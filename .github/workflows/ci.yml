@@ -104,6 +104,12 @@ jobs:
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
+          # GHSA-h7x2-h6g9-p789 is an SSRF in MLflow's AI Gateway, which nothing here
+          # starts: mlflow is used for tracking, the model registry and pyfunc scoring.
+          # It has no patched release, and every version in the affected range is one we
+          # could ship, so without this the gate blocks every dependency update rather
+          # than the one thing it is meant to catch. Remove when a fix ships.
+          allow-ghsas: GHSA-h7x2-h6g9-p789
 
   workflows:
     runs-on: ubuntu-latest
