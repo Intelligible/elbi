@@ -1,0 +1,133 @@
+name: CI (frontend)
+
+# Split from the Python CI. The path filter lives in a job rather than in `on`, because a
+# required check that never runs never reports: filtered here, every pull request that
+# leaves the web app alone would wait forever on a check that was never going to arrive.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+# Read-only by default. A job that needs more says so itself, which keeps the blast radius
+# of a compromised action to what that one job was granted rather than to everything the
+# token could reach.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/elbi/web
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # The filter reads the pull request's file list from the API, which the
+      # read-only default does not cover: without this it fails with "resource not
+      # accessible by integration".
+      pull-requests: read
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Credentials kept here, unlike everywhere else. On a merge-group build there is
+          # no pull request to ask the API about, so the filter compares refs with git and
+          # has to fetch the base -- which needs auth.
+          #
+          # Scoped to this job, which runs one action and no build.
+          persist-credentials: true
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # A merge-group build has no pull request to ask the API about, so compare against
+          # the branch the queue is merging into.
+          base: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          filters: |
+            web:
+              - 'packages/elbi/web/**'
+              - '.github/workflows/ci-frontend.yml'
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/elbi/web/package-lock.json
+      - run: npm ci
+      - name: Lint (Biome)
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      # Coverage rather than a bare run: same tests, and it enforces the floor in
+      # vitest.config.ts so the web number cannot slide the way it did unnoticed.
+      - name: Test (Vitest, with coverage)
+        run: npm run coverage
+      - name: Build
+        run: npm run build
+      - name: Build Storybook
+        run: npm run build-storybook
+
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/elbi/web/package-lock.json
+      - run: npm ci
+      # Browsers only. `--with-deps` shells out to apt-get, which hung on the Ubuntu
+      # mirror for the full timeout on two pull requests and reported as `cancelled`,
+      # blocking them on a required check for a reason that had nothing to do with their
+      # changes. The runner image already carries the libraries Chromium needs.
+      - run: npx playwright install chromium
+      - name: E2E smoke (Playwright)
+        run: npm run test:e2e
+
+  # The one check the branch requires. The jobs above are conditional, and a required check
+  # that is skipped never reports; this always runs and reads their results instead.
+  frontend-ok:
+    if: always()
+    needs: [changes, frontend, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report
+        # This job never checks out, so the web directory the workflow defaults to is absent.
+        working-directory: .
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          # `skipped` passes: a job the change did not concern is not a failure. Anything
+          # that actually ran and did not succeed is.
+          if echo "$RESULTS" | grep -qE '"result": *"(failure|cancelled|timed_out)"'; then
+            echo "::error::a required job did not pass"
+            exit 1
+          fi

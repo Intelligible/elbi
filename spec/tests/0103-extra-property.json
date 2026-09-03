@@ -1,0 +1,13 @@
+{
+  "description": "Unknown top-level properties are rejected (additionalProperties: false).",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "churn_risk",
+    "serve": {
+      "format": "text"
+    },
+    "owner": "data-team"
+  },
+  "valid": false
+}

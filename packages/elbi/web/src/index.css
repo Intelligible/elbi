@@ -1,0 +1,447 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Elbi design tokens: a PostHog-3000-shaped system on one warm accent.
+
+   The neutral work is done by a single numeric ramp (`--n-25` … `--n-950`), a
+   true grey, so surfaces, borders and the three text tiers stay neutral and the
+   accent is the only colour in the room. It is a dark warm brown, and as its states
+   lighten they drift toward gold rather than onto a new colour.
+   Every semantic color ships with a `-tint` companion (a low-opacity fill) so a
+   status is always {saturated ink + soft fill}, theme-adaptive via color-mix.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Neutral ramp, true grey (chroma 0), no hue tint, the spine of the whole UI. */
+  --n-25: oklch(0.988 0 0);
+  --n-50: oklch(0.972 0 0);
+  --n-100: oklch(0.955 0 0);
+  --n-150: oklch(0.931 0 0);
+  --n-200: oklch(0.902 0 0);
+  --n-300: oklch(0.845 0 0);
+  --n-400: oklch(0.755 0 0);
+  --n-500: oklch(0.645 0 0);
+  --n-600: oklch(0.535 0 0);
+  --n-700: oklch(0.44 0 0);
+  --n-750: oklch(0.38 0 0);
+  --n-800: oklch(0.312 0 0);
+  --n-900: oklch(0.242 0 0);
+  --n-950: oklch(0.185 0 0);
+
+  --radius: 0.375rem;
+
+  /* Surfaces: page → panel → card, layering up toward the reader. The shell canvas
+     (`panel`) is the warehouse content field's colour, so the background matches it. */
+  --background: var(--n-50);
+  --panel: hsl(75deg 14% 95%);
+  --card: #ffffff;
+  --card-foreground: var(--n-950);
+  --popover: #ffffff;
+  --popover-foreground: var(--n-950);
+  --surface-secondary: var(--n-100);
+  --surface-tertiary: var(--n-150);
+
+  /* Text: three deliberate tiers rather than a foreground/muted binary. */
+  --foreground: var(--n-950);
+  --text-secondary: var(--n-700);
+  --text-tertiary: var(--n-600);
+
+  /* Cocoa accent; states climb in lightness, warming toward gold. */
+  --primary: oklch(0.42 0.062 50);
+  --primary-foreground: var(--n-50);
+  --accent-hover: oklch(0.47 0.066 55);
+  --accent-active: oklch(0.52 0.07 60);
+
+  --secondary: var(--n-100);
+  --secondary-foreground: var(--primary);
+  --muted: var(--n-100);
+  --muted-foreground: var(--n-600);
+  --accent: var(--n-100);
+  --accent-foreground: var(--primary);
+
+  /* Borders, two weights: a quiet hairline and a stronger structural line. */
+  --border: var(--n-200);
+  --border-strong: var(--n-300);
+  --input: var(--n-300);
+  --ring: oklch(0.52 0.07 60 / 0.5);
+
+  /* Semantic colors, each with a soft, theme-adaptive tint companion. */
+  --success: oklch(0.55 0.15 155);
+  --success-tint: color-mix(in oklab, var(--success) 13%, transparent);
+  --warning: oklch(0.63 0.15 71);
+  --warning-tint: color-mix(in oklab, var(--warning) 15%, transparent);
+  --danger: oklch(0.56 0.2 26);
+  --danger-tint: color-mix(in oklab, var(--danger) 12%, transparent);
+  --info: oklch(0.55 0.13 240);
+  --info-tint: color-mix(in oklab, var(--info) 13%, transparent);
+
+  --destructive: var(--danger);
+  --destructive-foreground: var(--n-50);
+
+  /* Verdict semantics (the product's signature) map onto the above. */
+  --verified: var(--success);
+  --verified-tint: var(--success-tint);
+  --caution: var(--warning);
+  --caution-tint: var(--warning-tint);
+
+  --brand-cocoa: oklch(0.444 0.068 50);
+  --brand-gold: oklch(0.753 0.114 79);
+  --brand-rose: oklch(0.670 0.094 25);
+  --brand-mist: var(--n-150);
+  --brand-steel: var(--n-500);
+
+  /* Sidebar surface: a hair cooler/darker than the canvas for separation. */
+  --sidebar: var(--n-100);
+  --sidebar-foreground: var(--n-950);
+  --sidebar-accent: var(--n-200);
+  --sidebar-accent-foreground: var(--primary);
+  --sidebar-border: var(--n-200);
+
+  /* Elevation: floating surfaces (popovers, menus, modals) read as lifted. */
+  --shadow-elevation:
+    0 1px 2px rgb(10 33 38 / 0.04), 0 4px 12px rgb(10 33 38 / 0.08),
+    0 12px 32px rgb(10 33 38 / 0.06);
+  --shadow-modal: 0 8px 24px rgb(10 33 38 / 0.14), 0 24px 64px rgb(10 33 38 / 0.18);
+  --modal-backdrop: rgb(15 30 33 / 0.32);
+
+  /* Resting elevation for the app shell's content panels: a shallow lift; most of
+     the separation comes from the white panel against the grey canvas behind it. */
+  --shadow-panel: 0 1px 2px rgb(10 33 38 / 0.04), 0 1px 3px rgb(10 33 38 / 0.03);
+
+  /* Tactile button "chrome": the physical key-press feel. PostHog's Lemon UI uses a
+     0.1875rem (3px) bottom depth, collapsed on press. */
+  --chrome-depth: 0.1875rem;
+
+  /* Categorical data-viz palette: anchored on the accent, evenly spaced hues. */
+  --data-1: oklch(0.55 0.11 55);
+  --data-2: oklch(0.62 0.15 45);
+  --data-3: oklch(0.6 0.13 280);
+  --data-4: oklch(0.66 0.15 130);
+  --data-5: oklch(0.64 0.16 20);
+  --data-6: oklch(0.68 0.13 90);
+  --data-7: oklch(0.58 0.13 330);
+  --data-8: oklch(0.6 0.1 240);
+  --data-9: oklch(0.7 0.14 160);
+  --data-10: oklch(0.64 0.14 60);
+  --data-11: oklch(0.56 0.12 300);
+  --data-12: oklch(0.62 0.14 10);
+  --data-13: oklch(0.66 0.11 210);
+  --data-14: oklch(0.6 0.13 110);
+  --data-15: oklch(0.58 0.14 350);
+}
+
+.dark {
+  /* Neutral dark surfaces; the warm brand stays on accents only, never on the
+     background. The accent lightens here, for contrast against the dark. */
+  --n-25: oklch(0.205 0 0);
+  --n-50: oklch(0.185 0 0);
+  --n-100: oklch(0.225 0 0);
+  --n-150: oklch(0.255 0 0);
+  --n-200: oklch(0.29 0 0);
+  --n-300: oklch(0.34 0 0);
+  --n-400: oklch(0.44 0 0);
+  --n-500: oklch(0.56 0 0);
+  --n-600: oklch(0.66 0 0);
+  --n-700: oklch(0.75 0 0);
+  --n-750: oklch(0.8 0 0);
+  --n-800: oklch(0.86 0 0);
+  --n-900: oklch(0.92 0 0);
+  --n-950: oklch(0.97 0 0);
+
+  --background: var(--n-50);
+  --panel: hsl(240deg 8% 8%);
+  --card: var(--n-100);
+  --card-foreground: var(--n-950);
+  --popover: var(--n-150);
+  --popover-foreground: var(--n-950);
+  --surface-secondary: var(--n-150);
+  --surface-tertiary: var(--n-200);
+
+  --foreground: var(--n-950);
+  --text-secondary: var(--n-700);
+  --text-tertiary: var(--n-600);
+
+  --primary: oklch(0.72 0.088 65);
+  --primary-foreground: var(--n-25);
+  --accent-hover: oklch(0.77 0.09 68);
+  --accent-active: oklch(0.82 0.09 72);
+
+  --secondary: var(--n-200);
+  --secondary-foreground: var(--n-950);
+  --muted: var(--n-150);
+  --muted-foreground: var(--n-600);
+  --accent: var(--n-200);
+  --accent-foreground: var(--n-950);
+
+  --border: var(--n-200);
+  --border-strong: var(--n-300);
+  --input: var(--n-300);
+  --ring: oklch(0.72 0.088 65 / 0.55);
+
+  --success: oklch(0.72 0.16 158);
+  --success-tint: color-mix(in oklab, var(--success) 18%, transparent);
+  --warning: oklch(0.78 0.14 76);
+  --warning-tint: color-mix(in oklab, var(--warning) 20%, transparent);
+  --danger: oklch(0.68 0.19 25);
+  --danger-tint: color-mix(in oklab, var(--danger) 20%, transparent);
+  --info: oklch(0.68 0.13 240);
+  --info-tint: color-mix(in oklab, var(--info) 20%, transparent);
+
+  --destructive: var(--danger);
+  --destructive-foreground: var(--n-25);
+
+  --verified: var(--success);
+  --verified-tint: var(--success-tint);
+  --caution: var(--warning);
+  --caution-tint: var(--warning-tint);
+
+  --brand-cocoa: oklch(0.444 0.068 50);
+  --brand-gold: oklch(0.753 0.114 79);
+  --brand-rose: oklch(0.670 0.094 25);
+  --brand-mist: var(--n-200);
+  --brand-steel: var(--n-500);
+
+  --sidebar: var(--n-25);
+  --sidebar-foreground: var(--n-950);
+  --sidebar-accent: var(--n-200);
+  --sidebar-accent-foreground: var(--n-950);
+  --sidebar-border: var(--n-200);
+
+  --shadow-elevation:
+    0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.3);
+  --shadow-modal: 0 8px 24px rgb(0 0 0 / 0.5), 0 24px 64px rgb(0 0 0 / 0.55);
+  --modal-backdrop: rgb(0 0 0 / 0.55);
+
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.25);
+
+  --data-1: oklch(0.7 0.12 68);
+  --data-2: oklch(0.72 0.15 55);
+  --data-3: oklch(0.7 0.14 285);
+  --data-4: oklch(0.76 0.16 135);
+  --data-5: oklch(0.72 0.17 25);
+  --data-6: oklch(0.8 0.14 92);
+  --data-7: oklch(0.7 0.14 332);
+  --data-8: oklch(0.72 0.11 242);
+  --data-9: oklch(0.8 0.15 162);
+  --data-10: oklch(0.76 0.15 62);
+  --data-11: oklch(0.68 0.13 302);
+  --data-12: oklch(0.74 0.15 12);
+  --data-13: oklch(0.76 0.12 212);
+  --data-14: oklch(0.72 0.14 112);
+  --data-15: oklch(0.7 0.15 352);
+}
+
+@theme inline {
+  --font-sans:
+    Geist, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* PostHog-tight scale: controls 6px, containers 8px, overlays/panel 10px. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+
+  --color-background: var(--background);
+  --color-panel: var(--panel);
+  --color-foreground: var(--foreground);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-tertiary: var(--surface-tertiary);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
+  --color-verified: var(--verified);
+  --color-verified-tint: var(--verified-tint);
+  --color-caution: var(--caution);
+  --color-caution-tint: var(--caution-tint);
+
+  --color-brand-cocoa: var(--brand-cocoa);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-rose: var(--brand-rose);
+  --color-brand-mist: var(--brand-mist);
+  --color-brand-steel: var(--brand-steel);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-n-25: var(--n-25);
+  --color-n-50: var(--n-50);
+  --color-n-100: var(--n-100);
+  --color-n-150: var(--n-150);
+  --color-n-200: var(--n-200);
+  --color-n-300: var(--n-300);
+  --color-n-400: var(--n-400);
+  --color-n-500: var(--n-500);
+  --color-n-600: var(--n-600);
+  --color-n-700: var(--n-700);
+  --color-n-750: var(--n-750);
+  --color-n-800: var(--n-800);
+  --color-n-900: var(--n-900);
+  --color-n-950: var(--n-950);
+
+  --color-data-1: var(--data-1);
+  --color-data-2: var(--data-2);
+  --color-data-3: var(--data-3);
+  --color-data-4: var(--data-4);
+  --color-data-5: var(--data-5);
+  --color-data-6: var(--data-6);
+  --color-data-7: var(--data-7);
+  --color-data-8: var(--data-8);
+  --color-data-9: var(--data-9);
+  --color-data-10: var(--data-10);
+  --color-data-11: var(--data-11);
+  --color-data-12: var(--data-12);
+  --color-data-13: var(--data-13);
+  --color-data-14: var(--data-14);
+  --color-data-15: var(--data-15);
+
+  --shadow-elevation: var(--shadow-elevation);
+  --shadow-modal: var(--shadow-modal);
+  --shadow-panel: var(--shadow-panel);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Numbers are a first-class citizen: tabular figures everywhere they line up. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tactile "chrome" press physics: a solid frame sits under the control, so it
+   reads as a physical key that depresses onto the frame when pressed. Variants
+   set `--btn-frame` to their own darker edge color. */
+@layer components {
+  .chrome {
+    box-shadow: 0 var(--chrome-depth) 0 -1px var(--btn-frame, transparent);
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
+  }
+  .chrome:active:not(:disabled) {
+    transform: translateY(var(--chrome-depth));
+    box-shadow: 0 0 0 0 var(--btn-frame, transparent);
+  }
+}
+
+/* A quiet, cohesive scrollbar rather than the OS default. */
+@supports (scrollbar-width: thin) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--n-300) transparent;
+  }
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--n-300);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--n-400);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Notebook markdown code blocks: the `prose` `pre` supplies the single code background
+   and its padding/rounding; highlight.js then only tints the tokens. Without this its
+   theme paints a second, differently-shaded box inside the prose one. */
+.prose pre code.hljs {
+  background: transparent;
+  padding: 0;
+}
+
+/* Tables in kernel output: a `sql()` result, a DataFrame's `_repr_html_`. The markup
+   carries no classes, so these style the container's descendants. */
+.nb-html table {
+  border-collapse: collapse;
+  width: max-content;
+  max-width: 100%;
+}
+.nb-html th,
+.nb-html td {
+  padding: 0.3rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.nb-html thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-strong);
+  font-weight: 600;
+}
+.nb-html tbody tr + tr td {
+  border-top: 1px solid var(--border);
+}
+/* A pandas index is a `th` inside the body: it labels a row rather than heading a column. */
+.nb-html tbody th {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.nb-html td {
+  font-variant-numeric: tabular-nums;
+}

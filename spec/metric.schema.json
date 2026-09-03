@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.intelligible.ai/metric/v1/metric.schema.json",
+  "title": "MetricSet",
+  "description": "The declarative manifest of a semantic-layer metric set: named metrics defined over certified derivations. A metric pairs an aggregation (a measure) with the dimensions it can be sliced by, so the same definition yields the same number in every tool and agent. The vocabulary follows the industry model (dbt MetricFlow, OSI): measures, dimensions, time grains, and metric types. Because a metric's source is a pre-joined certified derivation, no multi-dataset joins or relationships are needed. Implementations load this schema as data and validate against it rather than mirroring it in code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specVersion", "kind"],
+  "properties": {
+    "specVersion": {
+      "description": "The version of the Metric Spec this manifest conforms to.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "kind": {
+      "description": "The manifest kind. Always 'MetricSet' for this schema.",
+      "const": "MetricSet"
+    },
+    "metrics": {
+      "description": "The named metrics, each defined over a certified derivation.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/metric" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "description": "The metric kind. 'simple' aggregates one measure; 'ratio' divides one metric by another; 'derived' evaluates an arithmetic expression over other metrics; 'cumulative' aggregates one metric over a trailing time window.",
+          "enum": ["simple", "ratio", "derived", "cumulative"]
+        },
+        "label": {
+          "description": "A human-readable display name.",
+          "type": "string",
+          "maxLength": 256
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "format": {
+          "description": "How the metric's value is displayed (never how it is computed). Follows Cube's model: a unit kind, an optional ISO 4217 currency, decimal precision, notation, and a d3-format pattern escape hatch. A 'percent' metric stores the fraction.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "enum": ["number", "currency", "percent", "duration"] },
+            "currency": { "type": "string", "pattern": "^[A-Za-z]{3}$" },
+            "precision": { "type": "integer", "minimum": 0, "maximum": 12 },
+            "notation": { "enum": ["standard", "compact", "scientific"] },
+            "pattern": { "type": "string", "maxLength": 64 }
+          }
+        },
+        "source": {
+          "description": "The certified derivation whose rows this metric aggregates (simple metrics).",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "measure": { "$ref": "#/$defs/measure" },
+        "numerator": {
+          "description": "For a ratio metric, the name of the numerator metric.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "denominator": {
+          "description": "For a ratio metric, the name of the denominator metric.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "expr": {
+          "description": "For a derived metric, an arithmetic expression over other metric names (e.g. 'revenue - cost'). Supports + - * / and parentheses.",
+          "type": "string",
+          "minLength": 1
+        },
+        "inputMetrics": {
+          "description": "For a derived metric, the metric names its expression references.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "uniqueItems": true
+        },
+        "inputMetric": {
+          "description": "For a cumulative metric, the metric aggregated over the window.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "window": {
+          "description": "For a cumulative metric, the number of trailing time-grain periods to aggregate. Absent means cumulative to date (all prior periods).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "periodAgg": {
+          "description": "For a cumulative metric, how to aggregate across the window.",
+          "enum": ["sum", "average", "min", "max"],
+          "default": "sum"
+        },
+        "dimensions": {
+          "description": "The columns this metric can be grouped by.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": []
+        },
+        "timeDimension": { "$ref": "#/$defs/timeDimension" },
+        "filters": {
+          "description": "Row filters applied before aggregation.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/filter" },
+          "default": []
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "simple" } } },
+          "then": { "required": ["source", "measure"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "ratio" } } },
+          "then": { "required": ["numerator", "denominator"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "derived" } } },
+          "then": { "required": ["expr", "inputMetrics"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "cumulative" } } },
+          "then": { "required": ["inputMetric"] }
+        }
+      ]
+    },
+    "measure": {
+      "description": "An aggregation over a column of the source rows.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agg"],
+      "properties": {
+        "agg": {
+          "description": "The aggregation function.",
+          "enum": [
+            "sum",
+            "average",
+            "count",
+            "count_distinct",
+            "min",
+            "max",
+            "median"
+          ]
+        },
+        "column": {
+          "description": "The column to aggregate. Omitted only for 'count' (counts rows).",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "agg": { "not": { "const": "count" } } } },
+          "then": { "required": ["column"] }
+        }
+      ]
+    },
+    "timeDimension": {
+      "description": "A time column and the grain to roll it up to.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column"],
+      "properties": {
+        "column": { "type": "string", "minLength": 1 },
+        "grain": {
+          "enum": ["hour", "day", "week", "month", "quarter", "year"]
+        }
+      }
+    },
+    "filter": {
+      "description": "A row filter: column, comparison, and value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column", "op", "value"],
+      "properties": {
+        "column": { "type": "string", "minLength": 1 },
+        "op": {
+          "enum": ["eq", "ne", "lt", "le", "gt", "ge", "in"]
+        },
+        "value": {}
+      }
+    }
+  }
+}

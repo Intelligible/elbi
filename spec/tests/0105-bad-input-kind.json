@@ -1,0 +1,18 @@
+{
+  "description": "An input kind outside the allowed enum is invalid.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "churn_risk",
+    "inputs": {
+      "sales": {
+        "kind": "table",
+        "ref": "sales"
+      }
+    },
+    "serve": {
+      "format": "text"
+    }
+  },
+  "valid": false
+}

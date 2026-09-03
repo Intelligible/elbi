@@ -1,0 +1,13 @@
+{
+  "description": "A serve field that does not belong to the declared format is rejected.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "churn_risk",
+    "serve": {
+      "format": "markdown",
+      "maxRows": 10
+    }
+  },
+  "valid": false
+}

@@ -1,0 +1,22 @@
+{
+  "description": "An input of kind 'semantic_model' is valid, and implies no dependsOn edge.",
+  "data": {
+    "specVersion": "1.1",
+    "kind": "Derivation",
+    "name": "metric_gates",
+    "inputs": {
+      "model": {
+        "kind": "semantic_model",
+        "ref": "sales_semantics"
+      },
+      "sales": {
+        "kind": "dataset",
+        "ref": "sales"
+      }
+    },
+    "serve": {
+      "format": "table"
+    }
+  },
+  "valid": true
+}

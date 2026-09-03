@@ -1,0 +1,20 @@
+# Dockerfile lint. The ignores below are decisions, not silence -- each says why the rule
+# does not apply here, so the next person can disagree with the reason rather than guess.
+
+ignored:
+  # DL3008: pin apt versions. The bases are pinned by digest, but apt still resolves from
+  # the network at build time, and Debian withdraws a version from the archive as soon as
+  # it is superseded -- so a pinned line stops building within weeks. The packages here
+  # are three: libgomp1, ca-certificates, curl. Reproducibility comes from the digest and
+  # from rebuilding often, not from a pin that expires.
+  - DL3008
+  # DL3013: pin pip versions in the sandbox image. It installs nothing but the runtime a
+  # cell needs, and the derivation's own lock decides versions at run time.
+  - DL3013
+  # DL4006: set `pipefail` before a RUN with a pipe. The one pipe is
+  # `echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check`, whose left side is echo
+  # and cannot fail; the check's own exit status is what the `&&` chain tests, and it is
+  # the whole point of the line.
+  - DL4006
+
+failure-threshold: warning

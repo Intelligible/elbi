@@ -1,0 +1,489 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.intelligible.ai/dashboard/v1/dashboard.schema.json",
+  "title": "Dashboard",
+  "description": "The declarative manifest of an elbi dashboard: a presentation surface whose widgets each bind to a certified derivation. A dashboard holds no data logic of its own; it names derivations, resolves parameters, and lays out how their verified results are rendered. This is the open standard; implementations load this schema as data and validate against it rather than mirroring it in code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "specVersion",
+    "kind",
+    "name",
+    "pages"
+  ],
+  "properties": {
+    "specVersion": {
+      "description": "The version of the Dashboard Spec this manifest conforms to.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "kind": {
+      "description": "The manifest kind. Always 'Dashboard' for this schema.",
+      "const": "Dashboard"
+    },
+    "name": {
+      "description": "A stable, unique identifier for the dashboard. Lower snake_case.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "title": {
+      "description": "Human-readable dashboard title shown in the UI.",
+      "type": "string",
+      "maxLength": 256
+    },
+    "description": {
+      "description": "Human- and agent-readable summary of what the dashboard shows.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "theme": {
+      "description": "Rendering theme. 'auto' follows the viewer's preference.",
+      "enum": [
+        "auto",
+        "light",
+        "dark"
+      ],
+      "default": "auto"
+    },
+    "variables": {
+      "description": "Dashboard-scoped values a viewer supplies through filter controls. A widget consumes a variable by referencing it as '$name' in its bind params, so wiring is explicit and reviewable.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variable"
+      },
+      "default": []
+    },
+    "pages": {
+      "description": "The dashboard's pages. Each page is a grid of widgets.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/page"
+      }
+    },
+    "refresh": {
+      "description": "How often a viewer's browser re-checks each widget's data version for staleness.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "interval": {
+          "enum": [
+            "off",
+            "30s",
+            "1m",
+            "5m",
+            "15m",
+            "1h",
+            "1d"
+          ],
+          "default": "off"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "description": "The variable's identifier, referenced by widgets as '$name'.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "label": {
+          "description": "Display label for the filter control. Defaults to a title-cased name.",
+          "type": "string",
+          "maxLength": 256
+        },
+        "type": {
+          "description": "The value type a selection produces. A 'multiselect' control produces an array of this type; 'daterange' produces a two-element [start, end] array of dates.",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "date"
+          ]
+        },
+        "control": {
+          "description": "The input control rendered for this variable.",
+          "enum": [
+            "dropdown",
+            "multiselect",
+            "search",
+            "date",
+            "daterange",
+            "range",
+            "toggle"
+          ],
+          "default": "dropdown"
+        },
+        "default": {
+          "description": "Initial value when the viewer has made no selection."
+        },
+        "options": {
+          "$ref": "#/$defs/options"
+        },
+        "scope": {
+          "description": "'global' (all pages) or the name of a single page this filter is confined to.",
+          "type": "string",
+          "pattern": "^([a-z][a-z0-9_]*|global)$",
+          "default": "global"
+        },
+        "appliesTo": {
+          "description": "Which widgets this variable filters when applied by cross-filtering: '*' for all in scope, or an explicit list of widget ids. Advisory to the renderer; a widget always consumes a variable it references via '$name'.",
+          "oneOf": [
+            {
+              "const": "*"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "uniqueItems": true
+            }
+          ],
+          "default": "*"
+        },
+        "immune": {
+          "description": "Widget ids that cross-filtering never touches, even when in 'appliesTo'.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "options": {
+      "description": "Where a control's selectable options come from: a static list, or the distinct values of a column produced by a certified derivation.",
+      "type": "object",
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "values"
+          ],
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value"
+                    ],
+                    "properties": {
+                      "value": {},
+                      "label": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "derivation",
+            "column"
+          ],
+          "properties": {
+            "derivation": {
+              "description": "A certified derivation whose rows supply the option values.",
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "column": {
+              "description": "The column whose distinct values become option values.",
+              "type": "string"
+            },
+            "labelColumn": {
+              "description": "Optional column supplying a human-readable label per value.",
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "widgets"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "columns": {
+          "description": "Number of grid columns the page is divided into.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24,
+          "default": 24
+        },
+        "widgets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/widget"
+          }
+        }
+      }
+    },
+    "widget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "gridPos"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable identifier, unique within the dashboard.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "description": "The kind of widget. 'metric', 'chart', 'map', and 'table' bind to a derivation; 'text' renders markdown; 'filter' renders a control for a variable.",
+          "enum": [
+            "metric",
+            "chart",
+            "map",
+            "table",
+            "text",
+            "filter"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "gridPos": {
+          "$ref": "#/$defs/gridPos"
+        },
+        "bind": {
+          "$ref": "#/$defs/bind"
+        },
+        "viz": {
+          "description": "Rendering spec for the widget. For 'chart'/'map' this is a grammar-of-graphics spec; for 'metric' it selects the field and format; for 'table' it configures columns and paging.",
+          "type": "object"
+        },
+        "content": {
+          "description": "Markdown body for a 'text' widget. Supports '$name' variable interpolation.",
+          "type": "string",
+          "maxLength": 16384
+        },
+        "variable": {
+          "description": "For a 'filter' widget, the name of the variable this control binds.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "interactions": {
+          "$ref": "#/$defs/interactions"
+        }
+      }
+    },
+    "gridPos": {
+      "description": "Grid placement. The page is divided into 'columns' columns; each height unit is one grid row.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "w": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "h": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "bind": {
+      "description": "The data binding: either a certified derivation (with params) or a semantic-layer metric (with groupBy, grain, and filters). A param value is a literal or a '$name' reference to a dashboard variable. Exactly one of 'derivation' or 'metric' is set.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "derivation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "params": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "default": {}
+        },
+        "metric": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "The semantic-layer metric this tile resolves."
+        },
+        "groupBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Dimensions to group the metric by."
+        },
+        "grain": {
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month",
+            "quarter",
+            "year"
+          ],
+          "description": "Time grain to roll the metric up to."
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Metric row filters ({column, op, value})."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "derivation"
+          ]
+        },
+        {
+          "required": [
+            "metric"
+          ]
+        }
+      ]
+    },
+    "interactions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "crossFilter": {
+          "description": "On selecting a mark, set dashboard variables from the selected datum, re-resolving every non-immune widget that references them.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "emit"
+          ],
+          "properties": {
+            "emit": {
+              "description": "Map of variable name to the datum field whose value is emitted on selection.",
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "drillThrough": {
+          "description": "On selection, navigate to a detail page or dashboard, carrying variable state.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "target"
+          ],
+          "properties": {
+            "target": {
+              "description": "'page:<name>' for a page in this dashboard, or 'dashboard:<name>' for another dashboard.",
+              "type": "string",
+              "pattern": "^(page|dashboard):[a-z][a-z0-9_]*$"
+            },
+            "carry": {
+              "description": "Variable names whose current values are carried to the target.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "uniqueItems": true,
+              "default": []
+            }
+          }
+        },
+        "drillDown": {
+          "description": "Step through a hierarchy of grouping columns within the widget by rebinding a param.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "hierarchy",
+            "param"
+          ],
+          "properties": {
+            "hierarchy": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 2
+            },
+            "param": {
+              "description": "The bind param set to the current hierarchy level.",
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

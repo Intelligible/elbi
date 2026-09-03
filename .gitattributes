@@ -1,0 +1,5 @@
+# Normalize line endings to LF across platforms.
+* text=auto eol=lf
+
+# The lockfile is generated; collapse it in diffs/reviews.
+uv.lock linguist-generated=true

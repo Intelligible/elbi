@@ -1,0 +1,72 @@
+name: Scorecard
+
+# What the supply-chain checks look like from outside, scored against OpenSSF's own
+# criteria rather than ours. It reads repository *settings* as well as files -- branch
+# protection, code review, whether dependency alerts are on -- so it catches the half of
+# a project's posture that never appears in a diff and that CI therefore cannot see.
+#
+# Weekly rather than per-push: the settings it grades change rarely, and a score is a
+# trend to watch instead of a gate to pass. Results land in the Security tab as code
+# scanning alerts.
+
+on:
+  branch_protection_rule:
+  schedule:
+    # Mondays, early UTC. A fixed minute rather than a rounded hour, which is when every
+    # other project's cron fires and the runner queue is longest.
+    - cron: "23 5 * * 1"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    name: Analyse
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only on a public repository. Several checks read history through the GraphQL API,
+    # which the job's own token cannot reach on a private or internal one, and the run
+    # fails on that rather than on anything about the project. Publishing a score for a
+    # repository nobody can see would mean nothing either. Skipped, not failed: a job
+    # that goes red for a reason that is not a defect teaches people to ignore red.
+    if: github.event.repository.visibility == 'public'
+    permissions:
+      # Upload the SARIF so findings appear as code scanning alerts.
+      security-events: write
+      # Read this repository's own workflow runs, which several checks grade.
+      actions: read
+      contents: read
+      # Publish the result to the public OpenSSF dataset, and prove the run came from
+      # here. Nothing is published from a fork or a pull request; see `publish_results`.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Run the analysis
+        uses: ossf/scorecard-action@55891bbd73f2425e97637d96e306fc9d491d0b21 # v2.4.4
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          # Only from this repository's own main branch, so a fork cannot publish a
+          # score under this project's name.
+          publish_results: ${{ github.event_name != 'pull_request' }}
+
+      # Kept as an artifact as well as uploaded, because code scanning retains alerts
+      # rather than the report that produced them, and comparing two weeks means having
+      # both reports.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: scorecard-sarif
+          path: scorecard.sarif
+          retention-days: 30
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # v3
+        with:
+          sarif_file: scorecard.sarif

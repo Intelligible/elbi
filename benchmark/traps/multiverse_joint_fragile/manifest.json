@@ -1,0 +1,18 @@
+{
+  "pitfall": "multiverse",
+  "status": "accepted",
+  "description": "An x-y effect that survives each robustness check alone but vanishes under the combined specification.",
+  "provenance": "synthetic; confounder-and-outlier joint fragility (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "joint_fragile", "seed": 0 },
+  "gate": "verify_multiverse",
+  "claim": { "x": "x", "y": "y" },
+  "gate_args": { "resamples": 150 },
+  "expected_verdict": "fragile",
+  "expected_pivotal": "controlling for 'w'",
+  "rationale": "The effect survives each robustness check on its own but flips across the defensible specifications taken together; adjusting for 'w' is the choice it turns on, so a single point claim is not supported.",
+  "naive_verdict": "robust",
+  "naive_rationale": "each single robustness check passes, so a bare read calls the effect robust"
+}

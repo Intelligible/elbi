@@ -1,0 +1,20 @@
+# Cosmic Ray config for the deep, whole-module mutation sweep run on a schedule by
+# `.github/workflows/benchmark-mutation.yml`. It mutates every branch of one gate and
+# reports the mutants that survive the whole trap suite, i.e. gate behaviour no trap yet
+# exercises, to guide which traps to add. (The blocking per-PR gate is the separate,
+# fast `benchmark.bite` runner; this is its slower, broader counterpart.)
+#
+# Scoped to the experiment gate as the representative example: the `simpsons_ab_reversal`
+# trap runs `verify_experiment`. To sweep another gate, copy this file and repoint
+# `module-path` (effect.py, leakage.py, rtm.py, multiverse.py, ...).
+#
+# `python -m pytest` (not `uv run pytest`) avoids re-resolving the env per mutant;
+# invoke via `uv run` so the venv is already on PATH.
+[cosmic-ray]
+module-path = "packages/elbi-core/src/elbi_core/verification/experiment.py"
+timeout = 30.0
+test-command = "python -m pytest benchmark/tests/test_traps.py -x -q -p no:cacheprovider --no-header"
+excluded-modules = []
+
+[cosmic-ray.distributor]
+name = "local"

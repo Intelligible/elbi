@@ -1,0 +1,493 @@
+name: CI
+
+# Every push runs this workflow, and the jobs inside decide what applies. That is the
+# opposite of skipping the workflow by path, which was the first attempt here and is
+# incompatible with requiring a check: a required check on a workflow that did not run is
+# never reported, and the pull request waits on it forever. So `changes` classifies the
+# commit, the expensive jobs sit behind it, and `ci-ok` reports once for all of them.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Re-runnable by hand. A dropped push webhook leaves a commit with no run at all, and
+  # without this there is nothing to re-run: the only way to get a signal is another push.
+  # The merge queue builds a temporary branch and asks for the same checks on it. Without
+  # this trigger they never run there, so a queued pull request sits in AWAITING_CHECKS
+  # forever and the queue never drains -- which is exactly what it did.
+  merge_group:
+  workflow_dispatch:
+
+# Read-only by default. A job that needs more says so itself, which keeps the blast radius
+# of a compromised action to what that one job was granted rather than to everything the
+# token could reach.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # What this commit touches, so a job that cannot be affected by it does not run. A
+  # commit changing only the Terraform or a readme was running the whole matrix, five
+  # benchmark jobs and an image build for files none of them open.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # The filter reads the pull request's file list from the API, which the
+      # read-only default does not cover: without this it fails with "resource not
+      # accessible by integration".
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Credentials kept here, unlike everywhere else. On a merge-group build there is
+          # no pull request to ask the API about, so the filter compares refs with git and
+          # has to fetch the base -- which needs auth. Without it the fetch fails with
+          # "could not read Username" and the queue evicts every candidate.
+          #
+          # Scoped to this job, which runs one action and no build.
+          persist-credentials: true
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # A merge-group build has no pull request to ask the API about, so compare against
+          # the branch the queue is merging into.
+          base: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          filters: |
+            code:
+              - "packages/**"
+              - "spec/**"
+              - "pyproject.toml"
+              - "uv.lock"
+              - ".github/workflows/ci.yml"
+            docs:
+              - "docs/**"
+              - "mkdocs.yml"
+              - "packages/**"
+              - "pyproject.toml"
+              - ".github/workflows/ci.yml"
+
+  # The workflows themselves, checked like any other source. Both tools caught real things
+  # on their first run here: every action was on a mutable tag, no workflow declared its
+  # permissions, and the checkout token was left in `.git/config` for every later step to
+  # read. The 2026 supply-chain attacks on tj-actions and others all arrived through a
+  # mutable reference, so this is the check that keeps the pins pinned.
+  # Refuses a dependency that arrives with a known advisory, rather than reporting it
+  # after it is already on main the way a Dependabot alert does.
+  dependency-review:
+    # The action reads the pull request's dependency diff, so there is nothing for it to
+    # compare on a push or a queued merge.
+    #
+    # The dependency graph it reads is free on a public repository and needs GitHub
+    # Advanced Security anywhere else, where the action fails with "not supported on this
+    # repository" rather than with a finding. Skipped rather than failed, as with the
+    # three workflows that need public visibility for the same reason.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+  workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      # Syntax, runner labels, shell correctness. Pinned by version and checksum-free only
+      # because the archive is fetched from the project's own release page over TLS.
+      - name: actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.7
+        run: |
+          curl -fsSL \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz actionlint
+          ./actionlint .github/workflows/*.yml
+      # Security posture: mutable action refs, over-broad permissions, credential
+      # persistence, template injection, cache poisoning.
+      #
+      # `--min-confidence=medium` rather than a named suppression: the one finding it
+      # excludes is `setup-node` reported at low confidence as caching on a release
+      # trigger, which it does not do without a `cache:` input. A threshold on confidence
+      # is a rule; an ignore list for one line is a place for the next one to hide.
+      - name: zizmor
+        run: uvx zizmor@1.29.0 --persona=regular --min-confidence=medium .github/workflows/
+
+      # The other two things this repository ships that are not Python: the container
+      # definitions and the shell that runs as PID 1 inside them. Both reach a deployment
+      # without a test ever executing them, so a linter is the only thing that reads them
+      # before an operator does.
+      #
+      # Pinned by digest like everything else. `.hadolint.yaml` records which rules are
+      # waived and why.
+      - name: hadolint
+        run: |
+          for f in Dockerfile docker/sandbox.Dockerfile; do
+            echo "--- $f"
+            docker run --rm -i \
+              -v "$PWD/.hadolint.yaml:/.config/hadolint.yaml:ro" \
+              hadolint/hadolint@sha256:a1d49ae1a4e83c1dbad26b8c1ad7588c8bd1e04f4866b34ad3cac50335198552 \
+              hadolint --no-color --config /.config/hadolint.yaml - < "$f"
+          done
+      - name: shellcheck
+        run: |
+          docker run --rm -v "$PWD:/mnt:ro" -w /mnt \
+            koalaman/shellcheck@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d \
+            deploy/docker-entrypoint.sh .github/free-disk-space.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format
+        run: uv run ruff format --check .
+      - name: Mypy
+        run: uv run mypy
+      # Shipped source, which has to run on every version the packages claim, and the
+      # tests, which the matrix runs on the oldest of them. `-t=3.10-` fails if anything
+      # needs more. Tests were outside this once, and `from datetime import UTC` reached
+      # a test module and failed on 3.10 in the matrix rather than here.
+      - name: Vermin (min Python version)
+        run: >
+          uv run vermin -t=3.10- --violations --no-tips
+          packages/elbi-core/src packages/elbi-core/tests
+          packages/elbi-cli/src packages/elbi-cli/tests
+          packages/elbi-agent/src packages/elbi-agent/tests
+          packages/elbi/src packages/elbi/tests
+          tests
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'merge_group'
+    runs-on: ${{ matrix.os }}
+    # A backstop against a hung job, not a bound on how long the suite may take. The
+    # Linux legs run 18-21 minutes and runners vary by about a third, so 30 clipped a
+    # slow-but-healthy leg -- and a timeout is reported as `cancelled`, which reads like
+    # someone cancelled the run rather than the suite never finishing.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is not a supported platform and its leg has been red since at least
+        # 2026-07-12: the notebook kernel gives its child process the kernel's own
+        # TemporaryDirectory as cwd, and Windows refuses to remove a directory that a
+        # live process has open, so cleanup recurses through shutil.rmtree's error
+        # handler until the interpreter dies of a stack overflow -- taking the run
+        # summary with it, which is why the leg reported nothing readable. Nothing
+        # here claims Windows (no Operating System classifiers, no mention in the
+        # docs) and the product deploys as a container, so the matrix now says what
+        # is actually supported instead of carrying a leg no one can read. Restoring
+        # it means fixing that cwd lifetime first.
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # A pull request brackets the supported range instead of enumerating it: the floor
+        # and the newest, on Linux only. This repository was spending like a twenty-person
+        # team on four committers -- 37,341 Actions minutes and $372 in seventeen days, 85%
+        # of the organisation's entire bill -- and it went on running 3,198 tests four times
+        # per commit plus a macOS leg billed at 10x. A break specific to 3.11 or 3.12, or to
+        # macOS, now reaches main and is caught there by the full grid before anything ships.
+        #
+        # macOS bills at 10x, which made the four macOS legs on every pull request
+        # about two thirds of this repository's entire Actions spend (measured:
+        # 18,280 of 27,754 billable minutes in a day). A pull request now gets one
+        # macOS leg on the newest Python -- enough to catch the platform-specific
+        # breakage this matrix exists for, which is how the missing libomp and the
+        # 3.13 connection leaks both surfaced -- and every merge to main still runs
+        # the full grid before anything ships. Linux is 1x, so it stays complete.
+        exclude: ${{ github.event_name == 'pull_request' && fromJSON('[{"os":"macos-latest","python-version":"3.10"},{"os":"macos-latest","python-version":"3.11"},{"os":"macos-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.13"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"}]') || fromJSON('[]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - name: Install uv and set Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      # xgboost's wheel links against libomp, which macOS runners do not ship.
+      - name: Install libomp (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libomp
+      # `--all-extras` installs torch and the CUDA stack behind it: 3.3 GB of wheels
+      # before anything else, on a runner with ~14 GB of which ~8 GB is preinstalled
+      # toolchains. That filled the disk, and the job died in cleanup *after* the suite
+      # had passed -- a red leg that said nothing about the code. None of the CUDA
+      # wheels can run here anyway, since the runners have no GPU; pointing torch at
+      # the CPU index would remove the need for this, and is the better fix when
+      # somebody decides whether a GPU deployment wants that lockfile.
+      # Deleting the toolchains rather than the marketplace action: this is ~20s where
+      # a full sweep is ~3min, on every leg of a matrix already watched for cost.
+      - name: Reclaim runner disk
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+      - run: uv sync --locked --all-extras --dev
+      # Distributed across workers, which is what the large Python suites do on this same
+      # hardware: home-assistant and prefect both pass `--numprocesses auto` on standard
+      # runners, and polars passes `-n auto`.
+      #
+      # `logical`, not `auto`, because `auto` does not work here. It asks psutil for physical
+      # cores and a standard runner reports one, so it creates a single worker and runs
+      # serially while claiming to distribute -- `created: 1/1 worker` in the log. `logical`
+      # reports the two the runner actually has. That part is deterministic, not a timing
+      # inference.
+      #
+      # The wall-clock difference between one worker and two is inside this runner's noise:
+      # 19:36 against 17:59, where the same code varies by about ±30% run to run (the macOS
+      # leg ranges 14 to 23 minutes). So this is not claimed as a speedup -- it follows the
+      # standard, implemented so it takes effect. `pytest-xdist` also earns its place as a
+      # dev dependency: 7:11 to 2:38 on a developer machine, where the cores are real.
+      #
+      # Not in `addopts`: the postgres job below runs against one shared database, where
+      # concurrent workers would collide.
+      #
+      # `loadfile` keeps a module's tests on one worker, which is what home-assistant does
+      # too. It costs a little against scattering them and bounds a leak to the module that
+      # caused it -- two files here were found leaking process state between tests.
+      - name: Run tests
+        run: uv run pytest -n logical --dist=loadfile
+      # What is left after the suite, so the next time this is tight it is visible in
+      # the log rather than inferred from an abort in cleanup.
+      - name: Disk remaining
+        if: always() && runner.os == 'Linux'
+        run: df -h /
+
+  # The tests that need a real Postgres skip themselves without TEST_POSTGRES_URI, so
+  # nothing ran them and a migration whose default only SQLite accepts reached a
+  # deployment. A service container is Linux-only, which is why this is its own job
+  # rather than a matrix addition.
+  postgres:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: elbi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Run the tests that need a real Postgres
+        env:
+          TEST_POSTGRES_URI: postgres://postgres:test@127.0.0.1:5432/elbi
+        # Named rather than selected by keyword: a test that stops matching would
+        # silently stop running, which is the failure this job exists to prevent.
+        run: >-
+          uv run pytest -v
+          packages/elbi/tests/test_db.py::test_concurrent_migrate_on_postgres_does_not_race
+          packages/elbi/tests/test_db.py::test_migrating_an_older_postgres_database_forward
+          packages/elbi/tests/test_db.py::test_deleting_a_conversation_on_postgres_where_the_key_is_enforced
+          packages/elbi/tests/test_models_api.py::test_promoting_on_a_real_postgres_registry
+
+  spec-conformance:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Run the derivation spec conformance suite
+        run: uv run pytest spec/tests -v
+
+  benchmark:
+    needs: changes
+    # Not on a pull request: this measures rather than verifies, and the numbers
+    # are only comparable against main anyway.
+    if: needs.changes.outputs.code == 'true' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write # to post the report as a sticky PR comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Run the statistical-pitfall benchmark
+        run: uv run python -m benchmark.run
+      - name: Upload the per-trap report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pitfall-benchmark-report
+          path: benchmark/report/
+      # Post the report as one sticky comment on the PR (edited in place, not spammed),
+      # even when a trap failed so the table is visible. Skips cleanly on forked PRs
+      # whose token is read-only.
+      - name: Comment the report on the PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pitfall-benchmark -->';
+            let report = '_benchmark report was not generated_';
+            try { report = fs.readFileSync('benchmark/report/report.md', 'utf8'); } catch {}
+            const body = `${marker}\n${report}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  # Blocking bite gate: each trap must kill >=1 mutant of its own gate module, so a trap
+  # that passes regardless of its gate is rejected. Survivors are fine (gate behaviour a
+  # trap need not cover), so it never false-alarms. Matrixed over the gate modules, one
+  # runner each, because Cosmic Ray mutates source in place and two sessions cannot share
+  # a module in one checkout.
+  benchmark-bite:
+    needs: changes
+    # Not on a pull request: this measures rather than verifies, and the numbers
+    # are only comparable against main anyway.
+    if: needs.changes.outputs.code == 'true' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [experiment.py, leakage.py, multiverse.py, effect.py, rtm.py]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Prove the traps on ${{ matrix.module }} bite their gate
+        run: |
+          # Capture the table so it shows in the job summary on pass and fail alike,
+          # then re-exit with the gate's own code (0 = all bit, non-zero = a rejection).
+          set +e
+          out=$(uv run python -m benchmark.bite --module "${{ matrix.module }}" 2>&1)
+          code=$?
+          {
+            echo "## Bite gate: ${{ matrix.module }}"
+            echo '```'
+            echo "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$out"
+          exit $code
+
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Build docs (strict)
+        run: uv run mkdocs build --strict
+
+  # One check to require, reporting for all of them. A branch rule naming the jobs above
+  # directly would block any pull request that legitimately skipped one, because a skipped
+  # job never reports; this always runs and reads their results instead.
+  #
+  # `benchmark` and `benchmark-bite` are deliberately absent: they measure rather than
+  # verify, and a required check that is slow or noisy teaches people to bypass the rule
+  # it belongs to. They still run and still show up on the pull request.
+  ci-ok:
+    if: always()
+    needs:
+      [changes, workflows, dependency-review, lint, test, postgres, spec-conformance, docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          # `skipped` passes: a job the change did not concern is not a failure. Anything
+          # that actually ran and did not succeed is.
+          if echo "$RESULTS" | grep -qE '"result": *"(failure|cancelled|timed_out)"'; then
+            echo "::error::a required job did not pass"
+            exit 1
+          fi

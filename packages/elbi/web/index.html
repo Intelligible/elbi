@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/brand/elbi-icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elbi</title>
+    <meta
+      name="description"
+      content="Derivations served to agents over MCP, with a verification oracle that decides what may be claimed."
+    />
+    <!-- Matches the app surface in each theme, so the browser chrome does not
+         disagree with the page underneath it. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f6f6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131313" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Elbi" />
+    <meta
+      property="og:description"
+      content="Derivations served to agents over MCP, with a verification oracle that decides what may be claimed."
+    />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // @jupyter-widgets/html-manager reads webpack's runtime global to resolve its
+      // chunk base path. Vite has no such global, so define it before any module loads
+      // or the widgets chunk throws a ReferenceError as it initializes. The app is served
+      // from the root, so the base path is empty.
+      window.__webpack_public_path__ = ""
+    </script>
+    <script>
+      // Apply the saved (or system) theme before first paint, so there is no flash of
+      // the wrong theme. The stored value is "light" | "dark" | "system".
+      (function () {
+        try {
+          var t = localStorage.getItem("elbi-theme") || "system"
+          var dark =
+            t === "dark" ||
+            (t === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches)
+          document.documentElement.classList.toggle("dark", dark)
+        } catch (e) {}
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

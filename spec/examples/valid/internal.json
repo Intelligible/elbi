@@ -1,0 +1,9 @@
+{
+  "specVersion": "1.0",
+  "kind": "Derivation",
+  "name": "cleaned_sales",
+  "description": "An internal derivation (no serve contract): consumed by other derivations, not exposed to agents.",
+  "inputs": {
+    "sales": { "kind": "dataset", "ref": "sales" }
+  }
+}

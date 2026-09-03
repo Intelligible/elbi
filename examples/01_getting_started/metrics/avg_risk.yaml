@@ -1,0 +1,6 @@
+name: avg_risk
+type: simple
+source: churn_risk
+measure:
+  agg: average
+  column: risk

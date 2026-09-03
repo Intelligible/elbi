@@ -1,0 +1,5 @@
+project: serving-a-model
+derivations_dir: derivations
+
+datasets:
+  - customers

@@ -1,0 +1,10 @@
+{
+  "description": "A derivation with no serve contract is valid: it is internal (not exposed to agents), usable only as an input to other derivations.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "internal_node",
+    "inputs": { "sales": { "kind": "dataset", "ref": "sales" } }
+  },
+  "valid": true
+}

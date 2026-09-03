@@ -1,0 +1,222 @@
+{
+  "note": "Connector logos shown beside each warehouse source's name. Checksums let a reviewer confirm a file has not been altered since it was recorded here. Do not add a logo without an entry.",
+  "sources": {
+    "posthog": {
+      "url": "https://github.com/PostHog/posthog",
+      "license": "MIT",
+      "commit": "4bf7bbfb20abe5f2181678dff8d6902873c56076",
+      "path": "frontend/public/services"
+    },
+    "unrecorded": {
+      "comment": "Added alongside the others in this product's own history, with no upstream noted at the time. Recorded as unknown rather than guessed."
+    }
+  },
+  "trademarks": "Every logo here is a trademark of the company named in its entry, reproduced only to identify the service a connector connects to, alongside that service's name. No affiliation or endorsement is claimed. The MIT licence on the collection these were taken from is a copyright licence and grants no trademark rights; use is governed by each owner's brand guidelines.",
+  "files": {
+    "airtable.png": {
+      "sha256": "896548b118dd8e3feb5408b2b2dafdbeba0ce56a2a736ca0689ff26b5486ed70",
+      "origin": "posthog",
+      "trademark_of": "Airtable"
+    },
+    "azure_blob.png": {
+      "sha256": "c902e60ac51e37ba6f3c01da928a94ac5cf7066830915b507281488cbcb7a73e",
+      "origin": "posthog",
+      "trademark_of": "Microsoft Corporation"
+    },
+    "bigquery.png": {
+      "sha256": "0f15d6dfaa569ece260e0dceb326ec43597a6c6733e6107655e2902ccd74076b",
+      "origin": "posthog",
+      "trademark_of": "Google LLC"
+    },
+    "braze.png": {
+      "sha256": "0c552f1d7e75d03b8a09cca6b2d559996223637511bd0cf8c6dd23ebcad6fa5b",
+      "origin": "posthog",
+      "trademark_of": "Braze, Inc."
+    },
+    "chargebee.png": {
+      "sha256": "188e047b314815106c3b4424c1617c196f602d61fbcbe93eda4444f0dd60e7dd",
+      "origin": "posthog",
+      "trademark_of": "Chargebee, Inc."
+    },
+    "clickhouse.png": {
+      "sha256": "8ad8e1ca9d326c665e891892b1228e629a637e23b7b4ab7a885ad5602d1f97fd",
+      "origin": "posthog",
+      "trademark_of": "ClickHouse, Inc."
+    },
+    "cockroachdb.png": {
+      "sha256": "34471c1468310a93362758872f8732ddf4ee907465f85e863fd9f7bb02954655",
+      "origin": "posthog",
+      "trademark_of": "Cockroach Labs, Inc."
+    },
+    "dynamodb.png": {
+      "sha256": "382b74201cd2d1794947470f7b714506d5907c7f81f03f9a25ebfb85cc2446bc",
+      "origin": "posthog",
+      "trademark_of": "Amazon.com, Inc."
+    },
+    "elasticsearch.png": {
+      "sha256": "f7b625c0641c38f8069e18746fdd92e60ec55e74fd9b80e39db32e6d70cfb357",
+      "origin": "posthog",
+      "trademark_of": "Elasticsearch B.V."
+    },
+    "front.png": {
+      "sha256": "468862b63ed56d5318b415601dd4e6cf946d56f2e492b8ab27083fbb2312fa91",
+      "origin": "posthog",
+      "trademark_of": "Front Technologies, Inc."
+    },
+    "github.png": {
+      "sha256": "367d5cb2adc609451cf9127250edfe893837485e7c779d7dcb4e31234f59b001",
+      "origin": "posthog",
+      "trademark_of": "GitHub, Inc."
+    },
+    "google_sheets.svg": {
+      "sha256": "48bfc82bbe69d5c2781b0015b2e2009595d98d98d4ace4d7c65c46f18279a095",
+      "origin": "posthog",
+      "trademark_of": "Google LLC"
+    },
+    "hubspot.png": {
+      "sha256": "9f87359da053ca9ef11505192af7c650af147f4a148132a3f10508cc600980fe",
+      "origin": "posthog",
+      "trademark_of": "HubSpot, Inc."
+    },
+    "intercom.png": {
+      "sha256": "4baa86274dfccaa10ffe44e4f4df4c1d624a04babfd47af05dfbda420b9109d5",
+      "origin": "posthog",
+      "trademark_of": "Intercom, Inc."
+    },
+    "jira.png": {
+      "sha256": "b42fb2dc9977e3c00e0494b4f31a385fa1f0e82d77e1b727a18dd42da1f6ff01",
+      "origin": "posthog",
+      "trademark_of": "Atlassian Pty Ltd"
+    },
+    "klaviyo.png": {
+      "sha256": "dce4b4668a4c968ef7332b34a9d4a585cb65ac3155f09ebb930800c41a43488c",
+      "origin": "posthog",
+      "trademark_of": "Klaviyo, Inc."
+    },
+    "mailchimp.png": {
+      "sha256": "4f824ca607d0202e89c49ffb0f0e7944807a3a913fc1e15d4d67b7191ca2a231",
+      "origin": "posthog",
+      "trademark_of": "Intuit Inc."
+    },
+    "mixpanel.png": {
+      "sha256": "72ce05507f147e2f69fad000b7d54988c564b34130238df219fb67759dbf2834",
+      "origin": "posthog",
+      "trademark_of": "Mixpanel, Inc."
+    },
+    "mongodb.svg": {
+      "sha256": "d9f2bf7041264f4747e9969fb82ede0199c0ac97dfa8632aa0687d702ec05f7b",
+      "origin": "posthog",
+      "trademark_of": "MongoDB, Inc."
+    },
+    "mssql.png": {
+      "sha256": "0656d8a7ad5042f40ce8f59fb81171d11b4631d60666e67e15f3d11fec94ea55",
+      "origin": "unrecorded",
+      "trademark_of": "Microsoft Corporation"
+    },
+    "mysql.png": {
+      "sha256": "a5be00e0982c25a7c5bc8a50ac4390bd64af830702c166746d1233b44b55f385",
+      "origin": "posthog",
+      "trademark_of": "Oracle Corporation"
+    },
+    "neon.png": {
+      "sha256": "b4e87a63e97e9bcd2b02361aaf7087923d1b78cffeebbfca8714698f7f2a571e",
+      "origin": "posthog",
+      "trademark_of": "Neon, Inc."
+    },
+    "notion.png": {
+      "sha256": "fedd62d71b967ed75ac566002b4ac330d32acdeb688381e5aff67b1c0669ac32",
+      "origin": "posthog",
+      "trademark_of": "Notion Labs, Inc."
+    },
+    "oracle.png": {
+      "sha256": "cd6fcdf8c464ecceec08edf5e00feb809b510f46b3969b9c3a74b8b6c3314459",
+      "origin": "posthog",
+      "trademark_of": "Oracle Corporation"
+    },
+    "pipedrive.png": {
+      "sha256": "a7b29f210d97e568da3f21ff79414e103d85ca684668c9373359ca3efebe90e4",
+      "origin": "posthog",
+      "trademark_of": "Pipedrive OU"
+    },
+    "planetscale.svg": {
+      "sha256": "0793972ec28d6242c700589c1fab6a1c350a1dd329d2888d44fd24abfd7824d3",
+      "origin": "posthog",
+      "trademark_of": "PlanetScale, Inc."
+    },
+    "postgres.png": {
+      "sha256": "91b70911e2b324a94eea2e24ccbf5789920191407a51d49de101aec4830cbcb6",
+      "origin": "posthog",
+      "trademark_of": "The PostgreSQL Community Association"
+    },
+    "redshift.png": {
+      "sha256": "326af69914041358d1d0ed174b66442b6f20e5937ef1984d5d0f7a88ca620a78",
+      "origin": "posthog",
+      "trademark_of": "Amazon.com, Inc."
+    },
+    "s3.png": {
+      "sha256": "b30b0a4110d619a0822f48940ea741a466d91adda31116ffedeac464c7f00fe4",
+      "origin": "posthog",
+      "trademark_of": "Amazon.com, Inc."
+    },
+    "salesforce.png": {
+      "sha256": "cf80f323d81ba8eac208cc975dfd85bec15e4fd557eb39b426ff5344b2602c95",
+      "origin": "posthog",
+      "trademark_of": "Salesforce, Inc."
+    },
+    "sendgrid.png": {
+      "sha256": "d807a67744ed0707cad38cfec9c051d1d6440042539577cd17660e9ac24c4ab6",
+      "origin": "posthog",
+      "trademark_of": "Twilio Inc."
+    },
+    "sentry.png": {
+      "sha256": "f5efe2e8951361232b8e20ccff8b0249e5dc2589c8164a9fb794b798af2e3dca",
+      "origin": "posthog",
+      "trademark_of": "Functional Software, Inc."
+    },
+    "sftp.png": {
+      "sha256": "f2dbfef09edd278625b4a920134a1051f5230edda3820f02edbc11e07277b732",
+      "origin": "posthog",
+      "trademark_of": "no owner (the mark is generic)"
+    },
+    "shopify.png": {
+      "sha256": "9d34a3fe1f8ed812dd2543134eb8c6916d70d69cecf7e28004ccdb94dfd32f67",
+      "origin": "posthog",
+      "trademark_of": "Shopify Inc."
+    },
+    "slack.png": {
+      "sha256": "da4c815b7692db57964a2d855f4be5e2e60cc08d787582fbd4fcc4d063a29451",
+      "origin": "posthog",
+      "trademark_of": "Slack Technologies, LLC"
+    },
+    "snowflake.png": {
+      "sha256": "a9021147cd4e8f94bee866c9e9b7210a389b9aeb55d1b96c94ddf4cff876b5bd",
+      "origin": "posthog",
+      "trademark_of": "Snowflake Inc."
+    },
+    "stripe.png": {
+      "sha256": "b2793d50bfd0ee20fd0166e19fe8a7d05fcba84f8feb6fdd693d772a31a02e6e",
+      "origin": "posthog",
+      "trademark_of": "Stripe, Inc."
+    },
+    "supabase.png": {
+      "sha256": "8742755cea85f512e08bbe97f59be22b5734028e3d1784db210ab06c100d7841",
+      "origin": "posthog",
+      "trademark_of": "Supabase, Inc."
+    },
+    "typeform.png": {
+      "sha256": "fe22bb21d07f17bd9f70e0cb2f1063a42d5a3f47b704e7294b3e9e17f73f5421",
+      "origin": "posthog",
+      "trademark_of": "Typeform SL"
+    },
+    "vercel.png": {
+      "sha256": "0478559cae220b52a34128ce485ecc7d79938a220065beee366a02d8d3402ae7",
+      "origin": "posthog",
+      "trademark_of": "Vercel, Inc."
+    },
+    "zendesk.png": {
+      "sha256": "8594db7f0a69f5260788996d65df0dedaff3fb3dfb5185de96ccc1a280a4d1ce",
+      "origin": "posthog",
+      "trademark_of": "Zendesk, Inc."
+    }
+  }
+}

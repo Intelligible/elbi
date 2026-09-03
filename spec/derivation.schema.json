@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.intelligible.ai/derivation/v1/derivation.schema.json",
+  "title": "Derivation",
+  "description": "The declarative manifest of a single elbi derivation. This is the open standard; SDK implementations load this schema as data and validate against it rather than mirroring it in code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specVersion", "kind", "name"],
+  "properties": {
+    "specVersion": {
+      "description": "The version of the Open Derivation Spec this manifest conforms to.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "kind": {
+      "description": "The manifest kind. Always 'Derivation' for this schema.",
+      "const": "Derivation"
+    },
+    "name": {
+      "description": "A stable, unique identifier for the derivation. Lower snake_case.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "origin": {
+      "description": "Who authored the derivation: a human, or an agent via the authoring loop. Default 'human'.",
+      "enum": ["human", "agent"],
+      "default": "human"
+    },
+    "status": {
+      "description": "Lifecycle/trust state. Only 'certified' derivations may be served to agents; 'proposed' ones await review. Default 'certified'.",
+      "enum": ["proposed", "certified"],
+      "default": "certified"
+    },
+    "description": {
+      "description": "Human- and agent-readable summary of what the derivation produces.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "inputs": {
+      "description": "Named inputs the compute function reads. Keys are referenced inside compute as ctx.input(key).",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/input" },
+      "default": {}
+    },
+    "dependsOn": {
+      "description": "Names of other derivations this one depends on. Normally inferred from inputs of kind 'derivation'; may be stated explicitly for ordering-only edges.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "params": {
+      "description": "Typed parameters an agent supplies when running the derivation. When served over MCP these become the tool's input schema.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/param" },
+      "default": {}
+    },
+    "serve": { "$ref": "#/$defs/serve" },
+    "claim": {
+      "description": "The analytical conclusion this derivation asserts, as a mapping of verification column roles to output columns (e.g. {\"x\": \"education\", \"y\": \"income\"} for an effect, or {\"variant\": \"arm\", \"metric\": \"converted\"} for an A/B test). When present, the authoring loop runs the verification oracle on the derivation's output and certifies it only if the conclusion is sound: the inferential-soundness check that golden cases (which verify only computation) cannot provide.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "contract": {
+      "description": "A DataContract the derivation's output must satisfy, embedded as a full DataContract manifest (see the Data Contract Spec). When present, the authoring loop checks the output against it and certifies only a sound result: the data-validity gate complementary to 'claim'. Validated against the Data Contract Spec independently.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "description": "The parameter's value type. 'object' is a record of named values; 'array' is a list (see 'items').",
+          "enum": ["string", "integer", "number", "boolean", "object", "array"]
+        },
+        "items": {
+          "description": "For type 'array', the element type. Nesting is bounded to one level: an array of scalars, or an array of records ('object').",
+          "enum": ["string", "integer", "number", "boolean", "object"]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "required": {
+          "description": "Whether the agent must supply this parameter.",
+          "type": "boolean",
+          "default": true
+        },
+        "default": {
+          "description": "Value used when the parameter is not supplied."
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": {
+          "description": "Whether this input is a raw dataset, the artifact of another derivation, or a governed semantic model.",
+          "enum": ["dataset", "derivation", "semantic_model"]
+        },
+        "ref": {
+          "description": "The name of the referenced dataset, derivation, or semantic model.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "required": {
+          "description": "Whether the input must be bound for the derivation to run.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "serve": {
+      "description": "The serve contract: how the derivation's artifact is presented to an agent over MCP.",
+      "type": "object",
+      "required": ["format"],
+      "properties": {
+        "format": {
+          "enum": ["table", "markdown", "json", "text"]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "format": { "const": "table" },
+            "columns": {
+              "description": "Optional explicit column projection and ordering.",
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            },
+            "maxRows": {
+              "description": "Maximum number of rows exposed to the agent.",
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "maxCells": {
+              "description": "Cell budget (rows x columns) for the inline preview; a portable proxy for a token budget. The full result remains available out of band (structured content / resource).",
+              "type": "integer",
+              "minimum": 1,
+              "default": 2000
+            }
+          }
+        },
+        {
+          "properties": {
+            "format": { "const": "markdown" }
+          }
+        },
+        {
+          "properties": {
+            "format": { "const": "json" },
+            "indent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8,
+              "default": 2
+            }
+          }
+        },
+        {
+          "properties": {
+            "format": { "const": "text" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

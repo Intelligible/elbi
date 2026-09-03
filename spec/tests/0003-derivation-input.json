@@ -1,0 +1,25 @@
+{
+  "description": "An input of kind 'derivation' with a matching dependsOn edge is valid.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "pricing_effects",
+    "inputs": {
+      "sales": {
+        "kind": "dataset",
+        "ref": "sales"
+      },
+      "risk": {
+        "kind": "derivation",
+        "ref": "churn_risk"
+      }
+    },
+    "dependsOn": [
+      "churn_risk"
+    ],
+    "serve": {
+      "format": "markdown"
+    }
+  },
+  "valid": true
+}

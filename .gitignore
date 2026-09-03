@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+# (uv.lock IS committed; the cache and venv are not)
+.uv/
+
+# Test / coverage / type-check caches
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Docs build
+site/
+
+# Local derivation cache
+.elbi/
+
+# Local credentials & data bindings: NEVER commit these.
+# The credentialed data-locations file is local-only.
+elbi.dev.yaml
+# Exception: example projects commit dev bindings that point only to fixtures.
+!examples/**/elbi.dev.yaml
+*.local.yaml
+.env
+.env.*
+# ...but the deployment template must be tracked.
+!.env.example
+
+# Frontend (the built SPA under web/dist is covered by the `dist/` rule above and
+# bundled into the wheel via Hatchling artifacts, not committed)
+node_modules/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Cosmic Ray mutation-testing session databases
+.mutation.sqlite
+.benchmark-mutation.sqlite
+
+# Local MLflow store/artifacts created when a command or test runs from the repo root
+/mlflow.db
+/mlruns/
+/mlartifacts/
+
+# Generated per-trap benchmark report (rebuilt by `just benchmark`)
+/benchmark/report/
+
+# Vitest writes its HTML/lcov report here.
+packages/elbi/web/coverage/

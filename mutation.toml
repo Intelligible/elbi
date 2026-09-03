@@ -1,0 +1,19 @@
+# Cosmic Ray mutation-testing config. Mutation testing is the quality gate that
+# line/branch coverage cannot be: it changes the code and checks that a test
+# fails. Coverage measures what ran; this measures what is actually asserted.
+#
+# Scoped to the core algorithmic module (ranking/retrieval), where subtle bugs
+# hide and tests are easiest to under-specify. Run with `just mutation`; a
+# scheduled CI job runs it non-blocking. To cover another module, point
+# `module-path` and `test-command` at it.
+#
+# `python -m pytest` (not `uv run pytest`) avoids re-resolving the environment
+# per mutant; invoke via `uv run` so the venv is already on PATH.
+[cosmic-ray]
+module-path = "packages/elbi-core/src/elbi_core/retrieval.py"
+timeout = 30.0
+test-command = "python -m pytest packages/elbi-core/tests/test_retrieval.py -x -q -p no:cacheprovider --no-header"
+excluded-modules = []
+
+[cosmic-ray.distributor]
+name = "local"

@@ -1,0 +1,12 @@
+{
+  "specVersion": "1.0",
+  "kind": "Derivation",
+  "name": "pricing_effects",
+  "description": "Estimated revenue effect of a pricing change, built on churn_risk.",
+  "inputs": {
+    "sales": { "kind": "dataset", "ref": "sales" },
+    "risk": { "kind": "derivation", "ref": "churn_risk" }
+  },
+  "dependsOn": ["churn_risk"],
+  "serve": { "format": "markdown", "title": "Pricing effects" }
+}

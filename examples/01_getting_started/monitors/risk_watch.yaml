@@ -1,0 +1,9 @@
+target_kind: derivation
+target: churn_risk
+method: mad
+sensitivity: 3.0
+window: 30
+interval_hours: 1.0
+config:
+  column: risk
+  agg: mean

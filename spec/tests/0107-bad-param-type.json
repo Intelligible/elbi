@@ -1,0 +1,11 @@
+{
+  "description": "A param type outside the allowed enum is invalid.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "houses_in_zip",
+    "params": { "zipcode": { "type": "str" } },
+    "serve": { "format": "table" }
+  },
+  "valid": false
+}

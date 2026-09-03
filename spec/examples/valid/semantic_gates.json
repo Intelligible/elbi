@@ -1,0 +1,11 @@
+{
+  "specVersion": "1.1",
+  "kind": "Derivation",
+  "name": "metric_gates",
+  "description": "Checks a governed semantic model's metrics against the rows they aggregate.",
+  "inputs": {
+    "model": { "kind": "semantic_model", "ref": "sales_semantics" },
+    "sales": { "kind": "dataset", "ref": "sales" }
+  },
+  "serve": { "format": "table", "title": "Metric gates" }
+}

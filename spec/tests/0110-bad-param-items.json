@@ -1,0 +1,11 @@
+{
+  "description": "An array param's items must be one of the allowed element types.",
+  "data": {
+    "specVersion": "1.1",
+    "kind": "Derivation",
+    "name": "score_customers",
+    "params": { "batch": { "type": "array", "items": "array" } },
+    "serve": { "format": "table" }
+  },
+  "valid": false
+}

@@ -1,0 +1,27 @@
+# Keep the build context small and reproducible. The venv and node_modules are
+# platform-specific and rebuilt in-image; caches and local state never belong in an image.
+.git
+.gitignore
+**/.venv
+.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.mypy_cache
+.pytest_cache
+.ruff_cache
+**/.ruff_cache
+**/dist
+**/web/dist
+**/.elbi
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+**/*.db
+docs/_build
+htmlcov
+.coverage
+.DS_Store

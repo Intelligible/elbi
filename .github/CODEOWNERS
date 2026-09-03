@@ -1,0 +1,8 @@
+# One team reviews everything here. A path only needs its own line once it needs a
+# different reviewer, so this file stays a single rule until that is actually true.
+*                       @Intelligible/elbi-maintainers
+
+# Not a different owner, a different bar: a trap manifest carries a ground-truth
+# verdict, so adding or editing one needs sign-off against benchmark/RUBRIC.md (>=2
+# reviewers for real, file-backed traps, enforced in benchmark/tests/test_schema.py).
+/benchmark/traps/       @Intelligible/elbi-maintainers

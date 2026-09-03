@@ -1,0 +1,11 @@
+entities:
+  - name: customer
+    joinKey: customer_id
+featureViews:
+  - name: customer_risk
+    entities:
+      - customer
+    source: churn_risk
+    features:
+      - name: risk
+    description: Per-customer churn-risk score served from the certified derivation.

@@ -1,0 +1,6 @@
+{
+  "specVersion": "1.0",
+  "kind": "Derivation",
+  "name": "system_status",
+  "serve": { "format": "text" }
+}

@@ -1,0 +1,8 @@
+source_kind: dataset
+dataset: sales
+target: amount
+task: auto
+engine: flaml
+time_budget: 300.0
+mode: on_data_change
+enabled: true

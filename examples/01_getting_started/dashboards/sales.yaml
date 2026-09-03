@@ -1,0 +1,12 @@
+specVersion: '1.0'
+kind: Dashboard
+title: Sales
+pages:
+  - name: main
+    widgets:
+      - id: churn_table
+        type: table
+        gridPos: {x: 0, y: 0, w: 12, h: 8}
+        bind:
+          derivation: churn_risk
+          params: {}

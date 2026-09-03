@@ -1,0 +1,6 @@
+{
+  "specVersion": "1.0",
+  "kind": "Derivation",
+  "name": "Churn-Risk",
+  "serve": { "format": "table" }
+}

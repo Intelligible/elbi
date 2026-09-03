@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Statistical-pitfall trap manifest",
+  "description": "One trap: a dataset, the gate call to run, its ground-truth verdict, provenance, and reviewer sign-off. The trap id is the enclosing folder name (not a field).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pitfall",
+    "status",
+    "description",
+    "provenance",
+    "added_by",
+    "reviewed_by",
+    "data",
+    "gate",
+    "claim",
+    "expected_verdict",
+    "rationale",
+    "naive_verdict",
+    "naive_rationale"
+  ],
+  "properties": {
+    "pitfall": {
+      "enum": [
+        "simpsons",
+        "confounding",
+        "leakage",
+        "rtm",
+        "multiverse",
+        "selection-berkson"
+      ]
+    },
+    "status": {
+      "enum": ["candidate", "accepted"],
+      "description": "Human-vetting state only; both run in the required check."
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "provenance": {
+      "type": "string",
+      "minLength": 1,
+      "description": "'synthetic; ...' or, for a real dataset, a citation naming a post-cutoff/private source."
+    },
+    "added_by": { "type": "string", "minLength": 1 },
+    "reviewed_by": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Reviewer sign-offs against RUBRIC.md. A file-backed (real) trap needs >=2 (enforced in test_schema)."
+    },
+    "data": {
+      "description": "The committed rows the loader reads: a data.jsonl file in the trap folder, or inline rows for tiny cases.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file"],
+          "properties": { "file": { "type": "string" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rows"],
+          "properties": {
+            "rows": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "object" }
+            }
+          }
+        }
+      ]
+    },
+    "generated_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "seed"],
+      "description": "Authoring provenance for synthetic traps: the seeded generator that produced the committed data (re-run with `benchmark.run --regenerate-data`). Absent => a real dataset (needs >=2 reviewers).",
+      "properties": {
+        "generator": { "type": "string" },
+        "seed": { "type": "integer" },
+        "n": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "gate": {
+      "enum": [
+        "verify_all",
+        "verify_experiment",
+        "verify_leakage",
+        "verify_multiverse",
+        "verify_powerlaw",
+        "verify_spatial",
+        "verify_extrapolation",
+        "verify_proportional_hazards",
+        "verify_rtm"
+      ]
+    },
+    "claim": {
+      "type": "object",
+      "description": "Role -> column mapping passed to the gate (x, y, controls, group, ...)."
+    },
+    "bite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module"],
+      "description": "The gate module (filename under elbi_core/verification/) the bite gate mutates; the trap must kill >=1 mutant of it (benchmark/bite.py). Optional for single-purpose gates (derived from `gate`); required for verify_all traps, whose detection lives in a shared module.",
+      "properties": {
+        "module": { "type": "string", "pattern": "\\.py$" }
+      }
+    },
+    "gate_args": {
+      "type": "object",
+      "description": "Non-role gate parameters (e.g. resamples), merged into the call alongside claim."
+    },
+    "expected_verdict": {
+      "enum": ["sound", "unsound", "inconclusive", "invalid", "robust", "fragile"],
+      "description": "The verdict the gate must return for the trap to pass."
+    },
+    "expected_pivotal": {
+      "type": ["string", "null"],
+      "description": "Substring that must appear in the report text, so the trap bites on the right reason."
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why this verdict, keyed to RUBRIC.md; the auditable record of which rule fired."
+    },
+    "naive_verdict": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The surface conclusion a bare LLM/analyst reaches."
+    },
+    "naive_rationale": { "type": "string", "minLength": 1 }
+  }
+}

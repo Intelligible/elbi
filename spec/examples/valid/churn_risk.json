@@ -1,0 +1,15 @@
+{
+  "specVersion": "1.0",
+  "kind": "Derivation",
+  "name": "churn_risk",
+  "description": "Per-customer churn-risk scores derived from recent sales activity.",
+  "inputs": {
+    "sales": { "kind": "dataset", "ref": "sales" }
+  },
+  "serve": {
+    "format": "table",
+    "title": "Churn risk",
+    "columns": ["customer_id", "risk"],
+    "maxRows": 50
+  }
+}

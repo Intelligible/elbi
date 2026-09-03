@@ -1,0 +1,147 @@
+elbi
+Copyright 2026 Intelligible, Inc.
+
+This product includes software developed at Intelligible, Inc.
+(https://intelligible.ai/).
+
+This product is licensed under the Apache License, Version 2.0; see the
+LICENSE file for the full text.
+
+---
+
+This product bundles third-party material beyond its Python and JavaScript
+dependencies. Each item below travels inside the built web bundle or the
+published wheel, so its notice travels here.
+
+**Font Awesome Free 5.15.4** (https://fontawesome.com), reached through
+`@jupyter-widgets/html-manager`, which the notebook widget renderer uses for its
+icons. The webfonts under `web/dist/assets/fa-*` are covered by three licences
+at once, as Font Awesome distributes them: the icons under CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/), the fonts under SIL OFL 1.1
+(https://scripts.sil.org/OFL), and the accompanying code under the MIT licence.
+CC BY 4.0 asks for attribution, which is what this paragraph is.
+
+**Geist** (https://vercel.com/font), Copyright (c) 2023 Vercel, Inc., SIL OFL 1.1
+(https://scripts.sil.org/OFL). The interface is set in Geist and Geist Mono, loaded
+from Google Fonts, and the "elbi" wordmark under `web/public/brand` and in
+`web/src/components/Logo.tsx` is its outlines converted to paths.
+
+**KaTeX** (https://katex.org), Copyright (c) 2013-2020 Khan Academy and other
+contributors, MIT licensed. Its math webfonts ship under
+`web/dist/assets/KaTeX_*` and render mathematics in notebook and chat output.
+
+**PostHog** (https://posthog.com), Copyright (c) 2020-2026 PostHog Inc., MIT
+licensed. The warehouse "Sources" surface follows PostHog's Lemon UI for its
+layout, density and control shapes, and
+`packages/elbi/web/src/components/warehouse/phc.tsx` derives spacing and sizing
+values, and its success/danger/info colours, from that stylesheet. The accent
+and brand colours are this product's own.
+
+**Apache Ossie**, formerly the Open Semantic Interchange
+(https://github.com/open-semantic-interchange/OSI), Apache-2.0 licensed. The
+metrics layer vendors its JSON Schema at
+`packages/elbi-core/src/elbi_core/spec/osi.schema.json` so an installed wheel can
+validate an OSI document without reaching the network.
+
+---
+
+Some dependencies installed alongside this product are copyleft, and a
+distribution that bundles them (the container image, chiefly) carries their
+terms rather than this product's.
+
+Under the LGPL: fpdf2 (certificate PDFs), psycopg and psycopg-binary (the
+Postgres driver), psycopg2-binary (reached through MLflow's registry), pymssql
+(the SQL Server connector), paramiko (the SFTP connector, reached through
+fsspec) and yattag. Each is imported as a separate library
+and none is modified here, so the LGPL's terms attach to those libraries alone.
+They install as ordinary packages in the environment, which is what lets a
+recipient replace one with their own build, as the LGPL requires.
+
+Under the MPL 2.0, in whole or in part: certifi, pathspec, orjson and tqdm. The
+MPL applies per file and none of those files is modified here.
+
+Nothing in this product is licensed under the GPL, the AGPL, the SSPL or a
+non-commercial licence. Where a dependency offers a choice (dompurify as
+MPL-2.0 or Apache-2.0, jszip as MIT or GPL-3.0-or-later) this product elects
+the permissive option.
+
+---
+
+This product bundles connector logos in
+packages/elbi/web/public/services/, shown beside each warehouse source's
+name. All but one were taken from PostHog (MIT licensed; see the attribution
+above); the exception was added in this product's own history with no upstream
+recorded, and is listed that way rather than guessed. Each file's
+origin, checksum and trademark owner is in that directory's manifest.json.
+
+The same two points made below about the model-provider logos apply here
+without change: these are trademarks of their respective owners, reproduced
+only to identify the service a connector connects to, and a copyright licence
+on a collection of logos grants no trademark rights.
+
+---
+
+This product bundles model-provider logos in
+packages/elbi/web/public/model-icons/. Each file's origin, the
+version or commit it came from, its checksum, and any brand guidelines the
+source records are listed in that directory's manifest.json.
+
+The logos are trademarks of their respective owners. They are reproduced
+here for one purpose only: to identify the model provider a user has
+configured, alongside that provider's name. No affiliation with,
+sponsorship by, or endorsement from any of these companies is claimed or
+implied.
+
+Two things are worth stating plainly, because the collection licences below
+are easy to over-read:
+
+  1. A licence on a collection of logos is a copyright licence covering
+     that collection. It does not grant trademark rights, and it cannot:
+     CC0 says so explicitly in section 4(a), and disclaims in 4(c) any
+     responsibility for clearing third-party rights. Trademark use is
+     governed by each owner's own brand guidelines, not by the collection.
+
+  2. simple-icons is itself released under CC0, but its maintainers state
+     that this "doesn't mean to imply that all icons within the project are
+     also CC0", and publish per-icon licence data where it is known. For
+     every icon taken from simple-icons here, that data is absent, which
+     under their own disclaimer implies nothing either way. See
+     https://github.com/simple-icons/simple-icons/blob/develop/DISCLAIMER.md
+
+Collection licences follow.
+
+gilbarbara/logos (https://github.com/gilbarbara/logos) is released under
+CC0 1.0 Universal; simple-icons (https://github.com/simple-icons/simple-icons)
+likewise, subject to the note above. Neither requires attribution; both are
+credited here for provenance.
+
+Logos taken from lobe-icons (https://github.com/lobehub/lobe-icons):
+
+    MIT License
+    Copyright (c) 2023 LobeHub
+
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+    BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+    ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+To have a logo removed from this product, open an issue at
+https://github.com/Intelligible/elbi or contact
+legal@intelligible.ai, and it will be removed in the next release. Such a
+provider then displays its name without a mark, which the UI already
+supports for every provider we ship no logo for.

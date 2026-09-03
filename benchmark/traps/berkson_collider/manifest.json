@@ -1,0 +1,18 @@
+{
+  "pitfall": "selection-berkson",
+  "status": "accepted",
+  "description": "Talent and interview score look anti-correlated once you condition on admission.",
+  "provenance": "synthetic; collider (Berkson) selection on admission (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "berkson_admissions", "seed": 0 },
+  "gate": "verify_all",
+  "claim": { "x": "talent", "y": "interview", "controls": ["admitted"] },
+  "bite": { "module": "effect.py" },
+  "expected_verdict": "unsound",
+  "expected_pivotal": "collider",
+  "rationale": "Talent and interview are independent until you condition on admission, which both cause. Admission is passed explicitly as a control and is a clear collider, so conditioning on it manufactures the association. Because the selection is declared and identifiable here, the verdict is unsound rather than the usual inconclusive for selection cases.",
+  "naive_verdict": "sound",
+  "naive_rationale": "an association appears once admission is controlled, reading as a real link"
+}

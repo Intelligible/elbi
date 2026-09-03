@@ -1,0 +1,10 @@
+{
+  "specVersion": "1.1",
+  "kind": "Derivation",
+  "name": "revenue_by_region",
+  "origin": "agent",
+  "status": "proposed",
+  "description": "Total revenue grouped by region.",
+  "inputs": { "sales": { "kind": "dataset", "ref": "sales" } },
+  "serve": { "format": "table", "title": "Revenue by region" }
+}

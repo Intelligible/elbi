@@ -1,0 +1,18 @@
+{
+  "pitfall": "rtm",
+  "status": "accepted",
+  "description": "A cohort selected for a low baseline improves on remeasurement with no treatment.",
+  "provenance": "synthetic; baseline-selected group reverting to the mean (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "rtm_selected", "seed": 0 },
+  "gate": "verify_all",
+  "claim": { "before": "baseline", "after": "followup", "group": "cohort" },
+  "bite": { "module": "rtm.py" },
+  "expected_verdict": "unsound",
+  "expected_pivotal": "regression to the mean",
+  "rationale": "The cohort was picked for a low baseline, so it drifts back toward the mean on its own with no treatment; once you adjust for the baseline the group effect does not hold.",
+  "naive_verdict": "sound",
+  "naive_rationale": "the selected group's gain reads as an effect rather than reversion"
+}

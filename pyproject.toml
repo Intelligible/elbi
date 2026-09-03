@@ -1,0 +1,307 @@
+# Workspace root: virtual project (not published to PyPI).
+# It owns the lockfile, dev tooling, and shared tool configuration.
+# Shippable code lives in packages/*.
+[project]
+name = "elbi-workspace"
+version = "0"
+description = "Development workspace for the elbi framework (not published)."
+requires-python = ">=3.10"
+dependencies = [
+    # Pull every core-SDK feature set so a plain `uv sync` gives a complete dev env with
+    # nothing to hand-install: both compute engines (DuckDB + Polars, via `engines`), the
+    # SQL loader (`sql`), and the Parquet path (in `engines`). Semantic search (model2vec)
+    # is a base dependency now, so it needs no extra. The fat `elbi-app`
+    # transitively pulls the ML stack and every warehouse connector driver, so those need
+    # no separate mention here.
+    "elbi-core[aws,azure,gcp,engines,sql]",
+    "elbi-cli",
+    "elbi-agent[anthropic]",
+    "elbi",
+]
+
+[tool.uv]
+package = false
+
+# Floors on two packages nothing here depends on directly. `requires-python` has no upper
+# bound, so the universal resolve covers interpreters numba has no wheels for yet, and for
+# those it walks back to releases old enough to predate any upper bound of their own --
+# llvmlite 0.36, from 2021. That version then also gets selected for 3.12, where it cannot
+# build at all, so a plain `uv lock --upgrade` produces a lockfile that will not sync on
+# the interpreter this project pins. These keep the walk inside versions that support the
+# interpreters actually supported.
+constraint-dependencies = [
+    "llvmlite>=0.45",
+    "numba>=0.62",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+elbi-core = { workspace = true }
+elbi-cli = { workspace = true }
+elbi-agent = { workspace = true }
+elbi = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "pytest-cov>=7.1",
+    "hypothesis>=6.165.2",
+    # The current starlette TestClient requires the httpx 2.x line.
+    "httpx2>=2.10.0",
+    "mypy>=2.3.0",
+    "ruff>=0.16.2",
+    # Checks that no stdlib member newer than `requires-python` is used. Ruff's
+    # py310 target governs syntax, and mypy runs at 3.12 where a 3.11 member
+    # resolves, so nothing else here can see `from datetime import UTC` in a
+    # package that supports 3.10.
+    "vermin>=1.8.0",
+    "cosmic-ray>=8.7.0",
+    "towncrier>=25.8",
+    "pre-commit>=4.6.1",
+    "types-PyYAML>=6.0",
+    "types-jsonschema>=4.18",
+    # boto3 ships no type information, and the credential broker imports it; the stubs
+    # are how that import is checked rather than excused.
+    "boto3-stubs[sts]>=1.43.72",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
+    # A notebook kernel provisions ipywidgets per-notebook; installed here too so the
+    # widget comm-protocol test runs against a real widget.
+    "ipywidgets>=8.1",
+    "pytest-xdist>=3.6",
+    # A hung test is otherwise killed by the workflow timeout, which reports as
+    # `cancelled` and names nothing. This fails the test that hung, with a traceback.
+    "pytest-timeout>=2.4",
+]
+
+# ---------------------------------------------------------------------------
+# Shared tool configuration. Members inherit by upward discovery.
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+# Match the pinned runtime (.python-version = 3.12), so newer dependency stubs (e.g.
+# numpy 2.5, whose stubs use 3.12-only `type` syntax) parse. Lower-version syntax
+# compatibility is enforced by ruff's py310 target; which stdlib *members* exist at
+# 3.10 is vermin's job, because at 3.12 typeshed resolves the 3.11 ones and this
+# check cannot see them.
+python_version = "3.12"
+strict = true
+# warn_redundant_casts / warn_unused_ignores / disallow_untyped_defs are all
+# implied by strict; we add only what strict does not set.
+warn_unused_configs = true
+show_error_codes = true
+pretty = true
+# Strict typing covers all shipped source. Tests are guarded by ruff + pytest;
+# checking them under mypy collides on duplicate `conftest` module names.
+files = [
+    "packages/elbi-core/src",
+    "packages/elbi-cli/src",
+    "packages/elbi-agent/src",
+    "packages/elbi/src",
+]
+explicit_package_bases = true
+mypy_path = [
+    "packages/elbi-core/src",
+    "packages/elbi-cli/src",
+    "packages/elbi-agent/src",
+    "packages/elbi/src",
+]
+
+[[tool.mypy.overrides]]
+module = ["mcp.*"]
+ignore_missing_imports = true
+
+# pyarrow ships only partial types; skip following it so its symbols are Any
+# (consistent whether or not the optional 'data' extra is installed).
+[[tool.mypy.overrides]]
+module = ["pyarrow.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# onnxruntime backs the default hybrid search; it ships no py.typed marker.
+[[tool.mypy.overrides]]
+module = ["onnxruntime.*"]
+ignore_missing_imports = true
+
+# model2vec is the alternative embedder. Skip following it (its symbols are Any
+# either way), which also avoids parsing its transitive numpy stubs; those assume a
+# newer Python than we target and would otherwise break the run.
+[[tool.mypy.overrides]]
+module = ["model2vec.*"]
+ignore_missing_imports = true
+# fsspec ships no py.typed marker and paramiko's stubs are a separate unmaintained
+# package. Only these two are named: the s3fs/gcsfs/adlfs backends are loaded by protocol
+# rather than imported, so they never reach the type checker. The object-store connectors
+# hold the boundary -- every value crossing back out of them is annotated there.
+[[tool.mypy.overrides]]
+module = ["fsspec.*", "paramiko.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["mlflow.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# google-auth's downscoped-credentials module carries no annotations, so its constructors
+# read as untyped calls. Skipped rather than ignored inline: the boundary this code builds
+# is validated by our own tests, and an ignore per call site would be five apologies for
+# one library's typing.
+[[tool.mypy.overrides]]
+module = ["google.auth.*", "google.oauth2.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# azure-storage-blob and azure-identity ship partial types; the SAS helpers are untyped.
+[[tool.mypy.overrides]]
+module = ["azure.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["croniter.*"]
+ignore_missing_imports = true
+
+# ipywidgets and its comm channel are an optional, unstubbed notebook dependency,
+# provisioned into a kernel's environment rather than installed here.
+[[tool.mypy.overrides]]
+module = ["comm.*", "ipywidgets.*"]
+ignore_missing_imports = true
+
+# The worker's comm relay subclasses comm.base_comm.BaseComm, which is untyped (Any);
+# subclassing it is the whole point, so allow it in this one module.
+[[tool.mypy.overrides]]
+module = ["elbi_core.notebook._comm"]
+disallow_subclassing_any = false
+
+# The optional warehouse-connector drivers ship no (or partial) type stubs; treat their
+# symbols as Any (deltalake has no stubs; dlt's rest_api config is a dynamically-built
+# dict we hand to its engine).
+[[tool.mypy.overrides]]
+module = ["deltalake.*", "dlt.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# The optional 'ml' extra's stack ships no (or partial) type stubs; treat its
+# symbols as Any whether or not the extra is installed.
+[[tool.mypy.overrides]]
+module = [
+    "flaml.*",
+    "pandas.*",
+    "sklearn.*",
+    "numpy.*",
+    "shap.*",
+    "matplotlib.*",
+    "evidently.*",
+    "autogluon.*",
+    "catboost.*",
+    "tabicl.*",
+]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+]
+testpaths = [
+    "tests",
+    "packages/elbi-core/tests",
+    "packages/elbi-cli/tests",
+    "packages/elbi-agent/tests",
+    "packages/elbi/tests",
+    "spec/tests",
+    "benchmark/tests",
+    "examples/01_getting_started/tests",
+    "examples/02_serving_a_model/tests",
+]
+# Source trees are never test locations; without this, passing a path that overrides
+# testpaths (e.g. `pytest packages`) collects modules such as the `test` CLI command
+# in ``commands/test_cmd.py``, whose name matches the default ``test_*.py`` glob.
+# Setting norecursedirs replaces pytest's defaults, so they are restored alongside src.
+norecursedirs = [
+    "*.egg",
+    ".*",
+    "_darcs",
+    "build",
+    "CVS",
+    "dist",
+    "node_modules",
+    "venv",
+    "{arch}",
+    "src",
+]
+# A backstop against a test that will never finish, not a performance budget: the
+# slowest test here runs 59s, so this is roughly five times the worst case. A limit near
+# the slowest test would fail healthy work whenever a runner is slow.
+timeout = 300
+xfail_strict = true
+# Warnings are errors, with one scoped exception: MLflow registers CPython
+# import hooks (its autologging discovery); any later lazy import that passes
+# through them emits this harmless machinery warning from CPython itself.
+filterwarnings = [
+    "error",
+    "ignore:.*_ImportHookChainedLoader.*:ImportWarning",
+    "ignore:the load_module\\(\\) method is deprecated.*:DeprecationWarning",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["elbi_core", "elbi_cli", "elbi", "elbi_agent"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+# Measured across all four packages, not a target. It is a ratchet: raise it when the
+# number rises, never lower it to make a change fit. The previous 90 applied to
+# elbi_core and elbi_cli alone, which was most of the test suite
+# measuring a minority of the code.
+fail_under = 82
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+    "\\.\\.\\.",
+]
+
+[tool.towncrier]
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+package = "elbi_core"
+package_dir = "packages/elbi-core/src"
+title_format = "## {version} ({project_date})"
+issue_format = "[#{issue}](https://github.com/Intelligible/elbi/issues/{issue})"
+start_string = "<!-- towncrier release notes start -->\n"
+
+[[tool.towncrier.type]]
+directory = "feature"
+name = "Features"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "bugfix"
+name = "Bug Fixes"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "doc"
+name = "Documentation"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removal"
+name = "Deprecations and Removals"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "misc"
+name = "Miscellaneous"
+showcontent = false

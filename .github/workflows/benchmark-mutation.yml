@@ -1,0 +1,50 @@
+name: Benchmark bite
+
+# Deep gate-mutation sweep (complements the blocking `benchmark-bite` job in ci.yml).
+# The per-PR gate proves each trap kills >=1 mutant of its own module (non-vacuity, fast
+# via early-stop). This whole-module sweep is the opposite view: it reports the mutants
+# that *survive* the whole trap suite, i.e. gate behaviour no trap yet exercises, to
+# guide which traps to add. It mutates every gate branch, so it is slow and runs on a
+# schedule / on demand, non-blocking.
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC (after the core mutation run)
+  workflow_dispatch: {}
+
+# Read-only by default. A job that needs more says so itself, which keeps the blast radius
+# of a compromised action to what that one job was granted rather than to everything the
+# token could reach.
+permissions:
+  contents: read
+
+jobs:
+  bite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Mutate the gate; confirm traps catch it
+        run: |
+          rm -f .benchmark-mutation.sqlite
+          uv run cosmic-ray init benchmark/mutation.toml .benchmark-mutation.sqlite
+          uv run cosmic-ray exec benchmark/mutation.toml .benchmark-mutation.sqlite
+      - name: Report survival rate
+        run: |
+          echo '## Benchmark bite: gate-mutation survival (survivors = a gate behaviour no trap catches)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uv run cr-rate .benchmark-mutation.sqlite | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uv run cr-report .benchmark-mutation.sqlite > benchmark-bite-report.txt || true
+      - name: Upload bite report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: benchmark-bite-report
+          path: benchmark-bite-report.txt

@@ -1,0 +1,12 @@
+{
+  "description": "An unknown serve format is invalid.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "weird",
+    "serve": {
+      "format": "yaml"
+    }
+  },
+  "valid": false
+}

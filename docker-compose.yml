@@ -1,0 +1,47 @@
+# Run Elbi in Docker.
+#
+#   1. cp .env.example .env   and set LLM_API_KEY (or add a model in Settings later)
+#   2. docker compose up -d
+#   3. open http://localhost:7700
+#
+# State lives in a named volume, so `docker compose down` keeps your work and
+# `docker compose down -v` discards it. The default database is SQLite inside that
+# volume; point DB_URI at Postgres instead if you outgrow it.
+name: elbi
+
+services:
+  app:
+    # The published multi-arch image, so trying this needs no source tree and no build.
+    # Pin APP_VERSION to a release tag for anything you intend to keep; `latest` moves
+    # with main. To build from a checkout instead, uncomment `build:`: it wins over
+    # `image:` when both are present.
+    image: ghcr.io/intelligible/elbi:${APP_VERSION:-latest}
+    # build: .
+    restart: unless-stopped
+    ports:
+      # Bound to the loopback interface: this is your own tool, and publishing it on
+      # every interface would put it on the network for anyone who can reach the host.
+      - "127.0.0.1:${APP_PORT:-7700}:7700"
+    environment:
+      DB_URI: ${DB_URI:-sqlite:/data/elbi.db}
+      # Warehouse root on the persistent volume; the default (~/.elbi) is
+      # container-ephemeral and would be lost on every recreate.
+      STORAGE_URI: ${STORAGE_URI:-file:///data/.elbi/warehouse}
+      # Encrypts stored connection secrets at rest. Generate one with
+      # `openssl rand -hex 32`.
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-}
+      # The model the chat uses. Set a key here, or add one in Settings on first run.
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+    volumes:
+      - elbi_data:/data
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:7700/health/ready || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  elbi_data:

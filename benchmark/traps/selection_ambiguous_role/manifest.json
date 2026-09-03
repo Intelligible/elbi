@@ -1,0 +1,18 @@
+{
+  "pitfall": "selection-berkson",
+  "status": "accepted",
+  "description": "An effect that only appears once a covariate is adjusted for, whose causal role the rows cannot settle.",
+  "provenance": "synthetic; non-identifiable adjustment / suppressor (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "suppressor", "seed": 0 },
+  "gate": "verify_all",
+  "claim": { "x": "x", "y": "y", "controls": ["z"] },
+  "bite": { "module": "effect.py" },
+  "expected_verdict": "inconclusive",
+  "expected_pivotal": "role",
+  "rationale": "The effect only appears once you adjust for 'z', but the rows can't tell you whether 'z' is a confounder to control for or a collider/mediator to leave alone. Since the data can't settle it, the honest verdict is inconclusive rather than a guess.",
+  "naive_verdict": "sound",
+  "naive_rationale": "controlling for z surfaces a clean, significant effect that reads as real"
+}

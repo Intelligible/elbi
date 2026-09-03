@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.intelligible.ai/feature-store/v1/feature_store.schema.json",
+  "title": "FeatureStore",
+  "description": "The declarative manifest of a feature store: entities (join keys) and feature views (groups of features sourced from a certified derivation, keyed by entity and an event timestamp). Implementations load this schema as data and validate against it rather than mirroring it in code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specVersion", "kind"],
+  "properties": {
+    "specVersion": {
+      "description": "The version of the Feature Store Spec this manifest conforms to.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "kind": {
+      "description": "The manifest kind. Always 'FeatureStore' for this schema.",
+      "const": "FeatureStore"
+    },
+    "entities": {
+      "description": "The objects features describe, each identified by a join key.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity" },
+      "default": []
+    },
+    "featureViews": {
+      "description": "Named groups of features, each sourced from a certified derivation.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/featureView" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "joinKey"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "joinKey": {
+          "description": "The column that identifies this entity in feature and entity data.",
+          "type": "string",
+          "minLength": 1
+        },
+        "valueType": {
+          "description": "The join key's value type.",
+          "enum": ["string", "integer", "float", "boolean"],
+          "default": "string"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    },
+    "featureView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "entities", "source"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "entities": {
+          "description": "Names of the entities this view is keyed by.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "source": {
+          "description": "The certified derivation whose rows supply this view's feature values.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "timestampField": {
+          "description": "The event-time column in the source rows, enabling point-in-time joins. When absent, the view holds a single current value per entity.",
+          "type": "string",
+          "minLength": 1
+        },
+        "ttlSeconds": {
+          "description": "How far back a point-in-time join may look from each entity timestamp. Absent means unbounded.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "features": {
+          "description": "The feature columns exposed. When absent, every source column that is not a join key or the timestamp is exposed.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/feature" }
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dtype": {
+          "enum": ["string", "integer", "float", "boolean"]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    }
+  }
+}

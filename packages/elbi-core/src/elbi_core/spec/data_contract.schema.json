@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.intelligible.ai/data-contract/v1/data_contract.schema.json",
+  "title": "DataContract",
+  "description": "The declarative contract a table of rows must satisfy: per-field types and constraints, and table-level keys, referential integrity, and shape. This is the open standard for verifiable data cleaning; SDK implementations load this schema as data and validate against it rather than mirroring it in code. A contract's verdict is data validity (does the table meet its declared quality bar), distinct from a derivation claim's verdict of inferential soundness.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specVersion", "kind", "fields"],
+  "properties": {
+    "specVersion": {
+      "description": "The version of the Data Contract Spec this manifest conforms to.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "kind": {
+      "description": "The manifest kind. Always 'DataContract' for this schema.",
+      "const": "DataContract"
+    },
+    "description": {
+      "description": "Human- and agent-readable summary of what the contract guards.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "fields": {
+      "description": "Per-column type and constraint declarations, in column order.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/field" }
+    },
+    "table": { "$ref": "#/$defs/table" }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "description": "The column name this field describes.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "type": {
+          "description": "The column's declared value type. Validation checks that each present value parses as this type without mutating it (coercion is a separate, explicit stage).",
+          "enum": ["string", "integer", "number", "boolean", "date", "datetime"]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "constraints": { "$ref": "#/$defs/constraints" },
+        "mostly": {
+          "description": "The fraction of present values that must satisfy this field's constraints for the field to pass (a tolerance for a small share of violations). Missing values are judged only by 'required', never by the value constraints. Default 1 (strict).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        }
+      },
+      "allOf": [
+        {
+          "description": "A numeric range applies only to numeric types.",
+          "if": {
+            "required": ["type"],
+            "properties": { "type": { "not": { "enum": ["integer", "number"] } } }
+          },
+          "then": {
+            "properties": {
+              "constraints": {
+                "not": {
+                  "anyOf": [
+                    { "required": ["minimum"] },
+                    { "required": ["maximum"] }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Length and pattern apply only to strings.",
+          "if": {
+            "required": ["type"],
+            "properties": { "type": { "not": { "const": "string" } } }
+          },
+          "then": {
+            "properties": {
+              "constraints": {
+                "not": {
+                  "anyOf": [
+                    { "required": ["minLength"] },
+                    { "required": ["maxLength"] },
+                    { "required": ["pattern"] }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "constraints": {
+      "description": "Value-level constraints. Which apply is gated by the field's type (see the field's conditional rules); an unsupported constraint for a type is a spec violation.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "description": "Every value must be present (not missing).",
+          "type": "boolean"
+        },
+        "unique": {
+          "description": "Present values must be distinct.",
+          "type": "boolean"
+        },
+        "minimum": {
+          "description": "The smallest allowed value (inclusive) for a numeric field.",
+          "type": "number"
+        },
+        "maximum": {
+          "description": "The largest allowed value (inclusive) for a numeric field.",
+          "type": "number"
+        },
+        "minLength": {
+          "description": "The shortest allowed length for a string field.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxLength": {
+          "description": "The longest allowed length for a string field.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "pattern": {
+          "description": "A regular expression each string value must match (unanchored; anchor with ^ and $ to require a full match).",
+          "type": "string"
+        },
+        "enum": {
+          "description": "The closed set of allowed values.",
+          "type": "array",
+          "minItems": 1
+        }
+      }
+    },
+    "foreignKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fields", "reference"],
+      "properties": {
+        "fields": {
+          "description": "The local columns whose values must exist in the referenced resource.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resource", "fields"],
+          "properties": {
+            "resource": {
+              "description": "The name of the referenced resource (a dataset or an upstream derivation). Referential integrity edges are edges in the derivation DAG.",
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+            },
+            "fields": {
+              "description": "The referenced columns, positionally matched to 'fields'.",
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          }
+        }
+      }
+    },
+    "table": {
+      "description": "Table-level constraints over the whole set of rows.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primaryKey": {
+          "description": "Columns whose combined value is present and unique across all rows.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "uniqueKeys": {
+          "description": "Additional column sets whose combined value must be unique.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          }
+        },
+        "foreignKeys": {
+          "description": "Referential-integrity constraints against other resources.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/foreignKey" }
+        },
+        "rowCount": {
+          "description": "Bounds on the number of rows.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "columnsMatch": {
+          "description": "Require the table's columns to be exactly the declared fields, in order, with no extras or omissions (a schema-drift guard).",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+project: getting-started
+derivations_dir: derivations
+
+# The app serves data from the warehouse: each source is ensured and synced at load,
+# landing a Delta table named after it (here, `sales` from the committed fixture).
+sources:
+  - name: sales
+    type: csv
+    path: ./fixtures/sales.csv
+
+# The `elbi` CLI (`dev`, `validate`) reads data through these bindings.
+datasets:
+  - sales

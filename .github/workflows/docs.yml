@@ -1,0 +1,70 @@
+name: Docs
+
+# Publish `docs/` to the URL `mkdocs.yml` already claims. CI builds the site with
+# `--strict` on every change that touches it, so a broken link or a page missing from the
+# navigation fails there; this takes the same build and puts it where `site_url` says it
+# is. Without it that URL is a promise nothing keeps.
+#
+# Only from `main`, and only once the change is merged: a pull request's docs are checked
+# by CI, not published.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time, and never cancelled mid-flight: Pages serves whatever
+# finished last, so interrupting a publish can leave a half-uploaded site up.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Pages is free on a public repository and needs GitHub Enterprise anywhere else,
+    # so elsewhere this would build the site and then fail on the deploy. Skipped rather
+    # than failed, as with the other two workflows that need public visibility.
+    if: github.event.repository.visibility == 'public'
+    permissions:
+      # Publish the artifact as the live site, and prove the deployment came from here.
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked --all-extras --dev
+
+      # The same command CI runs. `--strict` here too, so a docs change that would break
+      # the build cannot reach the published site by being merged.
+      - name: Build
+        run: uv run mkdocs build --strict
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

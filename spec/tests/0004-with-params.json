@@ -1,0 +1,15 @@
+{
+  "description": "A derivation declaring typed params is valid.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "houses_in_zip",
+    "inputs": { "houses": { "kind": "dataset", "ref": "kc_house" } },
+    "params": {
+      "zipcode": { "type": "string", "description": "Zip code to filter to" },
+      "max_price": { "type": "integer", "required": false, "default": 0 }
+    },
+    "serve": { "format": "table" }
+  },
+  "valid": true
+}

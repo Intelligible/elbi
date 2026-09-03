@@ -1,0 +1,48 @@
+name: Mutation
+
+# Mutation testing is the real test-quality signal (coverage proves code ran, not
+# that it is checked). It is too slow to gate every PR, so it runs on a schedule
+# and on demand, non-blocking: it reports the survival rate and uploads the full
+# report rather than failing the build. Investigate new survivors as test gaps.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+# Read-only by default. A job that needs more says so itself, which keeps the blast radius
+# of a compromised action to what that one job was granted rather than to everything the
+# token could reach.
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras --dev
+      - name: Run mutation testing
+        run: |
+          rm -f .mutation.sqlite
+          uv run cosmic-ray init mutation.toml .mutation.sqlite
+          uv run cosmic-ray exec mutation.toml .mutation.sqlite
+      - name: Report survival rate
+        run: |
+          echo '## Mutation survival rate (lower is better)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uv run cr-rate .mutation.sqlite | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uv run cr-report .mutation.sqlite > mutation-report.txt || true
+      - name: Upload mutation report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mutation-report
+          path: mutation-report.txt

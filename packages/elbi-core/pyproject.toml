@@ -1,0 +1,159 @@
+[build-system]
+requires = ["hatchling>=1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "elbi-core"
+version = "0.1.0"
+description = "Author data context as code and serve it to agents over MCP."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Intelligible, Inc.", email = "open-source@intelligible.ai" }]
+keywords = ["mcp", "agents", "data", "derivations", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "jsonschema>=4.26",
+    "pyyaml>=6.0",
+    # The sandbox provisions agent-declared packages per analysis (the agent knows,
+    # e.g., `interpret` is the EBM package); uv resolves them into a cached,
+    # hash-pinned ephemeral environment. Shipping uv is what lets a plain
+    # `pip install elbi` run any analysis without bundling a fixed stack.
+    "uv>=0.9",
+    # Export certified runs to a team's MLflow. The skinny package is MLflow's
+    # client-only distribution (MlflowClient + entities, the tracking REST client),
+    # so this ships the export by default without the server/UI/pandas/scipy stack.
+    "mlflow-skinny>=3.0",
+    # Semantic half of the default hybrid derivation search: a contextual encoder
+    # run as an ONNX graph, which reads word order and so matches paraphrases a
+    # static model misses. onnxruntime runs it on CPU without pulling in PyTorch,
+    # keeping hybrid search working out of the box with no extra to install.
+    # Capped on 3.10 only: 1.24 declares it supports 3.10 but ships no cp310 wheel and
+    # no sdist, so a resolver picks it and the install then fails outright. 1.23 is the
+    # last release a 3.10 interpreter can actually get; newer ones resolve everywhere
+    # else. Drop this when 3.10 does (October 2026).
+    "onnxruntime>=1.20,<1.24; python_version < '3.11'",
+    "onnxruntime>=1.20; python_version >= '3.11'",
+    "tokenizers>=0.20",
+    "huggingface-hub>=0.30",
+    "numpy>=1.26",
+    # An alternative Embedder: a quarter of the weights and faster still, at a
+    # measurable cost in retrieval accuracy. Also the fallback where onnxruntime
+    # will not install.
+    "model2vec>=0.8",
+]
+
+[project.optional-dependencies]
+# Read columnar data formats in the local runner.
+data = ["pyarrow>=16.0"]
+# Mint prefix-scoped, short-lived S3 credentials for a sandbox (`sandbox.credentials`),
+# so a kernel reads the warehouse itself instead of every byte crossing the app. Only
+# the AWS path calls an SDK; the GCS and Azure scoping is pure and needs nothing.
+aws = ["boto3>=1.40"]
+# The same, on the other two clouds. Separate extras because an AWS deployment should not
+# install three SDKs to use one, and each is imported lazily so the absent ones cost
+# nothing.
+gcp = ["google-auth>=2.40"]
+azure = ["azure-storage-blob>=12.26", "azure-identity>=1.25"]
+# Ed25519 detached signatures for exportable verification certificates. The stdlib
+# has no asymmetric crypto, and a library user who never exports a certificate should
+# not pay for it, so signing lives behind an extra. Verifying the audit-log chain is
+# stdlib and needs nothing here.
+certificate = ["cryptography>=42"]
+# Push profiling, contract checking, and the oracle's data reduction down to a compute
+# engine, for data larger than memory. Optional; the core runs on list[dict] rows.
+# pyarrow is the zero-copy interchange between the row path and an engine. Its floor
+# is deliberately low (a floor, not a pin): AutoGluon caps pyarrow below its latest,
+# and the extras must co-install; standalone installs still resolve current pyarrow.
+duckdb = ["duckdb>=1.4", "pyarrow>=16.0"]
+polars = ["polars>=1.40", "pyarrow>=16.0"]
+engines = ["duckdb>=1.4", "polars>=1.40", "pyarrow>=16.0"]
+# Train, register, and serve predictive models (`elbi.ml`). Full MLflow (not
+# skinny) because the local registry needs the SQLAlchemy-backed store and the pyfunc
+# loader; FLAML's automl extra brings the standard tabular learners (LightGBM,
+# XGBoost, scikit-learn). pandas/scikit-learn floors are for our direct imports;
+# mlflow itself caps both (pandas<3, scikit-learn<2).
+ml = [
+    "mlflow>=3.14",
+    "flaml[automl]>=2.6",
+    "pandas>=2.2",
+    "scikit-learn>=1.6",
+    # Explainability artifacts (beeswarm, feature attributions) logged per run.
+    # Floor low enough for Python 3.10; newer interpreters resolve current shap.
+    "shap>=0.46",
+    # Drift monitoring: the de facto OSS standard for data-drift reports/tests.
+    "evidently>=0.7",
+    # The explicit Bayesian tuner (engine="optuna"): a TPE study with median pruning
+    # over gradient boosting. Pure-Python and light (no torch), so it ships with ml.
+    "optuna>=4.0",
+    # MLflow's registry store compares a version *string* against an INTEGER column --
+    # its client signature and its REST handlers both pass strings -- which only works
+    # where the driver leaves parameters untyped. psycopg 3 types them, so Postgres
+    # refuses `integer = character varying` and setting an alias fails. psycopg2 is the
+    # driver MLflow documents and tests, so a Postgres-backed registry needs it present.
+    "psycopg2-binary>=2.9",
+]
+# The maximum-accuracy AutoML engine (engine="autogluon"): multi-layer stack
+# ensembling over the tree learners. Tabular-only with the tree-model extras,
+# so the install stays in the hundreds of megabytes, not the torch gigabytes;
+# AutoGluon skips models whose optional dependencies are absent.
+autogluon = [
+    "elbi-core[ml]",
+    # Held at exactly 1.5.0 rather than given a range, for two reasons that between them
+    # leave one usable version. 1.6 moved the xgboost extra from `xgboost` to
+    # `xgboost-cpu`, which publishes manylinux and Windows wheels only: on macOS that
+    # falls back to an sdist needing cmake and a C++ build, which fails on a developer
+    # machine and on the macOS CI job. And AutoGluon publishes a dated nightly to PyPI
+    # most days, so a range stopping below 1.6 resolves to one of those instead -- a beta
+    # is not what holding a version back was asking for. Lift both when xgboost-cpu ships
+    # a macOS wheel.
+    "autogluon.tabular[lightgbm,catboost,xgboost]==1.5.0",
+]
+# The TabICL tabular foundation model (engine="tabicl"): a pretrained transformer that
+# predicts in a single forward pass, best on small-to-mid data. Pulls PyTorch; the
+# pretrained weights are open (BSD-3, no use-case restriction) and download from Hugging
+# Face on first use with no token -- so it is safe to ship and serve in a product, unlike
+# the TabPFN and Google TabFM weights, which are non-commercial.
+tabicl = [
+    "elbi-core[ml]",
+    "tabicl>=2",
+]
+# Connect datasets to SQL databases/warehouses. Core only (no ORM); add a driver
+# extra below for your engine. SQLite needs no driver (stdlib).
+sql = ["sqlalchemy>=2.0"]
+postgres = ["sqlalchemy>=2.0", "psycopg[binary]>=3.3.4"]
+mysql = ["sqlalchemy>=2.0", "pymysql>=1.2"]
+# pyodbc also requires an OS-level ODBC driver (msodbcsql18 + unixODBC).
+mssql = ["sqlalchemy>=2.0", "pyodbc>=5.3"]
+snowflake = ["sqlalchemy>=2.0", "snowflake-sqlalchemy>=1.10"]
+bigquery = ["sqlalchemy>=2.0", "sqlalchemy-bigquery>=1.17"]
+# Pull in the CLI (`elbi init`, `elbi mcp`, ...).
+# Version-floored so `pip install elbi-core[cli]` resolves a compatible
+# release from PyPI (tool.uv.sources is dev-only and absent from published metadata).
+# Note: `uv tool install` won't work with this extra -- elbi-core itself
+# declares no entry point, so uv tool refuses it outright. Install elbi-cli
+# directly as a tool instead; this extra is for library-style installs only.
+cli = ["elbi-cli>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/Intelligible/elbi"
+Documentation = "https://intelligible.github.io/elbi/"
+Source = "https://github.com/Intelligible/elbi"
+Issues = "https://github.com/Intelligible/elbi/issues"
+Changelog = "https://github.com/Intelligible/elbi/blob/main/CHANGELOG.md"
+
+[tool.uv.sources]
+elbi-cli = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/elbi_core"]

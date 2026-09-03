@@ -1,0 +1,136 @@
+[build-system]
+requires = ["hatchling>=1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "elbi"
+version = "0.1.0"
+description = "The FastAPI chat app and web surface over the elbi verifying runtime."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Intelligible, Inc.", email = "open-source@intelligible.ai" }]
+keywords = ["fastapi", "agents", "data-science", "verification", "elbi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+# The app is a deployed product, not a reusable library: it ships with everything it
+# offers installed, so every surface (all warehouse connectors, model training,
+# tracing) works out of the box with no opt-in extras. Reusable-library packaging (a lean
+# base plus opt-in extras) lives in the core `elbi` distribution, which this app
+# pulls with the feature sets it needs.
+dependencies = [
+    # The app serves every model through LiteLLM (Anthropic included), so token usage and
+    # cost are reported uniformly and any provider works out of the box; litellm is a hard
+    # dependency, not an extra. The anthropic extra supplies the model catalogue defaults.
+    "elbi-agent[anthropic,litellm]>=0.1.0",
+    "elbi-cli>=0.1.0",
+    # The core SDK with the DuckDB compute engine (the exploration SQL workbench and
+    # external-source queries) and the full ML lifecycle behind the /api/models surface:
+    # MLflow + FLAML (default), the accuracy-first AutoGluon engine, the Optuna tuner
+    # (in ml), and TabICL, the open (BSD-3, no-token) tabular foundation model. These
+    # are first-class app surfaces, so their stack ships installed rather than as hints.
+    "elbi-core[duckdb,ml,autogluon,tabicl]>=0.1.0",
+    "fastapi>=0.140.13",
+    "uvicorn[standard]>=0.52.3",
+    "sse-starlette>=3.4",
+    # The app mounts the CLI's MCP server and constructs MCP's own transport settings to
+    # do it, so mcp is a direct dependency here, not merely transitive through the CLI.
+    "mcp>=2.0.0",
+    # Render an exportable verification certificate as a one-page PDF. Pure Python with
+    # no system libraries (unlike weasyprint), and certificate export is an app
+    # presentation surface, so it ships with the app rather than the lean core SDK.
+    "fpdf2>=2.8",
+    # Parse multipart/form-data, which FastAPI needs for the CSV/Parquet file-upload
+    # endpoint (UploadFile). Otherwise transitive; pinned so the upload route is not at
+    # the mercy of another package happening to pull it in.
+    "python-multipart>=0.0.20",
+    "sqlmodel>=0.0.24",
+    # Prometheus metrics at /metrics (HTTP request counts, latency, build info): a
+    # deployment expectation, so it ships on by default.
+    "prometheus-fastapi-instrumentator>=8.0",
+    # app.py constructs Gauges and reads the REGISTRY directly, so prometheus-client is a
+    # direct dependency, not merely transitive through the instrumentator above.
+    "prometheus-client>=0.20",
+    # Parse cron expressions for orchestration schedules and dashboard delivery
+    # (next-run evaluation); the maintained pallets-eco standard, not a hand-rolled parser.
+    "croniter>=6.0",
+    # --- The data warehouse and its connectors -------------------------------------------
+    # Sync external sources (SQL DBs, files, SaaS APIs) into an Apache Delta Lake lakehouse
+    # queryable by DuckDB: the same table format PostHog stores every synced source in.
+    # Tables are written via delta-rs (deltalake); DuckDB reads them through its bundled
+    # delta extension. Runs on a laptop (local file:// storage) or the user's own
+    # S3/GCS/Azure bucket via one STORAGE_URI knob (delta-rs speaks object storage
+    # natively, so no per-backend filesystem packages).
+    "deltalake[pyarrow]>=1.4",
+    # dlt's rest_api engine runs the token/key REST connectors (Stripe-style SaaS, plus the
+    # manifest-driven Custom REST source): the same declarative REST config PostHog uses.
+    # The rest_api source ships in dlt core (no extra), so depend on dlt directly.
+    "dlt>=1.6",
+    # The SQL-database connectors share one SQLAlchemy engine (introspect + stream), with a
+    # driver per dialect (SQLite is stdlib). psycopg also drives the app's own Postgres
+    # DB_URI. Snowflake/BigQuery pull sizeable vendor SDKs but still ship installed so those
+    # connectors work without a follow-up install.
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "pymysql>=1.2",
+    "pymssql>=2.3",
+    "snowflake-sqlalchemy>=1.6",
+    "sqlalchemy-bigquery>=1.11",
+    "clickhouse-sqlalchemy>=0.3",
+    "oracledb>=3.4",
+    # The connectors that are not SQLAlchemy at all: each speaks its own protocol and
+    # brings its own introspection, so none of them can share the engine above.
+    "pymongo>=4.16",
+    "elasticsearch>=9.2",
+    # Object storage, over one fsspec filesystem per provider. fsspec and boto3 are
+    # already here (Delta Lake and the cloud probes use them); these are the backends
+    # that give fsspec the s3://, gs://, abfs:// and sftp:// protocols.
+    "s3fs>=2026.1",
+    "gcsfs>=2026.1",
+    "adlfs>=2024.12",
+    "paramiko>=4.1",
+    # OpenTelemetry distributed tracing, exported over OTLP. Inert unless
+    # OTEL_EXPORTER_OTLP_ENDPOINT is set.
+    "opentelemetry-sdk>=1.43",
+    "opentelemetry-instrumentation-fastapi>=0.64b0",
+    "opentelemetry-exporter-otlp-proto-http>=1.43",
+]
+
+[project.scripts]
+elbi-app = "elbi.cli:app"
+# Re-declared from elbi-cli (already a hard dependency above), so `uv tool
+# install elbi` alone puts both `elbi` (init/serve/mcp/...) and
+# `elbi-app` on PATH -- no `--with-executables-from` needed. `uv tool
+# install` only exposes a package's own declared scripts, never a dependency's.
+elbi = "elbi_cli.app:app"
+
+[tool.uv.sources]
+elbi-core = { workspace = true }
+elbi-agent = { workspace = true }
+elbi-cli = { workspace = true }
+
+[tool.hatch.build]
+# The SPA is built (web/ -> src/elbi/web/dist) before packaging and is
+# git-ignored, so it is force-included here to ship inside the wheel and sdist.
+# Run `just web-build` (or npm run build in web/) before building the distribution.
+artifacts = ["src/elbi/web/dist/**"]
+
+[tool.hatch.build.targets.wheel]
+artifacts = ["src/elbi/web/dist/**"]
+
+[project.urls]
+Homepage = "https://github.com/Intelligible/elbi"
+Documentation = "https://intelligible.github.io/elbi/"
+Source = "https://github.com/Intelligible/elbi"
+Issues = "https://github.com/Intelligible/elbi/issues"
+Changelog = "https://github.com/Intelligible/elbi/blob/main/CHANGELOG.md"

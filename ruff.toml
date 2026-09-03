@@ -1,0 +1,79 @@
+line-length = 88
+target-version = "py310"
+src = [
+    "packages/elbi-core/src",
+    "packages/elbi-cli/src",
+    "packages/elbi-agent/src",
+    "packages/elbi/src",
+]
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+    "PTH",  # flake8-use-pathlib
+    "RET",  # flake8-return
+    "S",    # flake8-bandit (we ship code others execute)
+    "RUF",  # ruff-specific rules
+    "D",    # pydocstyle
+]
+ignore = [
+    "D105",  # missing docstring in magic method
+    "D107",  # missing docstring in __init__
+]
+
+[lint.pydocstyle]
+convention = "google"
+
+# Bandit (S) targets shipped code, and B905 (zip strict=) guards against unequal
+# lengths; test fixtures use `random`, `assert`, and zips over equal-length
+# constructed columns, so neither applies to test code.
+[lint.per-file-ignores]
+"**/tests/**" = ["D", "S", "B905"]
+"**/conftest.py" = ["D"]
+"**/scaffold.py" = ["D"]
+"examples/**" = ["D"]
+# The benchmark trap generators build synthetic datasets with seeded `random`; the
+# pseudo-random source is intentional (reproducible fixtures, not cryptography).
+"benchmark/generators.py" = ["S311"]
+# Notebook cells run under the notebook runtime, which injects ``data`` (the bound
+# datasets) and carries state across cells; neither is visible to static analysis.
+"**/*.ipynb" = ["F821"]
+# Typer relies on Option()/Argument() as default values.
+"**/commands/**" = ["B008"]
+"**/app.py" = ["B008"]
+"**/cli.py" = ["B008"]
+# `elbi update --apply` hands the process to the installer with os.execvp. S606 flags
+# starting a process without a shell, which is the point: the argv list is built here
+# and shlex-split, a shell is never invoked, and a command containing shell syntax is
+# refused and printed instead. Every way of launching a process trips one of these
+# rules; this is the form that cannot be injected into.
+"**/commands/update_cmd.py" = ["B008", "S606"]
+# The brand generator shells out to rsvg-convert for the two rasters SVG cannot cover
+# (an iOS home-screen icon and a link preview). S603 flags every subprocess call, however
+# the argv is built; here the binary is resolved to an absolute path with shutil.which,
+# the arguments are literals and paths this file constructs, and no shell is involved.
+"tools/brand.py" = ["S603"]
+# This module's sole purpose is building SQL, so nearly every line trips the
+# dynamic-SQL check (S608). Identifiers pass through _qi() (quoted, embedded quotes
+# doubled) and literals through _escape_literal(), so injection is handled by
+# construction. Per Ruff's guidance, a per-file ignore fits a file that systematically
+# triggers a rule (inline noqa is for sporadic lines); the parity tests cover the SQL.
+"**/compute/duckdb_backend.py" = ["S608"]
+# Same situation for the search index's scoring statements: both modules exist to build
+# SQL. Only values are bound; the interpolated pieces are this module's own table names,
+# floats from elbi_core.text, and a facet column checked against FILTERABLE --
+# never caller input.
+"**/search/sql.py" = ["S608"]
+"**/search/index.py" = ["S608"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true

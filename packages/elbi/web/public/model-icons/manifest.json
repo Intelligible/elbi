@@ -1,0 +1,438 @@
+{
+  "note": "Written by scripts/vendor-model-icons.mjs. Do not edit by hand.",
+  "sources": {
+    "lobe-icons": {
+      "url": "https://github.com/lobehub/lobe-icons",
+      "license": "MIT",
+      "commit": "f07e9be35aef452ce735f95ea8204a14ecc513f7",
+      "path": "packages/static-svg/icons"
+    },
+    "simple-icons": {
+      "url": "https://github.com/simple-icons/simple-icons",
+      "license": "CC0-1.0",
+      "version": "16.25.0"
+    },
+    "gilbarbara/logos": {
+      "url": "https://github.com/gilbarbara/logos",
+      "license": "CC0-1.0",
+      "commit": "4de741f8503d5e81abf5dfa05214690e938296bf",
+      "path": "logos"
+    }
+  },
+  "trademarks": "These logos are trademarks of their respective owners, reproduced only to identify the model provider a user has configured. The collection licences above are copyright licences and grant no trademark rights. See NOTICE at the repository root.",
+  "icons": {
+    "ai21": {
+      "source": "lobe-icons",
+      "upstream": "ai21.svg",
+      "sha256": "6c80f2c0d8b11d1bee179666049b00e0ab7f58f5ee8c307ca0dd3327bb49f282",
+      "colourless": true
+    },
+    "alibabacloud": {
+      "source": "lobe-icons",
+      "upstream": "alibabacloud-color.svg",
+      "sha256": "73ea97baf919edb3d888a77cd45b21574e190a80124a59e199ea6953a28a959c",
+      "colourless": false
+    },
+    "apertis": {
+      "source": "lobe-icons",
+      "upstream": "apertis-color.svg",
+      "sha256": "9368f1adbcf3b3e18b96c35b085132232aa6c63bde9f72d5aa514739e1ae2e95",
+      "colourless": false
+    },
+    "aws": {
+      "source": "lobe-icons",
+      "upstream": "aws-color.svg",
+      "sha256": "b23f044479fe5c80f7df0a9515f969e5ea710c5f40d26dffa08969a0151731f3",
+      "colourless": false
+    },
+    "azure": {
+      "source": "lobe-icons",
+      "upstream": "azure-color.svg",
+      "sha256": "abc639d094593943c1b201270f4903c74d02d2e26acf26abf592a29c222c5181",
+      "colourless": false
+    },
+    "baseten": {
+      "source": "lobe-icons",
+      "upstream": "baseten.svg",
+      "sha256": "d560883f6df500c1290b2fb2018836d853c72697c1fc252793538fabf53ff28d",
+      "colourless": true
+    },
+    "bedrock": {
+      "source": "lobe-icons",
+      "upstream": "bedrock-color.svg",
+      "sha256": "a149a5678ce2b5d821759aabca7b815867027a8231a76723b3673580e8177a60",
+      "colourless": false
+    },
+    "cerebras": {
+      "source": "lobe-icons",
+      "upstream": "cerebras-color.svg",
+      "sha256": "355c2225284cd06c9cf4246110b60cb21bc86039872981e1be6bb82deec2ffa7",
+      "colourless": false
+    },
+    "clarifai": {
+      "source": "simple-icons",
+      "upstream": "clarifai (simple-icons)",
+      "sha256": "db5e800e3a1311d841fb78ba028e69c90110447bc87d99e5e4bf12ee5c2a4f16",
+      "colourless": false,
+      "license": null
+    },
+    "cloudflare": {
+      "source": "lobe-icons",
+      "upstream": "cloudflare-color.svg",
+      "sha256": "cee35d3f0ecb7925ce0a89aeaff8b907cadae7c3fe44a23e4001cc8d5ee57502",
+      "colourless": false
+    },
+    "cohere": {
+      "source": "lobe-icons",
+      "upstream": "cohere-color.svg",
+      "sha256": "84d0ee3cbe66f030e5a18cb2c86da9166ab2137c7a98781693bb1fbf31e392b9",
+      "colourless": false
+    },
+    "cometapi": {
+      "source": "lobe-icons",
+      "upstream": "cometapi-color.svg",
+      "sha256": "069903c78f5f468da16bfb82ed1de0f74030904183f764b71deb0c7e94213c23",
+      "colourless": false
+    },
+    "cursor": {
+      "source": "lobe-icons",
+      "upstream": "cursor.svg",
+      "sha256": "0cb51bddf264ae108926fd554c063ef40fc1aac3c5c921ddb39ad184e4e5d0ef",
+      "colourless": true
+    },
+    "databricks": {
+      "source": "simple-icons",
+      "upstream": "databricks (simple-icons)",
+      "sha256": "55201e1b30dd104a194418529eea8f6d223827f4b9ffe3c9b864feaf0e7b607c",
+      "colourless": false,
+      "license": null,
+      "guidelines": "https://brand.databricks.com/Styleguide/Guide/"
+    },
+    "deepinfra": {
+      "source": "lobe-icons",
+      "upstream": "deepinfra-color.svg",
+      "sha256": "bfc78853fe658f6446651d03218f3e809215fd7cb3bce841a6526de383286544",
+      "colourless": false
+    },
+    "deepseek": {
+      "source": "lobe-icons",
+      "upstream": "deepseek-color.svg",
+      "sha256": "deba5f98a5c1796e20fcac3149bcd7eb8a32f0bdd04d048819400b1f28bd1439",
+      "colourless": false
+    },
+    "digitalocean": {
+      "source": "simple-icons",
+      "upstream": "digitalocean (simple-icons)",
+      "sha256": "d101ad288b02c23824586a92be95ec4458f5b402693ed7aa7a0fa6c850e95b38",
+      "colourless": false,
+      "license": null,
+      "guidelines": "https://www.digitalocean.com/press/"
+    },
+    "docker": {
+      "source": "simple-icons",
+      "upstream": "docker (simple-icons)",
+      "sha256": "bfea18e7d5a69962acd24c74af449ae9169dd5e8ce8afa9cd26e547a73b28fcf",
+      "colourless": false,
+      "license": null
+    },
+    "featherless": {
+      "source": "lobe-icons",
+      "upstream": "featherless-color.svg",
+      "sha256": "45efbd887b9cfbef1bcef24c202df762ea2fa71a8fa5d96903cdad72a23a0965",
+      "colourless": false
+    },
+    "fireworks": {
+      "source": "lobe-icons",
+      "upstream": "fireworks-color.svg",
+      "sha256": "f1c4782b86bc03a36323fd68ad6cc376c6b2ebe57b701cc958ebd6b8d37effd6",
+      "colourless": false
+    },
+    "flux": {
+      "source": "lobe-icons",
+      "upstream": "flux.svg",
+      "sha256": "c7d557466f39a895b1cd0d233a64c092ef61ba052160af7db20af37464a9138a",
+      "colourless": true
+    },
+    "friendli": {
+      "source": "lobe-icons",
+      "upstream": "friendli.svg",
+      "sha256": "0ea6e5b955988d330951c463ea99babb3292e9859008cf8b66c85bf853d4a4aa",
+      "colourless": true
+    },
+    "gemini": {
+      "source": "lobe-icons",
+      "upstream": "gemini-color.svg",
+      "sha256": "8ab0a9bafec11f7e69bcb9fc4ffd8f1bc927d1ddcbbb6ff36dee5ae8b5a9d602",
+      "colourless": false
+    },
+    "github": {
+      "source": "lobe-icons",
+      "upstream": "github.svg",
+      "sha256": "1bd763b5d53ab1618e0afce72aacffc7e93d1249c395f713b3b055c087526625",
+      "colourless": true
+    },
+    "githubcopilot": {
+      "source": "lobe-icons",
+      "upstream": "githubcopilot.svg",
+      "sha256": "bbc7fddc13448236e5edea8c399d2072dc40aa5da5bca07f7a2f412405c500a3",
+      "colourless": true
+    },
+    "groq": {
+      "source": "lobe-icons",
+      "upstream": "groq.svg",
+      "sha256": "078d5cf6e7a54905040c15ddacf5ea33c13042fe7739e820cedc2096e4406651",
+      "colourless": true
+    },
+    "heroku": {
+      "source": "gilbarbara/logos",
+      "upstream": "heroku-icon.svg",
+      "sha256": "884e5fddc4913d7fbd9fc6f1f309355278ce6ad6ef95ea9bf98d63ddaa7a3352",
+      "colourless": false
+    },
+    "huggingface": {
+      "source": "lobe-icons",
+      "upstream": "huggingface-color.svg",
+      "sha256": "5d39d66bb6c9b026d3cb5de7bd9978dad3906570df2aca8f00078a6f8a3d0f5e",
+      "colourless": false
+    },
+    "hyperbolic": {
+      "source": "lobe-icons",
+      "upstream": "hyperbolic-color.svg",
+      "sha256": "459ebd5a986f2ba3dded01c29b97fb708893064ba64f5aa2131fd9690b32f503",
+      "colourless": false
+    },
+    "ibm": {
+      "source": "lobe-icons",
+      "upstream": "ibm.svg",
+      "sha256": "62c37af8c3f191572921197a29c90687079e62d3033f503faae59cdc96af0fb2",
+      "colourless": true
+    },
+    "inception": {
+      "source": "lobe-icons",
+      "upstream": "inception.svg",
+      "sha256": "aa491f544e8b77f520e7d7d1dc2362a2212dc6cd1a9373b97bb447c3f848d213",
+      "colourless": true
+    },
+    "lambda": {
+      "source": "lobe-icons",
+      "upstream": "lambda.svg",
+      "sha256": "0fda3913e9969665646d82752c785189fa07c851c90272ff93f68139d369d3b5",
+      "colourless": true
+    },
+    "lmstudio": {
+      "source": "lobe-icons",
+      "upstream": "lmstudio.svg",
+      "sha256": "4a575e8382b52ce742ac5d21d361a7d2a08cea7c12390ee1bbb755ef7d3cc25b",
+      "colourless": true
+    },
+    "meta": {
+      "source": "lobe-icons",
+      "upstream": "meta-color.svg",
+      "sha256": "adf9f2c1a646ccd3a37ca8c2e7e5985d64630cd633f4b95fba393d1d44e0578c",
+      "colourless": false
+    },
+    "minimax": {
+      "source": "lobe-icons",
+      "upstream": "minimax-color.svg",
+      "sha256": "7f7187fa6d9b341ac5f22f6c5a970523afb439dc45566d64eb4f4b9b604d6b01",
+      "colourless": false
+    },
+    "mistral": {
+      "source": "lobe-icons",
+      "upstream": "mistral-color.svg",
+      "sha256": "722f74b289d95486b43662fe24fa883b333701296f618406cd0ed502299170b6",
+      "colourless": false
+    },
+    "modelscope": {
+      "source": "lobe-icons",
+      "upstream": "modelscope-color.svg",
+      "sha256": "21841ddba0c560ad44c4def00a66f2a9b31703438ba390ea0b8e01cfbf39b5e4",
+      "colourless": false
+    },
+    "moonshot": {
+      "source": "lobe-icons",
+      "upstream": "moonshot.svg",
+      "sha256": "435f41b74e6a87639b6bf860e9628f20cbe7d6229bece412d548f4cea3081852",
+      "colourless": true
+    },
+    "morph": {
+      "source": "lobe-icons",
+      "upstream": "morph-color.svg",
+      "sha256": "994eb5b52da00eca9f4fa4d4c11a7fa1c1fa37dd9f58f9a97b951f0ea23a9f59",
+      "colourless": false
+    },
+    "nebius": {
+      "source": "lobe-icons",
+      "upstream": "nebius.svg",
+      "sha256": "4213ea25ec4c782688a7dafdad4bb828096151639077001c4df9c10a315f1af1",
+      "colourless": true
+    },
+    "novita": {
+      "source": "lobe-icons",
+      "upstream": "novita-color.svg",
+      "sha256": "e41321ff6a421b958c7f402f11ffcf44dbcef9c703c952736bcc92c0fd6624c4",
+      "colourless": false
+    },
+    "nvidia": {
+      "source": "lobe-icons",
+      "upstream": "nvidia-color.svg",
+      "sha256": "8c941e4eb8b782eccaaea1240c059d20be33ab8eda28d7c9ed9b53ac802fe683",
+      "colourless": false
+    },
+    "ollama": {
+      "source": "lobe-icons",
+      "upstream": "ollama.svg",
+      "sha256": "3a268218fb2e6e81fa31df70f70b51331625047794db81db21d35359428fae7a",
+      "colourless": true
+    },
+    "openai": {
+      "source": "lobe-icons",
+      "upstream": "openai.svg",
+      "sha256": "a595df6b423920c67a7f8f73c063e4bfb72d415948097b6cac063a2366bb5186",
+      "colourless": true
+    },
+    "openrouter": {
+      "source": "lobe-icons",
+      "upstream": "openrouter-color.svg",
+      "sha256": "17bede1b89166f824ee06753dc526a3f5e18b769706deaab09d04a3a98de1a78",
+      "colourless": false
+    },
+    "ovh": {
+      "source": "simple-icons",
+      "upstream": "ovh (simple-icons)",
+      "sha256": "ff5ae04393137d4a1629c093051c580173dcf6309d04fe54ea49c56af245c689",
+      "colourless": false,
+      "license": null
+    },
+    "parasail": {
+      "source": "lobe-icons",
+      "upstream": "parasail.svg",
+      "sha256": "0083857f48835c3c4f83bc4263331cfdbebdb6e4768e200e0279c1d152972231",
+      "colourless": true
+    },
+    "perplexity": {
+      "source": "lobe-icons",
+      "upstream": "perplexity-color.svg",
+      "sha256": "8353f3ab20822f1a933224b0ea32cc39f0c32d5740f4af8c254b0f418e0a3a70",
+      "colourless": false
+    },
+    "poe": {
+      "source": "lobe-icons",
+      "upstream": "poe-color.svg",
+      "sha256": "8a4b64f95c4c8d05eb90fbdd489acab747de6dfa2cf7b9c6f0ab28ea531939ac",
+      "colourless": false
+    },
+    "qwen": {
+      "source": "lobe-icons",
+      "upstream": "qwen-color.svg",
+      "sha256": "77f5768c66d08ce1d3d14e73373975c1bc0454be88c81523ddd0ffd7e2974029",
+      "colourless": false
+    },
+    "replicate": {
+      "source": "lobe-icons",
+      "upstream": "replicate.svg",
+      "sha256": "ff02158db5bc4a693d7f690c36cd7d547b8ca3313accba0783b2d3af28dae1e6",
+      "colourless": true
+    },
+    "sambanova": {
+      "source": "lobe-icons",
+      "upstream": "sambanova-color.svg",
+      "sha256": "411ab881318738b7689e5fc6c4e0879a22913aabb9bc2125e3fc03f24e3214d5",
+      "colourless": false
+    },
+    "sap": {
+      "source": "simple-icons",
+      "upstream": "sap (simple-icons)",
+      "sha256": "bf13086400d905c60f75292128c7c0bb0a6e7667120a19f1856c42255b468f05",
+      "colourless": false,
+      "license": null
+    },
+    "scaleway": {
+      "source": "simple-icons",
+      "upstream": "scaleway (simple-icons)",
+      "sha256": "5a4d40ccdfd85346579027febfd61578e38b41d591dee336318c0ce67ccf7744",
+      "colourless": false,
+      "license": null,
+      "guidelines": "https://ultraviolet.scaleway.com"
+    },
+    "snowflake": {
+      "source": "lobe-icons",
+      "upstream": "snowflake-color.svg",
+      "sha256": "f9e4d625d1563a0228fc738e3903c72a200da1aa75d156dac46c31067be0b314",
+      "colourless": false
+    },
+    "stability": {
+      "source": "lobe-icons",
+      "upstream": "stability-color.svg",
+      "sha256": "61c4593effe20b4fa1f0811861bb6ac199348d955b21a5c3f719bc07c9d27d3a",
+      "colourless": false
+    },
+    "together": {
+      "source": "lobe-icons",
+      "upstream": "together-color.svg",
+      "sha256": "27ccaf118a431c386b88418a34a4346afd9638dde10e3f2295db2eec1fa5898a",
+      "colourless": false
+    },
+    "v0": {
+      "source": "lobe-icons",
+      "upstream": "v0.svg",
+      "sha256": "fc253b71563a3a4db26ebc5a7b5402b30fb52d3f1f600025381e4f734ef1a2c3",
+      "colourless": true
+    },
+    "vercel": {
+      "source": "lobe-icons",
+      "upstream": "vercel.svg",
+      "sha256": "4874d52d8b2ce7c309cbd10c424fee123b2c9483e76d76ad0dca41794483eb24",
+      "colourless": true
+    },
+    "vertexai": {
+      "source": "lobe-icons",
+      "upstream": "vertexai-color.svg",
+      "sha256": "40f8bb6f7aca8d80ce2b0bd0d976e8e3ddeada3719758d262ea20075c11ad764",
+      "colourless": false
+    },
+    "vllm": {
+      "source": "lobe-icons",
+      "upstream": "vllm-color.svg",
+      "sha256": "3f837bad8d7f85d19e860a089639289ddd7492e67dc1ac7bd0f129f8f19b8ae6",
+      "colourless": false
+    },
+    "volcengine": {
+      "source": "lobe-icons",
+      "upstream": "volcengine-color.svg",
+      "sha256": "84f9e2cd1da7e73dc6c9a0f2521745d39cae96c008752cdb1baf57a8c94393a1",
+      "colourless": false
+    },
+    "weightsandbiases": {
+      "source": "simple-icons",
+      "upstream": "weightsandbiases (simple-icons)",
+      "sha256": "367b6149e49429d4dd1d221b27531b503e2535bd59437a2e2ed0e1aa91a4d813",
+      "colourless": false,
+      "license": null
+    },
+    "xai": {
+      "source": "lobe-icons",
+      "upstream": "xai.svg",
+      "sha256": "89eb7de9f0d02a41cfecd9109e253d7fd3529e27467dee4254faa67f3ac21451",
+      "colourless": true
+    },
+    "xiaomimimo": {
+      "source": "lobe-icons",
+      "upstream": "xiaomimimo.svg",
+      "sha256": "b04ad7dad52af2212c4567daf0ee6856f2c4625c92c680a27f9880295d558b71",
+      "colourless": true
+    },
+    "xinference": {
+      "source": "lobe-icons",
+      "upstream": "xinference-color.svg",
+      "sha256": "9fb12f4b6b3451a6295ce66d3596c8b36249077ad24d7b817b70ef0171529007",
+      "colourless": false
+    },
+    "zai": {
+      "source": "lobe-icons",
+      "upstream": "zai.svg",
+      "sha256": "e748cb5108ce37b116d7a5ba97d37e0ae97eadf6849b0de11afb248e244a01e1",
+      "colourless": true
+    }
+  }
+}

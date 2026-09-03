@@ -1,0 +1,17 @@
+{
+  "pitfall": "confounding",
+  "status": "candidate",
+  "description": "Freight quotes: fuel fee and quoted rate correlate because lane distance (yat_miles) drives both.",
+  "provenance": "Real internal freight quote-input lanes (yat_miles, service, equipment) from quote_inputs_freight; identifiers (quote_id, orig_zip, dest_zip, quote_date) dropped, 399 lanes (600 blank rows dropped). The outcome columns fuel_fee and quoted_rate are injected off the real yat_miles (fee=0.4*miles+N(0,30), rate=1.8*miles+N(0,60), seed 0) to create the distance confounder.",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "gate": "verify_all",
+  "claim": { "x": "fuel_fee", "y": "quoted_rate" },
+  "bite": { "module": "effect.py" },
+  "expected_verdict": "unsound",
+  "expected_pivotal": "'yat_miles' is a confounder",
+  "rationale": "Both the fuel fee and the quoted rate rise with lane distance, so they move together even though neither drives the other. Once you control for yat_miles the association disappears, so this is confounding, not a real fee-to-rate effect.",
+  "naive_verdict": "sound",
+  "naive_rationale": "fee and rate move together on the lane, so a bare read prices rate off the fee"
+}

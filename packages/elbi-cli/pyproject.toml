@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling>=1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "elbi-cli"
+version = "0.1.0"
+description = "The command-line interface for the elbi framework."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Intelligible, Inc.", email = "open-source@intelligible.ai" }]
+keywords = ["mcp", "agents", "cli", "elbi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    # The certificate extra pulls in cryptography: every certified-serve surface goes
+    # through this CLI (the dev MCP server directly, the app through it), so signing
+    # must be unconditionally available here.
+    "elbi-core[certificate]>=0.1.0",
+    # The 2.0 line serves the 2026-07-28 protocol revision, which drops the initialize
+    # handshake and the session header. It renamed FastMCP to MCPServer with no shim, so
+    # this floor is not optional: the 1.x API this package used is gone.
+    "mcp>=2.0.0",
+    # We construct MCP's pydantic models directly (e.g. ResourceLink), so pydantic
+    # is a direct dependency, not merely transitive through mcp.
+    "pydantic>=2.13",
+    "typer>=0.26",
+    "rich>=15.0",
+    "pyyaml>=6.0",
+    # The analytics-as-code sync/pull/plan/schema commands talk to a running app over
+    # its HTTP API.
+    "httpx>=0.28",
+    # PEP 440 comparison, for `elbi update`. Present transitively through most of the
+    # tree already; declared because comparing versions by hand gets 1.10 vs 1.9 wrong.
+    "packaging>=24.0",
+]
+
+[project.scripts]
+elbi = "elbi_cli.app:app"
+
+[project.urls]
+Homepage = "https://github.com/Intelligible/elbi"
+Documentation = "https://intelligible.github.io/elbi/"
+Source = "https://github.com/Intelligible/elbi"
+Issues = "https://github.com/Intelligible/elbi/issues"
+Changelog = "https://github.com/Intelligible/elbi/blob/main/CHANGELOG.md"
+[tool.uv.sources]
+elbi-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/elbi_cli"]

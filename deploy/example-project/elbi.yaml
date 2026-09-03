@@ -1,0 +1,14 @@
+# Starter project seeded into a fresh deployment so the app boots out of the box.
+# Mount your own project over /data (or edit this file). Add data as warehouse sources
+# (a connector, or an uploaded CSV/Parquet), and add derivations under derivations_dir.
+# The store is external when DB_URI points at Postgres; this file configures the
+# analysis project (sources, derivations, sandbox).
+project: elbi
+derivations_dir: derivations
+# The dependency-free sandbox (a hardened host subprocess); no docker-in-docker needed.
+sandbox: subprocess
+# Declare warehouse sources to ensure and sync on load, for example:
+# sources:
+#   - name: events
+#     type: csv
+#     path: ./fixtures/events.csv

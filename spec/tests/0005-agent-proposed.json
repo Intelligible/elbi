@@ -1,0 +1,14 @@
+{
+  "description": "A derivation may declare agent origin and proposed status.",
+  "data": {
+    "specVersion": "1.1",
+    "kind": "Derivation",
+    "name": "revenue_by_region",
+    "origin": "agent",
+    "status": "proposed",
+    "serve": {
+      "format": "table"
+    }
+  },
+  "valid": true
+}

@@ -1,0 +1,18 @@
+{
+  "pitfall": "confounding",
+  "status": "accepted",
+  "description": "Ice-cream sales and drownings correlate only because temperature drives both.",
+  "provenance": "synthetic; classic temperature-confounder illustration (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "ice_cream_drownings", "seed": 0 },
+  "gate": "verify_all",
+  "claim": { "x": "ice_cream", "y": "drownings" },
+  "bite": { "module": "effect.py" },
+  "expected_verdict": "unsound",
+  "expected_pivotal": "'temperature' is a confounder",
+  "rationale": "Ice-cream sales and drownings both rise with temperature; once you condition on temperature the association disappears, so it is confounding, not a causal link.",
+  "naive_verdict": "sound",
+  "naive_rationale": "a strong positive correlation reads as a causal effect to a bare model"
+}

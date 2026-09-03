@@ -1,0 +1,56 @@
+# Run `uv run pre-commit install` once; hooks then run on every commit.
+# Lint/format/type hooks are `local` so they use the project's pinned tool
+# versions (the same ones CI runs) rather than a separate pre-commit copy.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Vendored logos are excluded from both: their bytes are checksummed against what
+      # upstream published, and appending a newline breaks that check on every commit.
+      - id: trailing-whitespace
+        exclude: ^packages/elbi/web/public/model-icons/.*\.svg$
+      - id: end-of-file-fixer
+        exclude: ^packages/elbi/web/public/model-icons/.*\.svg$
+      - id: check-yaml
+        # A Helm template is not YAML: Go template actions appear where a parser expects a
+        # node, so `{{- if ... }}` at the top of a list is a syntax error rather than a
+        # mistake. Checking them here fails every commit that touches the chart, which is
+        # why this exclusion is the fix and not a silenced warning -- `helm template`
+        # renders them and CI already runs that.
+        exclude: ^deploy/helm/[^/]+/templates/
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff (lint)
+        entry: uv run ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff (format)
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        require_serial: true
+      # Whole shipped source rather than the staged files: a member too new for the
+      # floor fails wherever it is imported, not only where it was edited.
+      - id: vermin
+        name: vermin (min Python version)
+        entry: uv run vermin -t=3.10- --violations --no-tips
+          packages/elbi-core/src packages/elbi-cli/src
+          packages/elbi-agent/src packages/elbi/src
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        require_serial: true

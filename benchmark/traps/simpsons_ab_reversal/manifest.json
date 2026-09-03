@@ -1,0 +1,17 @@
+{
+  "pitfall": "simpsons",
+  "status": "accepted",
+  "description": "An A/B test where B wins the pooled conversion rate but A wins within every segment.",
+  "provenance": "synthetic; segment-confounded A/B allocation (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "simpsons_ab", "seed": 0 },
+  "gate": "verify_experiment",
+  "claim": { "variant": "variant", "metric": "converted" },
+  "expected_verdict": "unsound",
+  "expected_pivotal": "Simpson",
+  "rationale": "B wins the pooled rate, but A wins inside every segment; the pooled number is driven by how the variants are split across segments, so the aggregate lift is not real.",
+  "naive_verdict": "sound",
+  "naive_rationale": "B leads the pooled conversion rate, so a bare read calls the B lift real"
+}

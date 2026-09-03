@@ -1,0 +1,17 @@
+{
+  "description": "A 'semantic_model' input without a ref is invalid: every input requires a ref.",
+  "data": {
+    "specVersion": "1.1",
+    "kind": "Derivation",
+    "name": "metric_gates",
+    "inputs": {
+      "model": {
+        "kind": "semantic_model"
+      }
+    },
+    "serve": {
+      "format": "table"
+    }
+  },
+  "valid": false
+}

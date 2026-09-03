@@ -1,0 +1,18 @@
+{
+  "pitfall": "multiverse",
+  "status": "accepted",
+  "description": "Two independent variables: no effect beyond chance across the specification curve.",
+  "provenance": "synthetic; pure-noise x and y (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "noise", "seed": 0 },
+  "gate": "verify_multiverse",
+  "claim": { "x": "x", "y": "y" },
+  "gate_args": { "resamples": 150 },
+  "expected_verdict": "inconclusive",
+  "expected_pivotal": null,
+  "rationale": "x and y are independent, so no specification finds an effect beyond chance and there is nothing to certify; the honest answer is inconclusive, not a forced verdict.",
+  "naive_verdict": "sound",
+  "naive_rationale": "a bare read may over-interpret a small spurious slope in one specification as a real effect"
+}

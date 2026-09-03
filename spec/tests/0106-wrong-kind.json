@@ -1,0 +1,12 @@
+{
+  "description": "The kind field must be exactly 'Derivation'.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "derivation",
+    "name": "churn_risk",
+    "serve": {
+      "format": "text"
+    }
+  },
+  "valid": false
+}

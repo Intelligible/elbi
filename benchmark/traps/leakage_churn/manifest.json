@@ -1,0 +1,20 @@
+{
+  "pitfall": "leakage",
+  "status": "accepted",
+  "description": "A churn model whose 'cancellation_logged' feature is a proxy for the label.",
+  "provenance": "synthetic; target-leaking feature (seeded generator)",
+  "added_by": "leo",
+  "reviewed_by": ["leo"],
+  "data": { "file": "data.jsonl" },
+  "generated_by": { "generator": "leaky_churn", "seed": 0 },
+  "gate": "verify_leakage",
+  "claim": {
+    "target": "churned",
+    "features": ["tenure_months", "monthly_charges", "cancellation_logged"]
+  },
+  "expected_verdict": "unsound",
+  "expected_pivotal": "cancellation_logged",
+  "rationale": "The cancellation_logged feature predicts churn almost perfectly on its own, which is the signature of a feature that encodes the label rather than a legitimate predictor.",
+  "naive_verdict": "sound",
+  "naive_rationale": "near-perfect accuracy reads as a great model rather than a leak"
+}

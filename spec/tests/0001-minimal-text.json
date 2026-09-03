@@ -1,0 +1,12 @@
+{
+  "description": "A minimal derivation with only the required fields is valid.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "system_status",
+    "serve": {
+      "format": "text"
+    }
+  },
+  "valid": true
+}

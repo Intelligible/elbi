@@ -1,0 +1,65 @@
+{
+  "berkson_collider": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "The variable `admitted` is essentially a (noisy) sum of `talent` and `interview` (e.g., row1: 0.9417+(-1.3966)=-0.455 vs admitted=-0.659; row2: 0.3705+(-1.0163)=-0.646 vs admitted=-0.667, etc.). This makes `admitted` a collider: both talent and interview causally feed into it, bu",
+    "verdict": "unsound"
+  },
+  "confounding_freight_rate": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "The claim explicitly identifies distance (yat_miles) as the common driver of both fuel_fee and quoted_rate, which is exactly correct - this is a textbook confounding structure, not a spurious correlation being mistaken for causal. Both variables scale roughly linearly with miles ",
+    "verdict": "sound"
+  },
+  "confounding_ice_cream": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "This is the classic confounder scenario, and the data structure supports it: ice_cream, drownings, and temperature all move together, consistent with temperature being a common cause driving both ice_cream sales and drownings, rather than a direct causal link between them. The co",
+    "verdict": "sound"
+  },
+  "leakage_churn": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "The 'cancellation_logged' feature takes values \u22481 whenever churned=1 and \u22480 whenever churned=0, with only tiny noise. This is a near-perfect deterministic encoding of the target itself (essentially churned + noise), not an independent predictive feature. It's a classic leakage ca",
+    "verdict": "unsound"
+  },
+  "multiverse_joint_fragile": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "Looking at this data, x and y show a strong, consistent positive relationship across nearly the entire sample (correlation approximately 0.85-0.9), with w also tracking x and y closely for the bulk of observations. There is a distinct small cluster of high-x/high-y points (x\u22486, y",
+    "verdict": "unsound"
+  },
+  "multiverse_noise": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "The dataset shows x and y scattered without a clear linear or monotonic pattern-values of x from -2.4 to 2.7 pair with y values from -2.9 to 3.6 in a way that doesn't show a consistent trend (e.g., large positive x can pair with both positive and negative y, and vice versa). A ro",
+    "verdict": "sound"
+  },
+  "rtm_selected_cohort": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "This is a classic regression-to-the-mean setup: the \"selected\" cohort is explicitly chosen based on having low baseline values, and there's no evidence of any treatment being applied (no treatment variable in the dataset). The improvement from baseline to followup in the selected",
+    "verdict": "unsound"
+  },
+  "selection_ambiguous_role": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "The claim describes exactly the collider/adjustment-induced association pattern: x and y show no (or a different) relationship marginally, but conditioning on z manufactures or reverses an association. Here x and z are highly correlated (z looks like it could be a near-linear fun",
+    "verdict": "unsound"
+  },
+  "simpsons_ab_reversal": {
+    "captured_at": "2026-07-22",
+    "model": "claude-sonnet-5",
+    "prompt_version": 1,
+    "transcript_excerpt": "",
+    "verdict": "inconclusive"
+  }
+}

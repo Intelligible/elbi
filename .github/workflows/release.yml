@@ -1,0 +1,246 @@
+name: Release
+
+# Publishes every workspace package to PyPI via Trusted Publishing (OIDC).
+# No API tokens: authentication is handled by the OIDC exchange. Each package is
+# a distinct PyPI project, so each needs its own trusted-publisher config on PyPI
+# (repo + this workflow filename + the `pypi` environment) and is published in its
+# own step: OIDC mints a token scoped to a single project per upload.
+#
+# All four ship together. `elbi` requires elbi-agent,
+# elbi-cli and elbi-core, and elbi-cli requires
+# elbi-core, so releasing a subset publishes wheels that resolve to
+# nothing installable. `tool.uv.sources` hides that in the workspace, which is
+# why the smoke job below resolves the built wheels the way a user will.
+#
+# Run this workflow by hand to rehearse against TestPyPI first. It needs its own
+# trusted-publisher config there (same repo and filename, the `testpypi` environment),
+# because TestPyPI is a separate index with separate accounts.
+
+on:
+  release:
+    types: [published]
+  # A rehearsal against TestPyPI. It cannot reach PyPI: the two indexes have separate
+  # jobs below, each gated on the event, rather than one job choosing a URL.
+  workflow_dispatch:
+
+# Read-only by default. A job that needs more says so itself, which keeps the blast radius
+# of a compromised action to what that one job was granted rather than to everything the
+# token could reach.
+permissions:
+  contents: read
+
+# One release at a time, and never cancelled: a publish interrupted between two of the
+# four uploads leaves PyPI holding a partial release that cannot be replaced, because a
+# version is write-once.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The checkout token is not needed after cloning; leaving it in .git/config
+          # hands it to every later step, including any action they call.
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          # No npm cache, for the same reason as uv's below: a cache entry is writable by
+          # whatever ran before it, and this workflow signs and publishes what it builds.
+          # `cache-dependency-path` is absent too -- naming it is enough to turn caching
+          # back on.
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          # No cache on the release path. A cache is writable by anything that ran before
+          # it, so a poisoned entry would reach the artifacts this workflow signs and
+          # publishes -- the one place where a few saved minutes are not worth it.
+          enable-cache: false
+      # web/dist is git-ignored, so a fresh checkout has none. Skipping this ships
+      # a chat app that serves no web UI: hatchling force-includes the directory,
+      # and an absent one matches nothing.
+      - name: Build the web UI
+        run: npm ci && npm run build
+        working-directory: packages/elbi/web
+      - name: Build distributions (one directory per project)
+        run: |
+          uv build --package elbi --out-dir dist/elbi
+          uv build --package elbi-agent --out-dir dist/elbi-agent
+          uv build --package elbi-cli --out-dir dist/elbi-cli
+          uv build --package elbi-core --out-dir dist/elbi-core
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dist
+          path: dist/
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          # No cache on the release path. A cache is writable by anything that ran before
+          # it, so a poisoned entry would reach the artifacts this workflow signs and
+          # publishes -- the one place where a few saved minutes are not worth it.
+          enable-cache: false
+      # The elbi-* packages exist only in the wheelhouse, so resolution
+      # proves the release is self-contained; everything else comes from PyPI as
+      # it would for a user. A package left out of the build fails here.
+      # What PyPI itself runs on upload. A README that does not render is rejected there,
+      # which would strand the release: the tag and the GitHub release already exist, and
+      # a version cannot be re-uploaded once taken.
+      - name: Check the distribution metadata
+        run: uvx twine check --strict dist/*/*
+
+      - name: Collect the wheels
+        run: |
+          mkdir -p wheelhouse
+          find dist -name '*.whl' -exec cp {} wheelhouse/ \;
+          ls -1 wheelhouse
+      # Resolution alone stops catching an omitted package once the previous
+      # release is on PyPI, because the floor specifiers accept the older version
+      # from there. Assert the set directly instead.
+      - name: Check every package was built
+        run: |
+          python3 -c "
+          import glob
+          missing = [
+              name
+              for name, pattern in (
+                  ('elbi', 'elbi-[0-9]*.whl'),
+                  ('elbi-agent', 'elbi_agent-*.whl'),
+                  ('elbi-cli', 'elbi_cli-*.whl'),
+                  ('elbi-core', 'elbi_core-*.whl'),
+              )
+              if not glob.glob('wheelhouse/' + pattern)
+          ]
+          assert not missing, 'the release is missing: ' + ', '.join(missing)
+          print('all four packages built')
+          "
+      - name: Install and smoke-test the app
+        run: |
+          uv venv
+          uv pip install --find-links wheelhouse elbi
+          .venv/bin/elbi --version
+          .venv/bin/elbi-app --help > /dev/null
+          .venv/bin/python -c "
+          from importlib.resources import files
+          index = files('elbi') / 'web' / 'dist' / 'index.html'
+          assert index.is_file(), 'the wheel ships no built web UI'
+          print('web UI present')
+          "
+      # The MCP-only install is its own resolution path: elbi-cli pulls
+      # elbi-core without the app package.
+      - name: Install and smoke-test the CLI on its own
+        run: |
+          uv venv .venv-cli
+          uv pip install --python .venv-cli --find-links wheelhouse elbi-cli
+          .venv-cli/bin/elbi --version
+      # Wheels and sdists omit files for different reasons, so a wheel carrying the
+      # web UI is no evidence the sdist does. Check the archive, then build one for
+      # real to prove an sdist install works at all.
+      - name: Smoke-test the sdists
+        run: |
+          python3 -c "
+          import glob, tarfile
+          sdist = glob.glob('dist/elbi/elbi-[0-9]*.tar.gz')[0]
+          names = tarfile.open(sdist).getnames()
+          assert any(n.endswith('web/dist/index.html') for n in names), (
+              sdist + ' ships no built web UI'
+          )
+          print(sdist, 'contains the web UI')
+          "
+          uv venv .venv-sdist
+          uv pip install --python .venv-sdist dist/elbi-core/*.tar.gz
+          .venv-sdist/bin/python -c "import elbi_core; print('sdist install OK')"
+
+  publish:
+    # Only a published release reaches PyPI; a manual run cannot.
+    if: github.event_name == 'release'
+    needs: smoke
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+      # Four uploads to four PyPI projects cannot be one atomic operation -- OIDC
+      # mints a token per project -- so these are ordered steps in a single job
+      # rather than parallel jobs: dependencies publish first, and a failure
+      # part-way through never leaves a package whose requirements are absent from
+      # the index. Attestations (PEP 740) are generated by default under the
+      # `id-token: write` granted above.
+      - name: Publish elbi-core
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: dist/elbi-core
+      - name: Publish elbi-agent
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: dist/elbi-agent
+      - name: Publish elbi-cli
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: dist/elbi-cli
+      - name: Publish elbi
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: dist/elbi
+
+  # The same artifacts, the same OIDC exchange and the same attestations, against an index
+  # whose releases can be deleted. Run this before a first release so the upload path is
+  # not being exercised for the first time on the one index where a version is spent
+  # permanently.
+  publish-testpypi:
+    if: github.event_name == 'workflow_dispatch'
+    needs: smoke
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+      # Four uploads to four PyPI projects cannot be one atomic operation -- OIDC
+      # mints a token per project -- so these are ordered steps in a single job
+      # rather than parallel jobs: dependencies publish first, and a failure
+      # part-way through never leaves a package whose requirements are absent from
+      # the index. Attestations (PEP 740) are generated by default under the
+      # `id-token: write` granted above.
+      - name: Publish elbi-core to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/elbi-core
+      - name: Publish elbi-agent to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/elbi-agent
+      - name: Publish elbi-cli to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/elbi-cli
+      - name: Publish elbi to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/elbi

@@ -1,0 +1,87 @@
+version: 2
+# One grouped pull request per ecosystem per week. Ungrouped, a quiet week still
+# opened ten separate PRs that each had to be reviewed, rebased, and merged in turn,
+# and every merge invalidated the lockfile in the rest.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    ignore:
+      # Pinned in elbi-core for a reason a version bump cannot see: 1.6 moved the
+      # xgboost extra to `xgboost-cpu`, which publishes no macOS wheel, so the install
+      # falls back to an sdist needing cmake and fails on a developer machine and on the
+      # macOS CI leg. Dependabot lifted the pin to 1.6.1 once already; the bump passed
+      # because a pull request tests Linux only, and the break surfaced on main.
+      #
+      # Lift this together with the pin, when xgboost-cpu ships a macOS wheel.
+      - dependency-name: "autogluon.tabular"
+    groups:
+      # Split so a dev-tooling bump (ruff/mypy/pytest) never waits on a runtime
+      # dependency's review, and vice versa.
+      dev-dependencies:
+        dependency-type: "development"
+        patterns: ["*"]
+      runtime-dependencies:
+        dependency-type: "production"
+        patterns: ["*"]
+      # Everything the two above do not reach. `dependency-type` classifies declared
+      # dependencies only, so a transitive one matches neither group and arrives as a pull
+      # request of its own: four of them showed up at once for packages nothing here names.
+      # Listed last because a dependency joins the first group it matches.
+      transitive-dependencies:
+        patterns: ["*"]
+
+  # The web UI. Absent until three npm security updates arrived ungrouped and one at a
+  # time; without an entry here Dependabot opens security fixes individually and never
+  # offers ordinary version updates at all.
+  - package-ecosystem: "npm"
+    directory: "/packages/elbi/web"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    ignore:
+      # @tanstack/react-table 9 is a redesign, not a version bump: useReactTable becomes
+      # useTable, the row models are rebuilt as createCoreRowModel and friends, and
+      # ColumnDef takes a different number of type arguments. Held until the migration is
+      # done deliberately, then lift this and move the floor.
+      - dependency-name: "@tanstack/react-table"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Majors stay out of the groups so one redesigned package cannot hold twenty
+      # ordinary updates behind it -- react-grid-layout 2 and @tanstack/react-table 9
+      # arrived inside a group of 23 and failed the whole pull request. Excluded here,
+      # a major arrives on its own and is migrated on its own.
+      web-dev-dependencies:
+        dependency-type: "development"
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      web-dependencies:
+        dependency-type: "production"
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      web-transitive-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # The base images the deployable image and the compute sandbox layer over. Pinned by
+  # digest, which is what makes an update visible: a tag moves under you silently.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/docker"
+    schedule:
+      interval: "weekly"

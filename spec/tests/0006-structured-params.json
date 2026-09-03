@@ -1,0 +1,16 @@
+{
+  "description": "A derivation may declare object and array params, including an array of records.",
+  "data": {
+    "specVersion": "1.1",
+    "kind": "Derivation",
+    "name": "score_customers",
+    "inputs": { "model": { "kind": "derivation", "ref": "train_model" } },
+    "params": {
+      "record": { "type": "object", "description": "One feature record to score" },
+      "batch": { "type": "array", "items": "object", "required": false },
+      "ids": { "type": "array", "items": "string", "required": false }
+    },
+    "serve": { "format": "table" }
+  },
+  "valid": true
+}

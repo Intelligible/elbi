@@ -1,0 +1,71 @@
+name: CodeQL
+
+# Dataflow analysis over the Python and the web UI, which is a different question from
+# the one the linters answer. Ruff's flake8-bandit rules match shapes in a single file --
+# a bare `except`, a hardcoded password, a subprocess with `shell=True`. CodeQL follows a
+# value from where it enters the process to where it is used, so it sees the taint that
+# crosses functions and modules and that no per-file rule can.
+#
+# `zizmor` covers the third surface, the workflows themselves, and runs in CI where its
+# findings block a merge. This one reports rather than blocks: dataflow analysis over a
+# codebase this size takes long enough that gating every push on it would trade more in
+# feedback latency than it buys.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a query-pack update finds existing code rather than waiting for the next
+    # push to touch it.
+    - cron: "41 6 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyse:
+    name: Analyse ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Code scanning is free on a public repository and needs Code Security anywhere
+    # else. The analysis itself runs fine either way -- it is the upload that is
+    # refused, after the work is done -- so on a private repository this would burn
+    # three minutes per language and then fail for a reason that is not a defect.
+    # A private repository with Code Security enabled can drop this line.
+    if: github.event.repository.visibility == 'public'
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both are interpreted, so neither needs a build step: CodeQL extracts from
+        # source and `autobuild` has nothing to do.
+        language: ["python", "javascript-typescript"]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Initialise
+        uses: github/codeql-action/init@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # v3
+        with:
+          languages: ${{ matrix.language }}
+          # The security queries plus the quality ones that indicate a defect rather
+          # than a preference. The default pack alone omits several taint queries.
+          queries: security-and-quality
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # v3
+        with:
+          category: "/language:${{ matrix.language }}"

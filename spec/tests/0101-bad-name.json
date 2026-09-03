@@ -1,0 +1,12 @@
+{
+  "description": "A name that is not lower snake_case is invalid.",
+  "data": {
+    "specVersion": "1.0",
+    "kind": "Derivation",
+    "name": "Churn-Risk",
+    "serve": {
+      "format": "table"
+    }
+  },
+  "valid": false
+}

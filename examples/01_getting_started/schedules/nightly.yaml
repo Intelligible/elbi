@@ -1,0 +1,3 @@
+selection: stale
+mode: cron
+cron: 0 2 * * *

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "elbi-agent"
+version = "0.1.0"
+description = "The verifying analysis runtime for elbi: an LLM loop that cannot report an effect it has not verified."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Intelligible, Inc.", email = "open-source@intelligible.ai" }]
+keywords = ["agents", "llm", "data-science", "verification", "elbi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "elbi-core>=0.1.0",
+]
+
+[project.optional-dependencies]
+# The Anthropic client is opt-in: the runtime and its tests run against any
+# LLMClient, so the SDK is only needed to drive the loop with a real model.
+anthropic = ["anthropic>=0.121.0"]
+# The LiteLLM client makes the loop model-agnostic: one adapter over ~100 providers
+# (OpenAI, Anthropic, Google, Bedrock, Azure, OpenRouter, Ollama, local, ...), chosen
+# by a provider/model string. Opt-in, since the default install stays Anthropic-only.
+# 1.98.0 is excluded, not capped: it imports `NotRequired` from `typing`, which
+# exists only on 3.11+, while declaring support for 3.10, so `import litellm`
+# raises on a Python this project supports. Upstream issue BerriAI/litellm#38892,
+# fix proposed in #38895 and unreleased. Drop the exclusion once a release carries it.
+litellm = ["litellm>=1.75,!=1.98.0"]
+
+[project.urls]
+Homepage = "https://github.com/Intelligible/elbi"
+Documentation = "https://intelligible.github.io/elbi/"
+Source = "https://github.com/Intelligible/elbi"
+Issues = "https://github.com/Intelligible/elbi/issues"
+Changelog = "https://github.com/Intelligible/elbi/blob/main/CHANGELOG.md"
