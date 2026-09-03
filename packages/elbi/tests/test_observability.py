@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from elbi import create_app
 from elbi.db import Store, open_store
-from elbi.logging_config import JsonFormatter, configure_logging
+from elbi.logging_config import JsonFormatter, TextFormatter, configure_logging
 
 
 class _NoClient:
@@ -135,3 +136,33 @@ def test_configure_logging_selects_json(monkeypatch: pytest.MonkeyPatch) -> None
     # restore a plain formatter so later tests' logs are readable
     monkeypatch.setenv("LOG_FORMAT", "text")
     configure_logging()
+
+
+def test_a_logged_value_cannot_forge_a_second_record() -> None:
+    """Ids and names come off the request path, so a newline in one stays escaped."""
+    forged = "nb1\n2026-01-01 00:00:00 ERROR audit: granted admin"
+    record = logging.LogRecord(
+        "svc", logging.WARNING, "path", 1, "locking %s failed", (forged,), None
+    )
+    line = TextFormatter("%(levelname)s %(name)s: %(message)s").format(record)
+    assert "\n" not in line
+    assert "\\n" in line
+
+
+def test_a_traceback_still_spans_lines() -> None:
+    """Escaping applies to the message; the exception block stays readable."""
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        record = logging.LogRecord(
+            "svc", logging.ERROR, "path", 1, "failed", (), sys.exc_info()
+        )
+    assert len(TextFormatter("%(message)s").format(record).splitlines()) > 2
+
+
+def test_configure_logging_defaults_to_single_line_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LOG_FORMAT", raising=False)
+    configure_logging()
+    assert isinstance(logging.getLogger().handlers[0].formatter, TextFormatter)

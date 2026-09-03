@@ -44,6 +44,19 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(data, default=str)
 
 
+class TextFormatter(logging.Formatter):
+    """Render each record on one line, escaping newlines the message carries.
+
+    Ids and names taken from a request reach the log, and a newline in one would
+    otherwise start what reads as a second record.
+    """
+
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        """Format the record, with CR and LF in the message escaped."""
+        record.message = record.message.replace("\r", "\\r").replace("\n", "\\n")
+        return super().formatMessage(record)
+
+
 def configure_logging() -> None:
     """Configure the root logger from ``LOG_LEVEL`` (INFO) and ``LOG_FORMAT``."""
     level = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -52,7 +65,7 @@ def configure_logging() -> None:
         handler.setFormatter(JsonFormatter())
     else:
         handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            TextFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
         )
     root = logging.getLogger()
     root.handlers[:] = [handler]
