@@ -18,6 +18,7 @@ never trained on; the selected members are then refit on the full data for the e
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from collections.abc import Sequence
 from typing import Any
@@ -482,7 +483,7 @@ def _log_base_scores(
                 },
             )
             metrics = []
-            if score == score:  # not NaN
+            if not math.isnan(score):
                 metrics.append(
                     Metric("val_score", float(score), int(run.info.start_time), 0)
                 )

@@ -299,6 +299,7 @@ def train_automl(
                 "classification problem; use task='regression' for a continuous "
                 "target, or pick a categorical target"
             )
+    fit_period: int | None = None
     if resolved_task == "ts_forecast":
         frame, split_horizon, fit_period = _forecast_frame(
             frame, target, time_col, horizon
