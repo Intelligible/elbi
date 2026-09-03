@@ -68,9 +68,31 @@ def test_query_xor_table_required(db: str) -> None:
         load_sql(db, query="SELECT 1", table="sales")
 
 
-def test_bad_table_name_rejected(db: str) -> None:
-    with pytest.raises(DataBindingError, match="invalid table name"):
+def test_a_table_name_cannot_carry_sql(db: str) -> None:
+    """The name is quoted as an identifier, so the appended statement never runs."""
+    with pytest.raises(DataBindingError, match="SQL query failed"):
         load_sql(db, table="sales; DROP TABLE sales")
+    assert len(load_sql(db, table="sales").rows) == 2
+
+
+def test_empty_and_over_qualified_table_names_rejected(db: str) -> None:
+    for name in ("", ".", "a.b.c.d"):
+        with pytest.raises(DataBindingError, match="invalid table name"):
+            load_sql(db, table=name)
+
+
+def test_a_reserved_word_table_name_resolves(tmp_path: Path) -> None:
+    """``order`` is a keyword; unquoted it is a syntax error rather than a table."""
+    url = f"sqlite:///{tmp_path / 'kw.db'}"
+    engine = sa.create_engine(url)
+    with engine.begin() as conn:
+        conn.execute(sa.text('CREATE TABLE "order" (id INTEGER)'))
+        conn.execute(sa.text('INSERT INTO "order" VALUES (1)'))
+        conn.execute(sa.text('CREATE TABLE "MixedCase" (id INTEGER)'))
+        conn.execute(sa.text('INSERT INTO "MixedCase" VALUES (2)'))
+    engine.dispose()
+    assert load_sql(url, table="order").rows == [{"id": 1}]
+    assert load_sql(url, table="MixedCase").rows == [{"id": 2}]
 
 
 def test_invalid_connection_url() -> None:
@@ -115,10 +137,14 @@ def test_postgres_statement_timeout_is_in_milliseconds() -> None:
 class _FakeConn:
     def __init__(self) -> None:
         self.options: dict[str, Any] | None = None
+        self.statements: list[str] = []
 
     def execution_options(self, **kwargs: Any) -> _FakeConn:
         self.options = kwargs
         return self
+
+    def exec_driver_sql(self, statement: str) -> None:
+        self.statements.append(statement)
 
 
 def test_read_only_applies_for_postgres() -> None:
@@ -128,10 +154,56 @@ def test_read_only_applies_for_postgres() -> None:
     assert conn.options == {"postgresql_readonly": True}
 
 
-def test_read_only_noop_for_other_engines() -> None:
+def test_read_only_noop_for_dialects_without_one() -> None:
+    conn = _FakeConn()
+    assert _read_only(conn, "snowflake") is conn
+    assert conn.options is None
+    assert conn.statements == []
+
+
+def test_read_only_sets_query_only_for_sqlite() -> None:
     conn = _FakeConn()
     assert _read_only(conn, "sqlite") is conn
-    assert conn.options is None
+    assert conn.statements == ["PRAGMA query_only = ON"]
+
+
+def test_mysql_connects_read_only() -> None:
+    """Set on connect: a transaction already open would stay read-write."""
+    args = _connect_args("mysql", timeout=15)
+    assert args["init_command"] == "SET SESSION TRANSACTION READ ONLY"
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "DROP TABLE sales",
+        "CREATE TABLE evil (x INTEGER)",
+        "INSERT INTO sales VALUES (3, 'north', 1.0)",
+        "UPDATE sales SET amount = 0",
+        "DELETE FROM sales",
+    ],
+)
+def test_a_write_never_reaches_the_database(db: str, statement: str) -> None:
+    """Row-returning is checked after execution, so a write has to be refused first.
+
+    SQLite commits DDL outside the transaction, which is how a dropped table used to
+    survive the error the caller saw.
+    """
+    with pytest.raises(DataBindingError, match="SQL query failed"):
+        load_sql(db, query=statement)
+
+    engine = sa.create_engine(db)
+    with engine.connect() as conn:
+        names = {
+            row[0]
+            for row in conn.execute(
+                sa.text("SELECT name FROM sqlite_master WHERE type = 'table'")
+            )
+        }
+        rows = conn.execute(sa.text("SELECT id, amount FROM sales")).fetchall()
+    engine.dispose()
+    assert names == {"sales"}
+    assert rows == [(1, 100.0), (2, 5.0)]
 
 
 @pytest.mark.parametrize(
