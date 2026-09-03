@@ -1,0 +1,13 @@
+name: elbi
+
+# Tests are not shipped, and the quality pack's assert rules fire on the pattern that
+# makes a test readable.
+paths-ignore:
+  - "**/tests/**"
+  - benchmark
+
+query-filters:
+  # A Protocol body is `...`, which this reads as a statement with no effect. Every hit
+  # in this repository is one.
+  - exclude:
+      id: py/ineffectual-statement
