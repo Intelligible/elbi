@@ -62,6 +62,15 @@ export function DataTable<T>({
   const start = clampedPage * pageSize
   const rows = sorted.slice(start, start + pageSize)
 
+  // Whole-row click, minus what is not a row click: interactive controls inside a row own
+  // their own clicks.
+  const rowClick = (row: T) => (e: React.MouseEvent<HTMLTableRowElement>) => {
+    const t = e.target as Element
+    if (!e.currentTarget.contains(t)) return
+    if (t.closest("button,a,input,select,textarea,label")) return
+    onRowClick?.(row)
+  }
+
   const toggleSort = (key: string) =>
     setSort((prev) =>
       prev?.key !== key
@@ -161,7 +170,7 @@ export function DataTable<T>({
               rows.map((row) => (
                 <tr
                   key={rowKey(row)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  onClick={onRowClick ? rowClick(row) : undefined}
                   className={cn(
                     "border-t border-border transition-colors",
                     onRowClick && "cursor-pointer hover:bg-muted/60"

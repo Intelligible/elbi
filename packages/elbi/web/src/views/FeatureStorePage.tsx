@@ -131,10 +131,7 @@ export function FeatureStorePage() {
           variant="ghost"
           size="icon-sm"
           aria-label="Delete feature view"
-          onClick={(e) => {
-            e.stopPropagation()
-            void deleteFeatureView(v.name).then(refresh)
-          }}
+          onClick={() => void deleteFeatureView(v.name).then(refresh)}
         >
           <Trash2 className="size-4" />
         </Button>

@@ -120,10 +120,7 @@ function DashboardsBody() {
         <span className="inline-flex gap-1">
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              void duplicate(d.id)
-            }}
+            onClick={() => void duplicate(d.id)}
             className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted hover:text-foreground"
             aria-label={`Duplicate ${d.name}`}
           >
@@ -131,10 +128,7 @@ function DashboardsBody() {
           </button>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              void remove(d.id)
-            }}
+            onClick={() => void remove(d.id)}
             className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted hover:text-danger"
             aria-label="Delete dashboard"
           >
