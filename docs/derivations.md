@@ -6,7 +6,7 @@ it servable and verifiable: its inputs, its dependencies, and its serve contract
 ## The decorator
 
 ```python
-from elbi import Artifact, Context, Dataset, derivation, serve
+from elbi_core import Artifact, Context, Dataset, derivation, serve
 
 
 @derivation(
@@ -94,7 +94,7 @@ Parameters are values an agent supplies per call; served over MCP they become th
 tool's typed input schema. Read them with `ctx.param(name)`.
 
 ```python
-from elbi import param
+from elbi_core import param
 
 
 @derivation(
@@ -167,9 +167,9 @@ The full project is in
 Derivations are plain functions behind a registry. Drive them with a `Runner`:
 
 ```python
-from elbi import Registry, Runner
-from elbi.config import DataBindings
-from elbi.discovery import discover
+from elbi_core import Registry, Runner
+from elbi_core.config import DataBindings
+from elbi_core.discovery import discover
 
 registry = Registry()
 discover(Path("derivations"), registry=registry)
