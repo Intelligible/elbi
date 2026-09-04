@@ -63,6 +63,9 @@ export type NotebookEnvironment = {
 export type NotebookView = {
   id: string
   name: string
+  folder_id: string | null
+  // The containing folder's name, or null at the root (or if the folder was trashed).
+  folder_name: string | null
   deps: string[]
   metadata: Record<string, unknown>
   schedule: Record<string, unknown> | null
