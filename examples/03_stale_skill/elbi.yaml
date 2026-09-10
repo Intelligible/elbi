@@ -1,0 +1,9 @@
+project: stale-skill
+derivations_dir: derivations
+# lexical (BM25) search: two derivations don't need semantic search, and it skips
+# downloading an embedding model on first `elbi mcp` -- this stays fast offline.
+search: lexical
+
+datasets:
+  - returns
+  - positions
