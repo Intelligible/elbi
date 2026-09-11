@@ -24,7 +24,8 @@ from elbi_core import Artifact, Context, Dataset, derivation, serve
 from .cov_matrix import cov_matrix
 
 TRADING_DAYS_PER_YEAR = 252
-TARGET_MAX_VARIANCE_SHARE = 0.28  # no single name carries more than ~a quarter of book variance
+# No single name carries more than ~a quarter of book variance.
+TARGET_MAX_VARIANCE_SHARE = 0.28
 
 
 @derivation(
@@ -38,14 +39,19 @@ def risk_overlay(ctx: Context) -> Artifact:
     symbols: list[str] = cov["symbols"]
     matrix: dict[str, dict[str, float]] = cov["cov"]
 
-    weights = {row["symbol"]: float(row["weight"]) for row in ctx.input("positions").rows}
+    positions = ctx.input("positions").rows
+    weights = {row["symbol"]: float(row["weight"]) for row in positions}
 
     # (Sigma w)_a for each name, then the book's variance w^T Sigma w.
-    sigma_w = {a: sum(matrix[a][b] * weights.get(b, 0.0) for b in symbols) for a in symbols}
+    sigma_w = {
+        a: sum(matrix[a][b] * weights.get(b, 0.0) for b in symbols) for a in symbols
+    }
     portfolio_var = sum(weights.get(a, 0.0) * sigma_w[a] for a in symbols)
     gross_vol = math.sqrt(portfolio_var * TRADING_DAYS_PER_YEAR)
 
-    contribution = {a: weights.get(a, 0.0) * sigma_w[a] / portfolio_var for a in symbols}
+    contribution = {
+        a: weights.get(a, 0.0) * sigma_w[a] / portfolio_var for a in symbols
+    }
 
     cuts: dict[str, float] = {}
     for symbol, share in contribution.items():
@@ -56,9 +62,8 @@ def risk_overlay(ctx: Context) -> Artifact:
 
     # A content tag naming exactly which covariance computation this answer
     # came from -- so "which numbers produced this cut" is never a guess.
-    cov_hash = hashlib.sha256(
-        json.dumps(matrix, sort_keys=True).encode()
-    ).hexdigest()[:8]
+    digest = json.dumps(matrix, sort_keys=True).encode()
+    cov_hash = hashlib.sha256(digest).hexdigest()[:8]
 
     return Artifact.json(
         {

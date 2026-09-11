@@ -12,11 +12,13 @@ from mcp.client.streamable_http import streamable_http_client
 
 
 async def main() -> None:
-    async with streamable_http_client("http://127.0.0.1:7878/mcp") as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool("run_risk_overlay", {})
-            data = json.loads(result.content[0].text)
+    async with (
+        streamable_http_client("http://127.0.0.1:7878/mcp") as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        result = await session.call_tool("run_risk_overlay", {})
+        data = json.loads(result.content[0].text)
 
     print("=== run_risk_overlay ===")
     print(f"{'as_of':<10} {data['as_of']}")

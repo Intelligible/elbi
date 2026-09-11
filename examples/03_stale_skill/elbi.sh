@@ -25,4 +25,13 @@ if [ "$ready" != true ]; then
     exit 1
 fi
 
-python3 call_overlay.py
+# Resolve the interpreter from elbi's own shebang: elbi depends on mcp, so that
+# Python is guaranteed to have it. Bare `python3` on PATH is not.
+python_bin=$(sed -n '1s/^#!//p' "$(command -v elbi)")
+if [ -z "$python_bin" ] || ! "$python_bin" -c "import mcp" >/dev/null 2>&1; then
+    echo "no Python with the 'mcp' client library found next to the elbi CLI." >&2
+    echo "from a repo checkout, try: uv run ./elbi.sh" >&2
+    exit 1
+fi
+
+"$python_bin" call_overlay.py
