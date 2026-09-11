@@ -20,3 +20,17 @@ def _reset_prometheus_registry() -> Iterator[None]:
     for collector in list(REGISTRY._collector_to_names):
         REGISTRY.unregister(collector)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_spa_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep booting a server out of npm.
+
+    ``web/dist`` is not checked in, so the first test to call ``serve.build`` runs
+    ``npm ci`` and ``npm run build``. Under ``--dist=loadfile`` the files that boot a
+    server land on different workers, which then race on the same build directory and
+    one of them hits the timeout.
+    """
+    from elbi import serve
+
+    monkeypatch.setattr(serve, "_ensure_spa_built", lambda *_: None)
