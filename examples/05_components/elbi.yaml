@@ -1,0 +1,12 @@
+project: components-example
+derivations_dir: derivations
+
+# Same shape as 01_getting_started: one warehouse source, synced from a
+# committed fixture.
+sources:
+  - name: customers
+    type: csv
+    path: ./fixtures/customers.csv
+
+datasets:
+  - customers

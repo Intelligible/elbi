@@ -28,6 +28,18 @@ one person, one group, or the whole org):
   team has certified, so "has anyone already answered this" is a search, not a
   Slack message.
 
+## The one piece ahead of the access-control layer
+
+`search_components` (this session's own addition to `elbi_core`) finds a relevant,
+previously-computed statement by meaning, across every components-format
+derivation on one server. `elbi-enterprise`'s grants are precise down to one
+derivation -- share `default_risk_components` and everyone with access sees
+everything it serves -- but there is not yet a finer-grained kind for one
+component-statement *within* that derivation's output. Until there is, share the
+derivation, not the individual finding. (Flagging this as the current boundary
+rather than verifying it against elbi-enterprise's own test suite directly --
+worth confirming with whoever owns that package before this is load-bearing.)
+
 ## Ask
 
 Write to solutions@intelligible.ai.

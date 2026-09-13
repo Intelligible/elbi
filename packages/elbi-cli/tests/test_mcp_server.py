@@ -1203,6 +1203,62 @@ def test_search_derivations_tool_returns_matches() -> None:
     assert "No derivations match" in _tool_text(miss)
 
 
+def _server_with_components() -> MCPServer:
+    registry = Registry(retriever=Bm25Retriever())
+
+    @derivation(name="facts", serve=serve.components(), registry=registry)
+    def facts(ctx: Context) -> Artifact:
+        return Artifact.components(
+            [
+                {
+                    "id": "test/discount_threshold",
+                    "type": "threshold_rule",
+                    "scope": {"dataset": "customers"},
+                    "statement": "Discounts above 20% correlate with higher churn.",
+                },
+                {
+                    "id": "test/tenure_shape",
+                    "type": "model_component",
+                    "scope": {"dataset": "customers"},
+                    "statement": "Tenure has a protective, nonlinear effect on churn.",
+                },
+            ]
+        )
+
+    @derivation(name="hello", serve=serve.text(), registry=registry)
+    def hello(ctx: Context) -> Artifact:  # a non-components derivation, must be ignored
+        return Artifact.text("hi")
+
+    return build_server(registry, lambda: Runner(registry))
+
+
+def test_search_components_tool_returns_matches_with_provenance() -> None:
+    server = _server_with_components()
+    out = asyncio.run(
+        server.call_tool("search_components", {"query": "discount churn"})
+    )
+    text = _tool_text(out)
+    assert "Discounts above 20%" in text
+    matches = out.structured_content["components"]
+    assert matches[0]["provenance"]["derivation"] == "facts"
+    assert matches[0]["provenance"]["derivation_version"]
+
+
+def test_search_components_tool_ignores_non_components_derivations() -> None:
+    server = _server_with_components()
+    out = asyncio.run(server.call_tool("search_components", {"query": "hi hello"}))
+    assert out.structured_content["components"] == []
+    assert "No components match" in _tool_text(out)
+
+
+def test_search_components_tool_registered_on_every_server() -> None:
+    server = _server_with_one()  # no components-format derivation at all
+    tools = asyncio.run(server.list_tools())
+    assert "search_components" in {tool.name for tool in tools}
+    out = asyncio.run(server.call_tool("search_components", {"query": "anything"}))
+    assert out.structured_content["components"] == []
+
+
 def test_propose_persists_to_store_and_delete_removes_it(tmp_path: Path) -> None:
     registry = Registry()
     store = AuthoredStore(tmp_path / "authored")

@@ -1,0 +1,14 @@
+{
+  "description": "A derivation serving its artifact as OpenReasoningComponents (ORC) components is valid.",
+  "data": {
+    "specVersion": "1.1",
+    "kind": "Derivation",
+    "name": "churn_components",
+    "description": "Grounded, natural-language facts about customer churn.",
+    "inputs": {
+      "customers": { "kind": "dataset", "ref": "customers" }
+    },
+    "serve": { "format": "components", "title": "Churn components" }
+  },
+  "valid": true
+}

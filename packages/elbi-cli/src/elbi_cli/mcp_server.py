@@ -55,6 +55,7 @@ from elbi_core import (
     analyze_structure,
     author,
     profile_columns,
+    search_components,
     submit_code_job,
     suggest_contract,
     verify_all,
@@ -143,6 +144,7 @@ _MIME = {
     "markdown": "text/markdown",
     "json": "application/json",
     "text": "text/plain",
+    "components": "application/json",
 }
 
 
@@ -210,6 +212,7 @@ _ANNOTATIONS: dict[str, ToolAnnotations] = {
     "profile_dataset": READS,
     "structure_map": READS,
     "search_derivations": READS,
+    "search_components": READS,
     "asset_status": READS,
     "job_status": READS,
     "sandbox_environment": READS,
@@ -328,6 +331,7 @@ def build_server(
     operations: Operations | None = None,
     on_author: Callable[[str, dict[str, Any]], object] | None = None,
     on_delete: Callable[[str], object] | None = None,
+    embedder: Any | None = None,
 ) -> MCPServer:
     """Construct an :class:`MCPServer` exposing certified, served derivations.
 
@@ -354,6 +358,13 @@ def build_server(
     :func:`_register_run_code`), so files survive across calls; ``None`` keeps each call
     ephemeral. ``backend`` selects where that session runs: ``"subprocess"`` (default)
     or ``"docker"`` (an isolated container where ``run_code`` and ``bash`` share it).
+
+    ``embedder`` is reused for ``search_components``
+    (see :func:`_register_component_search`), the same object already loaded for
+    derivation search where one is available, so it is loaded once rather than
+    twice. ``None`` (the default, and the only option for ``elbi-cli``, which does
+    not depend on an embedding model) falls back to lexical search alone for
+    components.
     """
     server = MCPServer(name, instructions=instructions)
     # Agents add and remove derivation tools at runtime, so the tool list is
@@ -390,6 +401,7 @@ def build_server(
                     certificate = None
             _register(server, derivation, serving, attestation, certificate)
     _register_search(server, registry)
+    _register_component_search(server, registry, serving, embedder)
     if operations is not None:
         _register_operate(server, operations)
     if warehouse_schema is not None:
@@ -841,6 +853,75 @@ def _register_search(server: MCPServer, registry: Registry) -> None:
     )
     server.tool(name="search_derivations", description=search_derivations.__doc__)(
         search_derivations
+    )
+
+
+def _register_component_search(
+    server: MCPServer,
+    registry: Registry,
+    serving: Serving,
+    embedder: Any | None,
+) -> None:
+    """Register ``search_components``.
+
+    Retrieval over every served, certified ``components``-format derivation's
+    current facts. A thin, rebuild-every-call index (see
+    :func:`elbi_core.components.search_components`'s docstring for why): each call
+    re-serves every eligible derivation through the same :class:`Serving` cache
+    ``run_<name>`` uses, so it costs nothing beyond what is already cached, then
+    ranks the combined corpus. There is no persistence across restarts and no
+    incremental re-indexing; :mod:`elbi.search`'s chunked, persisted index (already
+    used for a derivation's own fields) is the right home once this needs to run at
+    real scale.
+    """
+
+    async def search_components_tool(query: str, limit: int = 5) -> CallToolResult:
+        # Recomputed per call, like search_derivations: a derivation can be authored
+        # or trashed between calls.
+        candidates = [
+            derivation
+            for derivation in registry
+            if derivation.is_served
+            and derivation.is_certified
+            and derivation.serve is not None
+            and derivation.serve.format == "components"
+        ]
+        corpus: list[dict[str, Any]] = []
+        for derivation in candidates:
+            try:
+                outcome = await serving.serve(derivation.name)
+            except Exception:
+                # One derivation failing to serve (e.g. a required param with no
+                # default, a transient error) must not sink the whole search.
+                logger.warning(
+                    "search_components: could not serve %r",
+                    derivation.name,
+                    exc_info=True,
+                )
+                continue
+            if outcome.structured is not None:
+                corpus.extend(outcome.structured.get("components", []))
+
+        matches = search_components(query, corpus, limit=limit, embedder=embedder)
+        if not matches:
+            text = f"No components match {query!r}."
+        else:
+            lines = [f"Found {len(matches)} component(s) for {query!r}:"]
+            lines.extend(f"- {match.get('statement', '')}" for match in matches)
+            text = "\n".join(lines)
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content={"components": matches, "count": len(matches)},
+        )
+
+    search_components_tool.__doc__ = (
+        "Search grounded, natural-language facts (OpenReasoningComponents) drawn "
+        "from every served components-format derivation. Returns matched "
+        "statements as text, and the full component objects -- with evidence, "
+        "relations and provenance -- as structured content."
+    )
+    server.tool(name="search_components", description=search_components_tool.__doc__)(
+        search_components_tool
     )
 
 

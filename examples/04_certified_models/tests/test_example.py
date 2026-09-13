@@ -16,6 +16,7 @@ from pathlib import Path
 
 from elbi_cli.mcp_server import build_server
 from elbi_core import Registry, Runner, SubprocessExecutor, author, serve
+from elbi_core.components import is_valid_component
 from elbi_core.config import DataBindings
 from elbi_core.discovery import discover
 
@@ -40,6 +41,52 @@ def test_default_model_is_opaque_and_internal() -> None:
     assert artifact.kind == "opaque"
     assert "weight" in artifact.value
     assert "days_past_due" not in artifact.value["features"]
+
+
+# --- The certified finding, as durable memory, not just a table ---
+#
+# default_risk (above) answers "what is this application's risk", once, per call.
+# default_risk_components answers "what do we know about default risk" as
+# natural-language statements with their own evidence -- servable the same way,
+# but also *discoverable later by meaning*, which a table is not. This is what
+# "certified" becoming "durable, searchable memory" means concretely: the
+# vetted model's finding is a fact an agent can find again, not a table it has
+# to re-read and re-interpret every time.
+
+
+def test_default_risk_components_are_valid_and_evidence_backed() -> None:
+    components = _runner().run("default_risk_components").value
+    assert len(components) == 3
+    for component in components:
+        assert is_valid_component(component)
+    by_id = {c["id"]: c for c in components}
+    threshold = by_id["elbi-examples/default_debt_ratio_threshold"]
+    assert threshold["evidence"]["odds_ratio"] > 1  # higher debt ratio raises risk
+
+
+def test_certified_finding_is_discoverable_as_memory() -> None:
+    """The literal claim: a certified derivation's finding is not just servable,
+    it is *findable* -- and it carries the same provenance/version every other
+    derivation gets, with no separate machinery for components.
+    """
+    registry = Registry()
+    discover(PROJECT / "derivations", registry=registry)
+    bindings = DataBindings.load(PROJECT / "elbi.dev.yaml")
+
+    def make_runner() -> Runner:
+        return Runner(registry, bindings=bindings, base_dir=PROJECT)
+
+    server = build_server(registry, make_runner)
+    result = asyncio.run(
+        server.call_tool("search_components", {"query": "debt ratio default risk"})
+    )
+    matches = result.structured_content["components"]
+    assert any(m["id"] == "elbi-examples/default_debt_ratio_threshold" for m in matches)
+    match = next(
+        m for m in matches if m["id"] == "elbi-examples/default_debt_ratio_threshold"
+    )
+    assert match["provenance"]["derivation"] == "default_risk_components"
+    assert match["provenance"]["derivation_version"]
 
 
 # --- The point: the oracle, not this test, decides which model is trustworthy ---
@@ -141,3 +188,31 @@ def test_unsound_proposal_never_becomes_an_mcp_tool() -> None:
     server = build_server(registry, lambda: runner)
     tools = asyncio.run(server.list_tools())
     assert "run_leaky_default_model_2" not in {tool.name for tool in tools}
+
+
+def test_rejected_proposal_never_reaches_component_search() -> None:
+    """Closes the loop with the memory tests above: an unsound proposal is not
+    only absent as a tool, it contributes nothing to search_components either
+    -- search_components only ever looks at served, certified derivations, so
+    an agent cannot find a rejected model's "finding" any way at all, not just
+    by calling it directly.
+    """
+    registry = Registry()
+    runner = Runner(registry, executor=SubprocessExecutor(timeout=60))
+    author(
+        "leaky_default_model_3",
+        _PROPOSAL.format(name="leaky_default_model_3"),
+        runner=runner,
+        serve=serve.table(),
+        claim={
+            "target": "defaulted",
+            "features": [*_LEGITIMATE_FEATURES, "days_past_due"],
+        },
+        registry=registry,
+    )
+
+    server = build_server(registry, lambda: runner)
+    result = asyncio.run(
+        server.call_tool("search_components", {"query": "default risk"})
+    )
+    assert result.structured_content["components"] == []

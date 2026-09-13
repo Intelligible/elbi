@@ -19,6 +19,18 @@ def test_text_and_markdown_and_json_constructors() -> None:
     assert Artifact.json({"k": "v"}).value == {"k": "v"}
 
 
+def test_components_constructor_copies_items() -> None:
+    items = [
+        {"id": "x/y", "type": "column", "scope": {"dataset": "d"}, "statement": "hi"}
+    ]
+    artifact = Artifact.components(items)
+    items.append(
+        {"id": "x/z", "type": "column", "scope": {"dataset": "d"}, "statement": "bye"}
+    )
+    assert artifact.kind == "components"
+    assert len(artifact.value) == 1
+
+
 def test_opaque_constructor_holds_object() -> None:
     model = object()
     artifact = Artifact.opaque(model)
