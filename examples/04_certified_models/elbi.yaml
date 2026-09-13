@@ -1,0 +1,10 @@
+project: certified-models
+derivations_dir: derivations
+
+sources:
+  - name: loans
+    type: csv
+    path: ./fixtures/loans.csv
+
+datasets:
+  - loans

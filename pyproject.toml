@@ -219,6 +219,8 @@ testpaths = [
     "benchmark/tests",
     "examples/01_getting_started/tests",
     "examples/02_serving_a_model/tests",
+    "examples/03_stale_skill/tests",
+    "examples/04_certified_models/tests",
 ]
 # Source trees are never test locations; without this, passing a path that overrides
 # testpaths (e.g. `pytest packages`) collects modules such as the `test` CLI command

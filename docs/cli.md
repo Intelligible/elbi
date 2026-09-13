@@ -2,8 +2,8 @@
 
 ```
 elbi init <name>     Scaffold a new project (offline).
-elbi serve           Serve the chat UI and MCP together on localhost.
-elbi mcp             Serve derivations over MCP only, no chat UI.
+elbi mcp             Serve derivations over MCP (the default way to run a project).
+elbi serve           Serve the chat UI, and MCP, together on localhost.
 elbi validate        Validate the project and derivations against the spec.
 elbi cache status    Show the local cache location and entry count.
 elbi cache clear     Clear the cache (optionally --tag <tag>).
@@ -18,25 +18,29 @@ elbi init acme-data-context [--template standard|minimal] [--force]
 
 Scaffolds a project and runs offline: nothing is sent anywhere.
 
-## `serve`
-
-```bash
-elbi serve [--host 127.0.0.1] [--port 7700] [--model <model>] [--directory .]
-```
-
-The default way to run a project: a chat UI plus the same MCP endpoint `mcp`
-serves, in one process. Requires the `elbi` app package; if it is not
-installed, prints how to add it.
-
 ## `mcp`
 
 ```bash
 elbi mcp [--host 127.0.0.1] [--port 7878] [--path /mcp] [--directory .]
 ```
 
-Discovers derivations, resolves local data bindings, and serves the project over
-MCP only -- no chat UI, no `elbi` app package needed. Compute runs on
-your machine; the serve contract is applied per derivation.
+The default way to run a project: discovers derivations, resolves local data
+bindings, and serves them over MCP -- no chat UI, no `elbi` app package needed.
+Compute runs on your machine; the serve contract is applied per derivation. Point
+any MCP client (Cursor, Claude Code, Claude Desktop, Inspector) at the printed URL;
+see [Getting started](getting-started.md). Speaks streamable HTTP only -- a client
+cannot spawn it over stdio, so leave the process running.
+
+## `serve`
+
+```bash
+elbi serve [--host 127.0.0.1] [--port 7700] [--model <model>] [--directory .]
+```
+
+An alternate client: a chat UI plus the same MCP endpoint `mcp` serves, in one
+process. Requires the `elbi` app package; if it is not installed, prints how to add
+it. Reach for it to inspect the derivation graph or demo without a client of your
+own; `mcp` is the default.
 
 ## `validate`
 

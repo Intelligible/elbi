@@ -123,7 +123,7 @@ Data context for __PROJECT__, built with
 [elbi](https://github.com/Intelligible/elbi).
 
 ```bash
-elbi serve       # chat UI + MCP at http://localhost:7700, opens a browser
+elbi mcp         # MCP server at http://localhost:7878/mcp -- point a client at it
 elbi validate    # check the project against the spec
 elbi test        # run every derivation and re-verify each claim
 ```
@@ -131,8 +131,8 @@ elbi test        # run every derivation and re-verify each claim
 Those three run from the installed CLI and need no virtual environment here.
 `uv run pytest` runs this project's own tests and does need one: `uv sync` first.
 
-`elbi serve` needs the `elbi` app package installed. For a
-lighter, MCP-only server with no chat UI, use `elbi mcp` instead.
+Want a browser UI instead? `elbi serve` opens a chat UI (and the same MCP
+endpoint) at http://localhost:7700, but needs the `elbi` app package installed.
 """
 
 _AGENTS_MD = """\
