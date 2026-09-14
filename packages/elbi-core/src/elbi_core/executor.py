@@ -232,7 +232,7 @@ class SubprocessExecutor:
         path, so a persistent workspace never mixes with them.
         """
         # validate deps before any filesystem work
-        argv = self._argv(deps, "", needs_package=needs_package)
+        self._argv(deps, "", needs_package=needs_package)
         with tempfile.TemporaryDirectory(prefix="elbi-sandbox-") as tmp:
             io_dir = Path(tmp)
             # The pickle producer is trusted (our own process); the untrusted code
