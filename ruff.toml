@@ -42,6 +42,7 @@ convention = "google"
 # The benchmark trap generators build synthetic datasets with seeded `random`; the
 # pseudo-random source is intentional (reproducible fixtures, not cryptography).
 "benchmark/generators.py" = ["S311"]
+"examples/04_certified_models/fixtures/generate_loans.py" = ["S311"]
 # Notebook cells run under the notebook runtime, which injects ``data`` (the bound
 # datasets) and carries state across cells; neither is visible to static analysis.
 "**/*.ipynb" = ["F821"]

@@ -48,3 +48,23 @@ def test_predict_batch_scores_each_record() -> None:
     )
     by_id = {row["id"]: row["churn_probability"] for row in out.value}
     assert by_id["a"] > 0.5 > by_id["b"]
+
+
+def test_whatif_moves_prediction_in_the_expected_direction() -> None:
+    """Poking at an active customer's recency should move the prediction the
+    same direction increasing recency moves it for any customer: up.
+    """
+    runner = _runner()
+    out = runner.run(
+        "predict_churn_whatif",
+        {
+            "base": ACTIVE,
+            "scenarios": [
+                {"recency": CHURNY["recency"]},  # only recency changes
+                {"recency": ACTIVE["recency"]},  # unchanged: delta should be ~0
+            ],
+        },
+    )
+    worse, unchanged = out.value
+    assert worse["delta"] > 0  # a longer time since last purchase raises risk
+    assert unchanged["delta"] == 0.0
