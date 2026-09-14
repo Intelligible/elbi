@@ -19,7 +19,7 @@ Claude Code, Cursor, Codex, etc remember things about your data. But they don't 
 ## elbi in 60 seconds
 
 ```bash
-uv tool install elbi      # install elbi
+uv tool install elbi          # install elbi
 elbi init acme-data-context   # set up an example project
 cd acme-data-context          
 elbi mcp                      # serve elbi over mcp
@@ -90,6 +90,19 @@ Examples of how to use elbi:
 - [`04_certified_models`](examples/04_certified_models): Since derivations are pure Python functions, they can be written by coding agents. elbi has a verification gate that catches bad derivations before they get committed to memory. In this example, an agent proposes a model that (accidentally) trains on a feature that leaks the label; elbi's verification oracle catches it before certification, and the proposal never gets cemented into the agent's memory. The one that does certify becomes durable, searchable memory, not just a table you re-read.
 - [`05_components`](examples/05_components): A derivation's finding can be expressed as a natural-language, evidence-backed statement instead of a table -- searchable by meaning across every derivation on the server, not just callable by name.
 - [`06_components_vs_rag`](examples/06_components_vs_rag): The same three questions against a real RAG pipeline and against Elbi's components, over one rate schedule. RAG's answer goes stale the moment a source is superseded and its vector store never marks that; Elbi's updates instantly and keeps a citable audit trail. Asked something neither side has data for, RAG guesses confidently anyway -- Elbi declines.
+
+## FAQ
+<details>
+<summary>
+Why not just have my agent write notes to a file or a wiki?
+</summary>
+
+You can, and some people do. Here's why elbi is a better fit for many:
+
+1. Convenience: getting an agent to write notes to a file or a wiki means setting up agent-specific settings, a rules file for Cursor, something else for Claude Code. Elbi ships once, and every tool that speaks MCP picks it up without per-agent setup.
+2. A note is right the moment you (or an agent) write it, and then it just sits there. Nothing checks whether the data behind the note has since changed, or whether the evidence was ever actually sound, confounded, biased, etc. Elbi checks both freshness and soundness for you.
+
+</details>
 
 ## How it works
 elbi serves Python functions to AI agents over MCP as versioned, cached tools. 
