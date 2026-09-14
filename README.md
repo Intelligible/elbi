@@ -12,9 +12,9 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
 </p>
 
-**Make your data agent's memory a transparent foundation.**
+**Give your data agent a verified fact store.**
 
-Claude Code, Cursor, Codex, etc remember things about your data. But they don't let you inspect that memory, correct it, or trust that tomorrow's session is standing on the same understanding as today's. elbi fixes that.
+Claude Code, Cursor, Codex, etc remember things about your data. But they don't let you inspect that memory, correct it, or trust that tomorrow's session is standing on the same understanding as today's. **elbi** fixes that.
 
 ## elbi in 60 seconds
 
@@ -25,7 +25,7 @@ cd acme-data-context
 elbi mcp                      # serve elbi over mcp
 ```
 
-That prints `MCP server ready at http://localhost:7878/mcp`. Point your agent (e.g. Claude Code) at that MCP server (exact steps for each are just below), and your agent has access to a transparent memory associated with that project. The agent gets acccess to tools that hold verified answers about the data (called "derivations" in elbi-speak), so the agent doesn't have to re-invent SQL every time it needs an answer.
+That prints `MCP server ready at http://localhost:7878/mcp`. Point your agent (e.g. Claude Code) at that MCP server (exact steps for each are just below), and your agent now has access to a verified fact store associated with that project. The agent gets access to tools that hold verified answers about the data (called "derivations" in elbi-speak), so the agent doesn't have to re-invent SQL every time it needs an answer.
 
 ## Connecting Clients
 
@@ -87,7 +87,7 @@ Examples of how to use elbi:
 - [`01_getting_started`](examples/01_getting_started): How to get started with elbi. Without elbi: you ask agent about churn risk, it invents a SQL query. With ELBI: you define a Python function (e.g. `churn_risk`), elbi serves it via MCP, and now every time you ask your agent about churn risk, it uses the correct calculation.
 - [`02_serving_a_model`](examples/02_serving_a_model): Derivations can hold complex information like trained statML models. Train a model once, serve predictions to an agent, do 'what-if' analyses, without writing any code yourself.
 - [`03_stale_skill`](examples/03_stale_skill): Skill files could point agents at trained statML models, but require external management to be kept fresh and organized. In this example of a financial workflow, a cached skill file tells a portfolio optimizer to cut TTD 3%; but the live tool call says to cut 9.2%. Same data streams; the difference is the refresh rate -- elbi gives freshness, while skill files require some external management.
-- [`04_certified_models`](examples/04_certified_models): Since derivations are pure Python functions, they can be written by coding agents. elbi has a verification gate that catches bad derivations before they get committed to memory. In this example, an agent proposes a model that (accidentally) trains on a feature that leaks the label; elbi's verification oracle catches it before certification, and the proposal never gets cemented into the agent's memory.
+- [`04_certified_models`](examples/04_certified_models): Since derivations are pure Python functions, they can be written by coding agents. elbi has a verification gate that catches bad derivations before they get committed to the fact store. In this example, an agent proposes a model that (accidentally) trains on a feature that leaks the label; elbi's verification oracle catches it before certification, and the proposal never gets cemented into the agent's fact store.
 
 ## How it works
 elbi serves Python functions to AI agents over MCP as versioned, cached tools. 
