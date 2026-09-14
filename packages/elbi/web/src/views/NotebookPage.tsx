@@ -35,7 +35,7 @@ import { ComputeDialog } from "@/components/notebook/ComputeDialog"
 import { DataModePill } from "@/components/notebook/DataModePill"
 import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { WidgetManagerContext } from "@/components/notebook/WidgetView"
-import { Scene, SceneHeader, SceneSkeleton } from "@/components/Scene"
+import { Scene, SceneBody, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -112,6 +112,7 @@ export function NotebookPage() {
   const navigate = useNavigate()
   const dark = useDarkTheme()
   const [view, setView] = useState<NotebookView | null>(null)
+  const [missing, setMissing] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [stale, setStale] = useState<Set<string>>(new Set())
@@ -133,7 +134,12 @@ export function NotebookPage() {
   const [showVariables, setShowVariables] = useState(false)
 
   const load = useCallback(async () => {
-    setView(await getNotebook(notebookId))
+    try {
+      setView(await getNotebook(notebookId))
+      setMissing(false)
+    } catch {
+      setMissing(true)
+    }
   }, [notebookId])
 
   const refreshVariables = useCallback(async () => {
@@ -382,6 +388,18 @@ export function NotebookPage() {
   )
 
   if (view === null) {
+    if (missing) {
+      return (
+        <Scene>
+          <SceneHeader backTo="/notebooks" backLabel="Notebooks" title="Not found" />
+          <SceneBody>
+            <p className="text-sm text-text-secondary">
+              This notebook was deleted, or the link is out of date.
+            </p>
+          </SceneBody>
+        </Scene>
+      )
+    }
     return <SceneSkeleton />
   }
 
