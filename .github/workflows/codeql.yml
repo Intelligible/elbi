@@ -64,6 +64,7 @@ jobs:
           # The security queries plus the quality ones that indicate a defect rather
           # than a preference. The default pack alone omits several taint queries.
           queries: security-and-quality
+          config-file: ./.github/codeql-config.yml
 
       - name: Analyse
         uses: github/codeql-action/analyze@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # v3
