@@ -9,6 +9,8 @@ The posture follows the industry standard for read-only analytics access:
 
 * **Governance lives at the source.** Connect with a SELECT-only database role;
   the framework does not re-implement access control.
+* **Read-only connections.** Postgres, MySQL, MariaDB and SQLite are put in the
+  dialect's own read-only mode, so a write is refused rather than rolled back.
 * **Bounded results.** A row cap protects the warehouse and the agent's context.
 * **Short-lived connections.** ``NullPool``: the runner is not a long-running
   pooled service.
@@ -20,7 +22,6 @@ The posture follows the industry standard for read-only analytics access:
 from __future__ import annotations
 
 import datetime as _dt
-import re
 from decimal import Decimal
 from typing import Any
 
@@ -31,10 +32,6 @@ from .errors import DataBindingError
 DEFAULT_MAX_ROWS = 10_000
 #: Default statement timeout in seconds.
 DEFAULT_TIMEOUT = 30
-
-# Table identifiers cannot be passed as bound parameters, so a ``table:`` binding
-# is validated against this allow-list (schema-qualified names permitted).
-_TABLE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
 
 def load_sql(
@@ -98,15 +95,21 @@ def _import_sqlalchemy() -> Any:
 
 
 def _statement(sqlalchemy: Any, query: str | None, table: str | None) -> Any:
+    """The statement to run: the caller's query, or a select over ``table``.
+
+    A ``table:`` binding is built as a Core construct rather than interpolated, so the
+    dialect quotes the identifier: reserved words and mixed-case names resolve, and a
+    name cannot carry SQL of its own.
+    """
     if query is not None:
         return sqlalchemy.text(query)
-    # table is guaranteed non-None by load_sql's xor check; validate the
-    # identifier against an allow-list (identifiers cannot be bound parameters).
-    if table is None or not _TABLE_NAME.match(table):
+    parts = [part for part in (table or "").split(".") if part]
+    if not parts or len(parts) > 3:
         raise DataBindingError(
             f"invalid table name {table!r}; expected an identifier like 'schema.table'"
         )
-    return sqlalchemy.text(f"SELECT * FROM {table}")  # noqa: S608 - allow-listed
+    named = sqlalchemy.table(parts[-1], schema=".".join(parts[:-1]) or None)
+    return sqlalchemy.select(sqlalchemy.text("*")).select_from(named)
 
 
 def _safe_url(sqlalchemy: Any, connection_url: str) -> Any:
@@ -118,9 +121,15 @@ def _safe_url(sqlalchemy: Any, connection_url: str) -> Any:
 
 
 def _read_only(conn: Any, backend: str) -> Any:
-    """Apply a read-only transaction where the dialect supports it."""
+    """Put the connection in read-only mode where the dialect supports it.
+
+    MySQL and MariaDB are handled in :func:`_connect_args` instead, because their
+    read-only mode has to be set before the first statement opens a transaction.
+    """
     if backend == "postgresql":
         return conn.execution_options(postgresql_readonly=True)
+    if backend == "sqlite":
+        conn.exec_driver_sql("PRAGMA query_only = ON")
     return conn
 
 
@@ -129,7 +138,12 @@ def _connect_args(backend: str, timeout: int) -> dict[str, Any]:
     if backend == "postgresql":
         return {"options": f"-c statement_timeout={timeout * 1000}"}
     if backend in {"mysql", "mariadb"}:
-        return {"connect_timeout": timeout}  # pymysql
+        # Read-only is set on connect: a session that has already opened a read-write
+        # transaction keeps it, and DDL commits before a later SET could take effect.
+        return {
+            "connect_timeout": timeout,  # pymysql
+            "init_command": "SET SESSION TRANSACTION READ ONLY",
+        }
     if backend in {"mssql", "sqlite"}:
         return {"timeout": timeout}  # pyodbc / sqlite3
     return {}
