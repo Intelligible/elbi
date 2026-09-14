@@ -36,6 +36,11 @@ site/
 # Local derivation cache
 .elbi/
 
+# 06_components_vs_rag's live-demo runtime state (a working copy of fixtures/ that
+# publish_update.py mutates when serve_demo.py runs); committed fixtures under
+# fixtures/ are the seed, never touched at runtime.
+examples/06_components_vs_rag/runtime/
+
 # Local credentials & data bindings: NEVER commit these.
 # The credentialed data-locations file is local-only.
 elbi.dev.yaml

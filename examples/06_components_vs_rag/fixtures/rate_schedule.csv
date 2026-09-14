@@ -1,0 +1,11 @@
+key,type,item,rate,unit,rate_display,detail,citation,effective_date,valid_until,depends_on,supersedes
+detention_fee,threshold_rule,Detention (after 2 free hours),50,per_hour,$50/hour,Charged for each hour or part-hour a driver is held past the 2 free hours allotted for loading/unloading.,ACME Freight Accessorial Tariff §4.2,2024-01-01,,,
+liftgate_fee,domain_knowledge,Liftgate fee,75,flat,$75 flat,Charged when a liftgate is used to lower freight at a location without a loading dock.,ACME Freight Accessorial Tariff §4.5,2024-01-01,,,
+residential_delivery_surcharge,domain_knowledge,Residential delivery surcharge,85,flat,$85 flat,Charged for delivery to a residential address.,ACME Freight Accessorial Tariff §4.7,2024-01-01,,,
+inside_delivery_fee,domain_knowledge,Inside delivery fee,125,flat,$125 flat,Charged when freight must be carried past the dock or threshold into the building.,ACME Freight Accessorial Tariff §4.8,2024-01-01,,,
+layover_fee,domain_knowledge,Layover fee,250,per_day,$250/day,Charged when a driver is held overnight through no fault of the carrier.,ACME Freight Accessorial Tariff §4.11,2024-01-01,,,
+fuel_surcharge_low,threshold_rule,"Fuel surcharge, diesel $3.00-$3.49/gal",22,percent,22%,Applied to the linehaul charge when the national average diesel price falls in this band.,ACME Freight Accessorial Tariff §5.1,2024-01-01,,diesel_price_index,
+fuel_surcharge_high,threshold_rule,"Fuel surcharge, diesel $3.50-$3.99/gal",26,percent,26%,Applied to the linehaul charge when the national average diesel price falls in this band.,ACME Freight Accessorial Tariff §5.1,2024-01-01,,diesel_price_index,
+redelivery_fee,domain_knowledge,Redelivery fee,95,flat,$95 flat,Charged when a delivery attempt fails and a second attempt is required.,ACME Freight Accessorial Tariff §4.13,2024-01-01,,,
+reconsignment_fee,domain_knowledge,Reconsignment fee,135,flat,$135 flat,Charged when a shipment's destination is changed after pickup.,ACME Freight Accessorial Tariff §4.14,2024-01-01,,,
+diesel_price_index,domain_knowledge,Diesel price index,3.25,usd_per_gallon,$3.25/gal (stub),Stands in for a live DOE weekly retail diesel price feed; the fuel surcharge tiers key off this band. Stubbed at a fixed value for this demo rather than a live feed.,ACME Freight Accessorial Tariff §5.0 (index reference),2024-01-01,,,
