@@ -547,13 +547,22 @@ def test_folder_crud_over_http(client: tuple[TestClient, dict[str, str]]) -> Non
     summary = next(n for n in http.get("/api/notebooks").json() if n["id"] == nb)
     assert summary["folder_id"] == child
 
+    # ...and so does the editor payload, which the notebook's back link navigates by.
+    view = http.get(f"/api/notebooks/{nb}").json()
+    assert (view["folder_id"], view["folder_name"]) == (child, "Q3")
+
     # Rename, then move the notebook up to the root.
     renamed = http.put(f"/api/notebooks/folders/{child}", json={"name": "Q4"})
     assert renamed.status_code == 200
+    # The name is resolved per request, not stamped on the notebook when it was created.
+    assert http.get(f"/api/notebooks/{nb}").json()["folder_name"] == "Q4"
+
     moved = http.post(f"/api/notebooks/{nb}/move", json={"folder_id": None})
     assert moved.status_code == 200
     summary = next(n for n in http.get("/api/notebooks").json() if n["id"] == nb)
     assert summary["folder_id"] is None
+    view = http.get(f"/api/notebooks/{nb}").json()
+    assert (view["folder_id"], view["folder_name"]) == (None, None)
 
 
 def test_move_into_descendant_is_conflict(

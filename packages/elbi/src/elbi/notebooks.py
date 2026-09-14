@@ -955,9 +955,13 @@ class NotebookService:
         graph = self.graph_for(notebook_id)
         cells = self._store.get_cells(notebook_id)
         metadata = json.loads(row.metadata_json or "{}")
+        # `None` if the folder was trashed; the back link then falls back to the root.
+        folder = self._store.get_folder(row.folder_id) if row.folder_id else None
         return {
             "id": row.id,
             "name": row.name,
+            "folder_id": row.folder_id,
+            "folder_name": folder.name if folder else None,
             "copied_from": row.copied_from,
             "deps": json.loads(row.deps_json or "[]"),
             "metadata": metadata,

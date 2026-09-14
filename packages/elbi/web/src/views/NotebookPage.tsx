@@ -601,8 +601,10 @@ function Toolbar({
   return (
     <>
       <SceneHeader
-        backTo="/notebooks"
-        backLabel="Notebooks"
+        backTo={
+          view.folder_id ? `/notebooks?folder=${encodeURIComponent(view.folder_id)}` : "/notebooks"
+        }
+        backLabel={view.folder_name ?? "Notebooks"}
         icon={<NotebookPen className="size-5" />}
         mono
         title={
