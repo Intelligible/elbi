@@ -138,6 +138,34 @@ Klaviyo, SendGrid, Braze, Pipedrive, Front, Vercel, Airtable, Mixpanel, GitHub,
 Jira, Notion, Slack, Sentry, Typeform and Intercom. If yours is not there, the
 **Custom REST source** takes a manifest describing any JSON API.
 
+### Deeply nested collections
+
+A connector infers each batch's schema from the JSON it just received, and most APIs
+return a shape consistent enough for that to work. Billing APIs often do not. Stripe's
+`invoices` embeds a paginated list of line items whose `parent` differs depending on
+whether the line came from a subscription or an invoice item, and only some carry
+`taxes` -- so two invoices in the same table disagree about their own shape. Delta can
+evolve a struct that gains a field, and a list that gains one, but not a list whose
+element struct diverges *and* gains a list-typed field:
+
+```
+Unsupported CAST from Struct("data": List(Struct(...))) to Struct("data": List(Struct(...)))
+```
+
+Set `WAREHOUSE_JSON_NESTED_LISTS=1` and any column holding a list of structs is stored
+as JSON text instead of typed columns. The sync then cannot break on shape, and nothing
+is discarded -- the column holds the same data, as text. DuckDB, Athena and Spark all
+read JSON natively, so a derivation unpacks the part it needs:
+
+```sql
+SELECT json_extract_string(lines, '$.data[0].parent.type') FROM stripe__invoices
+```
+
+The cost is real, which is why this is off by default: no column-level projection or
+predicate pushdown into that field. Scalars, plain structs and lists of scalars are
+untouched -- only columns that actually hold a list of structs are encoded, and each
+one is named in the log when it is.
+
 ### Incremental sync
 
 A connector offers an incremental cursor only where one would actually help. A
