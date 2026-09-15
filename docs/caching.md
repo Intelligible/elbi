@@ -31,7 +31,7 @@ retrain a model downstream of it.
 ## Per-derivation cache policy
 
 ```python
-from elbi import cache, derivation, serve
+from elbi_core import cache, derivation, serve
 
 
 @derivation(serve=serve.json(), cache=cache.auto(ttl=3600))
