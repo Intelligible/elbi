@@ -1,9 +1,15 @@
 """The output of a derivation.
 
 An :class:`Artifact` wraps a computed value together with a hint about its shape
-(``table``, ``markdown``, ``json``, ``text``, or ``opaque``). The serve contract
-decides how a renderable value is finally presented to an agent; the artifact
-only carries it.
+(``table``, ``markdown``, ``json``, ``text``, ``components``, or ``opaque``). The
+serve contract decides how a renderable value is finally presented to an agent; the
+artifact only carries it.
+
+A ``components`` artifact holds a list of OpenReasoningComponents (ORC)-shaped
+dicts: self-contained natural-language statements about the data, each optionally
+carrying ``structure``/``evidence``/``relations``/``provenance``. Unlike ``table``,
+the compute function authors these by hand today; nothing here generates them from
+data statistics.
 
 An ``opaque`` artifact holds an arbitrary Python object (a trained model, a fitted
 index) that a downstream derivation consumes but that is never rendered to an
@@ -17,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-ArtifactKind = Literal["table", "markdown", "json", "text", "opaque"]
+ArtifactKind = Literal["table", "markdown", "json", "text", "components", "opaque"]
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,11 @@ class Artifact:
     def text(cls, text: str) -> Artifact:
         """A plain-text artifact."""
         return cls(kind="text", value=str(text))
+
+    @classmethod
+    def components(cls, items: list[dict[str, Any]]) -> Artifact:
+        """A components artifact: a list of ORC-shaped natural-language facts."""
+        return cls(kind="components", value=list(items))
 
     @classmethod
     def opaque(cls, value: Any) -> Artifact:

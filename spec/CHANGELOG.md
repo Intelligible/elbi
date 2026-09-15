@@ -26,6 +26,13 @@ Adds provenance and lifecycle, supporting agent-authored derivations.
   definitions rather than only over rows. Such an input implies no `dependsOn`
   edge, and runners SHOULD version the derivation by the document's content.
   Backward compatible: existing `dataset` and `derivation` inputs are unaffected.
+- New serve contract format `components`: the artifact is served as a list of
+  OpenReasoningComponents (ORC) components, each a self-contained natural-language
+  statement about the data with optional structure/evidence/relations/provenance.
+  A runner SHOULD stamp `provenance.derivation`/`provenance.derivation_version`
+  onto a component that doesn't already declare its own provenance, so freshness
+  is checkable against the same content-hash versioning the spec already uses.
+  Backward compatible: existing formats are unaffected.
 
 ## 1.0 (unreleased)
 

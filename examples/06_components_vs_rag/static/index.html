@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Elbi vs. RAG -- freight accessorial rates</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 960px; margin: 0 auto; padding: 24px 16px;
+    background: Canvas; color: CanvasText;
+  }
+  h1 { font-size: 1.3rem; }
+  .sub { color: GrayText; margin-top: -8px; font-size: 0.9rem; }
+  .bar { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+  input[type=text] {
+    flex: 1; min-width: 200px; padding: 8px 10px; font-size: 1rem;
+    border: 1px solid GrayText; border-radius: 6px;
+  }
+  button {
+    padding: 8px 14px; font-size: 0.95rem; border-radius: 6px;
+    border: 1px solid GrayText; background: ButtonFace; cursor: pointer;
+  }
+  button.primary { background: #2563eb; color: white; border-color: #2563eb; }
+  button#publish { background: #b45309; color: white; border-color: #b45309; }
+  .panes { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+  .pane { flex: 1; min-width: 280px; border: 1px solid GrayText; border-radius: 8px; padding: 12px; }
+  .pane h2 { margin-top: 0; font-size: 1rem; }
+  .pane.declined { border-color: #b45309; }
+  .answer { white-space: pre-wrap; margin: 8px 0; }
+  .decline { color: #b45309; font-weight: 600; }
+  .hit {
+    border-top: 1px solid color-mix(in srgb, GrayText 40%, transparent);
+    padding-top: 6px; margin-top: 6px; font-size: 0.85rem; cursor: pointer;
+  }
+  .hit .heading { font-weight: 600; }
+  .hit .detail { display: none; margin-top: 4px; color: GrayText; }
+  .hit.open .detail { display: block; }
+  .status { font-size: 0.85rem; color: GrayText; min-height: 1.2em; }
+  code { font-size: 0.85em; }
+</style>
+</head>
+<body>
+  <h1>Elbi vs. RAG</h1>
+  <p class="sub">Same question, same source facts (a freight accessorial rate schedule), two pipelines.</p>
+
+  <div class="bar">
+    <input type="text" id="question" placeholder="what's the detention fee after two hours"
+      value="what's the detention fee after two hours">
+    <button class="primary" id="ask">Ask</button>
+    <button id="publish">Publish update (detention: $50/hour -&gt; $75/hour)</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <div class="panes">
+    <div class="pane" id="rag-pane">
+      <h2>RAG (chunk + embed + top-k)</h2>
+      <div class="answer" id="rag-answer">Ask a question to see an answer.</div>
+      <div id="rag-hits"></div>
+    </div>
+    <div class="pane" id="elbi-pane">
+      <h2>Elbi (components)</h2>
+      <div class="answer" id="elbi-answer">Ask a question to see an answer.</div>
+      <div id="elbi-hits"></div>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function ask() {
+  const question = $("question").value.trim();
+  if (!question) return;
+  $("status").textContent = "Asking both...";
+  const res = await fetch("/demo/components-vs-rag/api/ask", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({question}),
+  });
+  const data = await res.json();
+  $("status").textContent = "";
+  renderRag(data.rag);
+  renderElbi(data.elbi);
+}
+
+function renderRag(rag) {
+  $("rag-answer").textContent = rag.answer;
+  $("rag-hits").innerHTML = rag.chunks.map((c) => `
+    <div class="hit">
+      <div class="heading">${escapeHtml(c.source)} / ${escapeHtml(c.heading)}</div>
+      <div class="detail">${escapeHtml(c.text)}</div>
+    </div>`).join("");
+  wireHits("#rag-hits");
+}
+
+function renderElbi(elbi) {
+  const pane = $("elbi-pane");
+  pane.classList.toggle("declined", elbi.declined);
+  $("elbi-answer").innerHTML = elbi.declined
+    ? `<span class="decline">Declined:</span> ${escapeHtml(elbi.answer)}`
+    : escapeHtml(elbi.answer);
+  $("elbi-hits").innerHTML = elbi.components.map((c) => {
+    const rels = c.relations.length
+      ? c.relations.map((r) => `${r.type} -&gt; <code>${escapeHtml(r.target_id)}</code>`).join(", ")
+      : "none";
+    return `
+    <div class="hit">
+      <div class="heading"><code>${escapeHtml(c.id)}</code></div>
+      <div class="detail">
+        <div><strong>Statement:</strong> ${escapeHtml(c.statement)}</div>
+        <div><strong>Effective:</strong> ${escapeHtml(c.effective_date)}</div>
+        <div><strong>Citation:</strong> ${escapeHtml(c.citation || "none")}</div>
+        <div><strong>Dependency chain:</strong> ${rels}</div>
+      </div>
+    </div>`;
+  }).join("");
+  wireHits("#elbi-hits");
+}
+
+function wireHits(selector) {
+  document.querySelectorAll(`${selector} .hit`).forEach((el) => {
+    el.addEventListener("click", () => el.classList.toggle("open"));
+  });
+}
+
+async function publishUpdate() {
+  $("status").textContent = "Publishing update to both sides...";
+  const res = await fetch("/demo/components-vs-rag/api/publish-update", {method: "POST"});
+  const data = await res.json();
+  $("status").textContent = data.applied
+    ? `Published: ${data.detail}`
+    : `No-op: ${data.detail}`;
+}
+
+$("ask").addEventListener("click", ask);
+$("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
+$("publish").addEventListener("click", publishUpdate);
+</script>
+</body>
+</html>

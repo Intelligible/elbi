@@ -70,3 +70,7 @@ class MetricError(ElbiError):
 
 class CertificateError(ElbiError):
     """A verification certificate is malformed, or its signature does not verify."""
+
+
+class ComponentError(ElbiError):
+    """A components artifact item failed validation against ORC's component schema."""

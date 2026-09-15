@@ -8,6 +8,7 @@ better at the call site than the initializer::
     serve.markdown(title="Pricing effects")
     serve.json(indent=2)
     serve.text()
+    serve.components(title="Churn components")
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Any, Literal
 
 from .artifact import Artifact
 
-ServeFormat = Literal["table", "markdown", "json", "text"]
+ServeFormat = Literal["table", "markdown", "json", "text", "components"]
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,8 @@ class Serve:
         if self.format == "json":
             body = _json.dumps(artifact.value, indent=self.indent, default=str)
             return self._with_title(body)
+        if self.format == "components":
+            return self._with_title(_render_components(artifact))
         # markdown and text both stringify the value as-is.
         return self._with_title(str(artifact.value))
 
@@ -96,9 +99,15 @@ class Serve:
         """Return the payload for an MCP ``structuredContent`` field, or None.
 
         For a table, the served rows (projected to ``columns``, capped at
-        ``max_rows``) with their real types, plus the total ``row_count``. ``None``
-        for other formats.
+        ``max_rows``) with their real types, plus the total ``row_count``. For
+        ``components``, every component object in full (id/type/scope/statement/
+        relations/structure/evidence/provenance) -- ``render``/``preview`` carry only
+        the statements, so this is the one place the machine-checkable fields reach
+        an agent. ``None`` for other formats.
         """
+        if self.format == "components":
+            items = artifact.value if isinstance(artifact.value, list) else []
+            return {"components": items, "count": len(items)}
         if self.format != "table":
             return None
         rows = artifact.value if isinstance(artifact.value, list) else []
@@ -158,6 +167,24 @@ def json(*, title: str | None = None, indent: int = 2) -> Serve:
 def text(*, title: str | None = None) -> Serve:
     """A plain-text serve contract."""
     return Serve(format="text", title=title)
+
+
+def components(*, title: str | None = None) -> Serve:
+    """An ORC components serve contract."""
+    return Serve(format="components", title=title)
+
+
+def _render_components(artifact: Artifact) -> str:
+    """Render components the way ORC's own spec composes them into a prompt.
+
+    One bullet per statement, nothing else. The statement is the canonical
+    representation; the rest of a component's fields reach the agent only through
+    :meth:`Serve.structured`.
+    """
+    items = artifact.value if isinstance(artifact.value, list) else []
+    if not items:
+        return "_(no components)_"
+    return "\n".join(f"- {item.get('statement', '')}" for item in items)
 
 
 def _natural_columns(rows: list[dict[str, Any]]) -> list[str]:

@@ -21,6 +21,12 @@ It defines three derivations:
   trained once and cached, not refit on every call.
 - `predict_churn_batch`: served over MCP. Takes an `array` of customer records and
   returns a probability for each.
+- `predict_churn_whatif`: served over MCP. A what-if engine, not a second model --
+  it reuses the same cached `churn_model` and the same scorer `predict_churn` does.
+  Takes a `base` record and an `array` of `scenarios` (partial records, each merged
+  onto `base`), and returns a table of each scenario's probability and its `delta`
+  from the baseline. An agent (or a human) can ask "what if this customer's recency
+  were half what it is?" without writing any scoring code of its own.
 
 The model here is plain Python so the example needs no ML dependency. The shape is
 the same with scikit-learn or PyTorch: fit in the training derivation, return

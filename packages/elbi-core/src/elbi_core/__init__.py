@@ -50,6 +50,12 @@ from .certificate import (
     load_or_create_key,
     verify_certificate,
 )
+from .components import (
+    is_valid_component,
+    search_components,
+    stamp_provenance,
+    validate_component,
+)
 from .container import DockerExecutor, DockerReplSession
 from .context import Context
 from .dashboard import (
@@ -75,6 +81,7 @@ from .errors import (
     AuthorizationError,
     CacheError,
     CertificateError,
+    ComponentError,
     ConfigError,
     CycleError,
     DataBindingError,
@@ -237,6 +244,7 @@ __all__ = [
     "ClauseResult",
     "CodeResult",
     "ColumnProfile",
+    "ComponentError",
     "CompositeReport",
     "ConfigError",
     "Constraints",
@@ -336,6 +344,7 @@ __all__ = [
     "get_historical_features",
     "get_online_features",
     "initial_variable_state",
+    "is_valid_component",
     "is_valid_dashboard",
     "is_valid_feature_store",
     "is_valid_manifest",
@@ -355,10 +364,13 @@ __all__ = [
     "resolve_metric",
     "resolve_page",
     "resolve_widget",
+    "search_components",
     "serve",
+    "stamp_provenance",
     "submit_code_job",
     "suggest_contract",
     "to_osi",
+    "validate_component",
     "validate_dashboard",
     "validate_feature_store",
     "validate_manifest",

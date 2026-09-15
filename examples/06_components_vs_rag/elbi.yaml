@@ -1,0 +1,11 @@
+project: components-vs-rag
+derivations_dir: derivations
+
+# Same shape as 05_components: one source, synced from a committed fixture.
+sources:
+  - name: rate_schedule
+    type: csv
+    path: ./fixtures/rate_schedule.csv
+
+datasets:
+  - rate_schedule

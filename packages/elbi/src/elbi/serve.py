@@ -731,12 +731,18 @@ def build(
         store.delete_promoted_query(name)
         return True
 
+    # Constructed here (rather than beside SearchIndex below, its other consumer) so
+    # build_server can reuse it for search_components instead of loading the model
+    # a second time.
+    search_embedder = None if project.config.search == "lexical" else OnnxEmbedder()
+
     if with_mcp:
         mcp_server = build_server(
             project.registry,
             make_runner,
             enable_propose=True,
             operations=operations,
+            embedder=search_embedder,
             load_dataset=load_dataset,
             dataset_specs=dataset_specs(),
             # Warehouse-schema tools so an external coding agent learns the data.
@@ -1178,7 +1184,8 @@ def build(
     )
     # Platform-wide search: one DuckDB file beside the application database. The
     # registry is pointed at it here, so both consumers read one index.
-    search_embedder = None if project.config.search == "lexical" else OnnxEmbedder()
+    # search_embedder was constructed above, alongside the build_server call that
+    # also consumes it, so it is loaded once rather than twice.
     search_index = SearchIndex(
         project.cache_dir / "search.duckdb",
         # Declared, not measured: measuring loads the model, and the DDL needs the

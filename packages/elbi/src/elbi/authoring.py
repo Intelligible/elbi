@@ -52,6 +52,7 @@ def _serve_for(fmt: str) -> Serve:
         "markdown": serve_builders.markdown,
         "json": serve_builders.json,
         "text": serve_builders.text,
+        "components": serve_builders.components,
     }
     return builders.get(fmt, serve_builders.table)(title=None)
 

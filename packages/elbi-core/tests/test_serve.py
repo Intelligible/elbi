@@ -28,6 +28,13 @@ def test_text_manifest_is_minimal() -> None:
     assert serve.text().to_manifest() == {"format": "text"}
 
 
+def test_components_manifest_is_minimal() -> None:
+    assert serve.components(title="Facts").to_manifest() == {
+        "format": "components",
+        "title": "Facts",
+    }
+
+
 def test_render_table_with_columns_and_title() -> None:
     contract = serve.table(title="Scores", columns=["id", "risk"])
     rows = [{"id": "a", "risk": 0.9}, {"id": "b", "risk": 0.1, "extra": "ignored"}]
@@ -65,6 +72,30 @@ def test_render_empty_table_columns() -> None:
     assert "(no columns)" in rendered
 
 
+def test_render_components_is_one_bullet_per_statement() -> None:
+    items = [
+        {
+            "id": "a/1",
+            "type": "column",
+            "scope": {"dataset": "d"},
+            "statement": "first fact",
+        },
+        {
+            "id": "a/2",
+            "type": "column",
+            "scope": {"dataset": "d"},
+            "statement": "second fact",
+        },
+    ]
+    rendered = serve.components(title="Facts").render(Artifact.components(items))
+    assert rendered == "# Facts\n\n- first fact\n- second fact"
+
+
+def test_render_empty_components() -> None:
+    rendered = serve.components().render(Artifact.components([]))
+    assert "(no components)" in rendered
+
+
 # --- Preview + structured content (Gap 4: result-shaping wire format) ---
 
 
@@ -90,6 +121,14 @@ def test_preview_non_table_matches_render() -> None:
     assert contract.preview(artifact) == contract.render(artifact)
 
 
+def test_preview_components_matches_render() -> None:
+    contract = serve.components()
+    artifact = Artifact.components(
+        [{"id": "a/1", "type": "column", "scope": {"dataset": "d"}, "statement": "hi"}]
+    )
+    assert contract.preview(artifact) == contract.render(artifact)
+
+
 def test_structured_returns_rows_and_count_for_table() -> None:
     contract = serve.table(max_rows=2)
     rows = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
@@ -106,3 +145,17 @@ def test_structured_projects_to_declared_columns() -> None:
 
 def test_structured_is_none_for_non_table() -> None:
     assert serve.text().structured(Artifact.text("hi")) is None
+
+
+def test_structured_returns_full_components_and_count() -> None:
+    items = [
+        {
+            "id": "a/1",
+            "type": "column",
+            "scope": {"dataset": "d"},
+            "statement": "hi",
+            "evidence": {"sample_size": 10},
+        }
+    ]
+    structured = serve.components().structured(Artifact.components(items))
+    assert structured == {"components": items, "count": 1}
