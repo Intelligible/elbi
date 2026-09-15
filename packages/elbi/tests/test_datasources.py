@@ -268,3 +268,32 @@ def test_no_connector_reaches_dlt_except_through_the_one_door() -> None:
     assert not offenders, (
         f"import dlt through warehouse.sources._dlt instead: {offenders}"
     )
+
+
+def test_a_failed_connection_test_masks_the_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dialect is free to quote the URL it was handed, and that URL holds the secret.
+
+    The driver is stubbed because the ones packaged here happen not to echo the URL;
+    what is under test is that the message is masked when one does.
+    """
+    monkeypatch.setenv("APP_SECRET_KEY", "topsecret")
+    source = DataSource(
+        name="warehouse",
+        kind="postgres",
+        host="db.internal",
+        port=5432,
+        database="analytics",
+        username="reader",
+        secret=crypto.encrypt("hunter2"),
+    )
+
+    def _echoes_the_url(url: str, **kwargs: object) -> object:
+        raise RuntimeError(f"could not connect using {url}")
+
+    monkeypatch.setattr(datasources, "create_engine", _echoes_the_url)
+    result = datasources.test_connection(source)
+    assert result["ok"] is False
+    assert "hunter2" not in result["error"]
+    assert "db.internal" in result["error"]
