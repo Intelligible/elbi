@@ -26,6 +26,7 @@ from elbi_core import (
     Registry,
     Runner,
     Serve,
+    stamp_provenance,
 )
 
 ParamValues = Mapping[str, Any]
@@ -59,7 +60,8 @@ class ServeOutcome:
 
     ``text`` is the full render (what a resource read returns); ``preview`` is the
     context-sized inline text for the tool response; ``structured`` is the MCP
-    ``structuredContent`` payload (rows + count) for tables, else ``None``.
+    ``structuredContent`` payload -- rows + count for a table, the full component
+    objects + count for ``components`` -- else ``None``.
     """
 
     text: str
@@ -117,8 +119,17 @@ class Serving:
         cache = self._registry.get(name).cache
 
         if not cache.enabled:
-            artifact = await self._compute(self._make_runner(), name, params)
-            return self._present(name, contract, artifact, "uncached"), None
+            runner = self._make_runner()
+            artifact = await self._compute(runner, name, params)
+            # Caching is off, so no version is computed for anything else here --
+            # except a `components` contract, which needs one to stamp provenance.
+            data_version = (
+                await _run(runner.data_version, name, params)
+                if contract.format == "components"
+                else None
+            )
+            outcome = self._present(name, contract, artifact, "uncached", data_version)
+            return outcome, None
 
         runner = self._make_runner()
         data_version = await _run(runner.data_version, name, params)
@@ -130,19 +141,32 @@ class Serving:
                 cache.ttl is None or age < cache.ttl
             )
             if fresh:
-                outcome = self._present(name, contract, last.artifact, "hit")
+                # The artifact being served is `last.artifact`, so it is stamped with
+                # the version it was actually computed under -- `last.data_version`,
+                # which happens to equal `data_version` here, but only because of
+                # `fresh`.
+                outcome = self._present(
+                    name, contract, last.artifact, "hit", last.data_version
+                )
                 return outcome, data_version
             if cache.expire is None or age < cache.expire:
                 # Stale (within the expire ceiling): serve last-good now, refresh
                 # in the background (deduped). Bounds stale-if-error to `expire`.
                 self._schedule_refresh(key, name, params)
-                outcome = self._present(name, contract, last.artifact, "stale")
+                # Still `last.artifact` under `last.data_version`, which does *not*
+                # equal the freshly computed `data_version` here -- that mismatch is
+                # exactly what makes this stale. Stamping with the wrong one would
+                # claim a served component is current when it is not.
+                outcome = self._present(
+                    name, contract, last.artifact, "stale", last.data_version
+                )
                 return outcome, data_version
             # Past `expire`: hard miss: block for fresh, never serve this old.
 
         artifact = await self._compute(runner, name, params)
         self._last[key] = Served(artifact, data_version, self._clock())
-        return self._present(name, contract, artifact, "miss"), data_version
+        outcome = self._present(name, contract, artifact, "miss", data_version)
+        return outcome, data_version
 
     async def _compute(
         self, runner: Runner, name: str, params: ParamValues
@@ -156,8 +180,27 @@ class Serving:
         contract: Serve,
         artifact: Artifact,
         status: str,
+        data_version: str | None = None,
     ) -> ServeOutcome:
-        """Render an artifact for serving."""
+        """Render an artifact for serving.
+
+        For a ``components`` contract with a known ``data_version``, each item
+        that doesn't already declare its own ``provenance.derivation`` is stamped
+        with this derivation's name and *this artifact's* version (the version it
+        was actually computed under -- callers must pass the version that matches
+        `artifact`, not merely the latest one, or a stale result would be stamped
+        as current).
+        """
+        if contract.format == "components" and data_version is not None:
+            items = artifact.value if isinstance(artifact.value, list) else []
+            artifact = Artifact.components(
+                [
+                    stamp_provenance(
+                        item, derivation=name, derivation_version=data_version
+                    )
+                    for item in items
+                ]
+            )
         return ServeOutcome(
             text=contract.render(artifact),
             status=status,

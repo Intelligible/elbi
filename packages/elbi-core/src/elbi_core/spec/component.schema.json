@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.openreasoningcomponents.org/component/v0/component.schema.json",
+  "title": "Component",
+  "description": "The declarative schema of a single OpenReasoningComponents (ORC) component: a self-contained unit of knowledge grounded in a dataset and designed to be embedded in LLM reasoning. This is the open standard; implementations load this schema as data and validate against it rather than mirroring it in code. Where this schema and spec/component.md disagree, this schema is authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "scope", "statement"],
+  "properties": {
+    "id": {
+      "description": "Namespaced identifier, '<namespace>/<name>'. The namespace identifies the producing system or organization; the name identifies the component within that namespace. Case-sensitive; the '/' separator appears exactly once.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.]*$"
+    },
+    "type": {
+      "description": "The component type. v0 defines: column, metric, slice, distribution, statistical_association, threshold_rule, model_component, domain_knowledge, segment. Systems may define additional, namespaced custom types (e.g. 'x_interaction_effect'); this field is an open string, not a closed enum, so a custom type is not itself a validation failure.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "scope": {
+      "description": "The dataset this component is grounded in. Resolution of the dataset identifier to a catalog entry, file path, or schema is the responsibility of the system using the component.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset"],
+      "properties": {
+        "dataset": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "statement": {
+      "description": "The canonical representation: a natural language description of what the component captures, meant to be woven into a chain of thought. All other fields are auxiliary to this one.",
+      "type": "string",
+      "minLength": 1
+    },
+    "relations": {
+      "description": "Directed edges to other components. Every edge points from this component to a target component.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/relation" }
+    },
+    "structure": {
+      "description": "Auxiliary structured metadata supporting retrieval, filtering, validation and other programmatic operations. Has no required fields and no prescribed schema; its contents are determined by the component's type. Not canonical -- the statement is.",
+      "type": "object"
+    },
+    "evidence": {
+      "description": "Statistical or empirical support for the component. Free-form: the spec does not prescribe a statistical framework. A component with no evidence is treated as an unsupported assertion.",
+      "type": "object"
+    },
+    "provenance": {
+      "description": "How the component was generated.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "description": "Origin category: 'derived', 'human', or a custom value.",
+          "type": "string"
+        },
+        "method": {
+          "description": "Generation method or tool identifier.",
+          "type": "string"
+        },
+        "model": {
+          "description": "Identifier of the model used, if applicable.",
+          "type": "string"
+        },
+        "author": {
+          "description": "Author identifier, if human-authored.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "ISO 8601 timestamp of generation.",
+          "type": "string"
+        },
+        "derivation": {
+          "description": "Identifier of the external, versioned computation that produced this component (e.g. an Open Derivation Spec derivation name), if any. Generic: any system may populate this with whatever it calls its own versioned computation. Absent for a hand-authored component with no backing computation.",
+          "type": "string"
+        },
+        "derivation_version": {
+          "description": "The content-hash (or equivalent) version of the derivation named in 'derivation' at the time this component was generated. Lets a consumer decide whether the component is still current by comparing this value against the derivation's current version, without this spec needing any refresh machinery of its own.",
+          "type": "string"
+        }
+      }
+    },
+    "metadata": {
+      "description": "Arbitrary key-value pairs for system- or application-specific use.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "target_id"],
+      "properties": {
+        "type": {
+          "description": "Relationship type. v0 defines: depends_on (refresh dependency), derived_from (generative dependency, implies depends_on), supports (evidence for the target, no refresh dependency). Systems may define additional relation types as needed; this field is an open string, not a closed enum.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "target_id": {
+          "description": "Component ID of the target.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.]*$"
+        }
+      }
+    }
+  }
+}

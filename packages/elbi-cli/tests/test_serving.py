@@ -316,6 +316,152 @@ def test_structured_params_are_servable_and_keyed(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+# --- Components provenance stamping ---
+
+
+def _build_components(tmp_path: Path, *, never: bool = False):
+    """A components-serving derivation whose one fact echoes the input value, so a
+    changed input produces a visibly different component to test staleness against.
+    """
+    (tmp_path / "n.csv").write_text("value\n2\n", encoding="utf-8")
+    registry = Registry()
+
+    @derivation(
+        inputs={"n": Dataset("n")},
+        serve=serve.components(),
+        cache=cache.never() if never else cache.auto(),
+        registry=registry,
+        name="facts",
+    )
+    def facts(ctx: Context) -> Artifact:
+        value = ctx.input("n").rows[0]["value"]
+        return Artifact.components(
+            [
+                {
+                    "id": "test/n_value",
+                    "type": "column",
+                    "scope": {"dataset": "n"},
+                    "statement": f"n is {value}.",
+                }
+            ]
+        )
+
+    bindings = DataBindings(bindings={"n": "n.csv"})
+    serving = Serving(
+        registry, lambda: Runner(registry, bindings=bindings, base_dir=tmp_path)
+    )
+    return serving, tmp_path
+
+
+def _stamped(outcome: ServeOutcome) -> dict:
+    return outcome.structured["components"][0]
+
+
+def test_components_miss_stamps_derivation_and_version(tmp_path: Path) -> None:
+    serving, _base = _build_components(tmp_path)
+
+    async def scenario() -> ServeOutcome:
+        return await serving.serve("facts")
+
+    outcome = asyncio.run(scenario())
+    assert outcome.status == "miss"
+    component = _stamped(outcome)
+    assert component["provenance"]["derivation"] == "facts"
+    assert component["provenance"]["derivation_version"]
+    assert "- n is 2." in outcome.text
+
+
+def test_components_hit_keeps_the_same_stamped_version(tmp_path: Path) -> None:
+    serving, _base = _build_components(tmp_path)
+
+    async def scenario() -> tuple[ServeOutcome, ServeOutcome]:
+        first = await serving.serve("facts")
+        second = await serving.serve("facts")
+        return first, second
+
+    first, second = asyncio.run(scenario())
+    assert second.status == "hit"
+    assert _stamped(second)["provenance"] == _stamped(first)["provenance"]
+
+
+def test_components_stale_serve_keeps_the_old_version_not_the_new_one(
+    tmp_path: Path,
+) -> None:
+    """A stale serve renders the OLD artifact; stamping it with the freshly computed
+    (mismatched) version would claim a served component is current when it is not.
+    """
+    serving, base = _build_components(tmp_path)
+
+    async def scenario() -> tuple[ServeOutcome, ServeOutcome]:
+        first = await serving.serve("facts")  # miss -> caches "n is 2."
+        (base / "n.csv").write_text("value\n9\n", encoding="utf-8")
+        stale = await serving.serve("facts")
+        await _drain(serving)
+        return first, stale
+
+    first, stale = asyncio.run(scenario())
+    assert stale.status == "stale"
+    assert "- n is 2." in stale.text  # still the OLD value
+    assert (
+        _stamped(stale)["provenance"]["derivation_version"]
+        == (_stamped(first)["provenance"]["derivation_version"])
+    )
+
+
+def test_components_uncached_still_gets_a_version_stamped(tmp_path: Path) -> None:
+    """Uncached normally skips computing a version at all; `components` is the one
+    format that needs it anyway, to stamp provenance.
+    """
+    serving, _base = _build_components(tmp_path, never=True)
+
+    async def scenario() -> ServeOutcome:
+        return await serving.serve("facts")
+
+    outcome = asyncio.run(scenario())
+    assert outcome.status == "uncached"
+    assert _stamped(outcome)["provenance"]["derivation_version"]
+
+
+def test_components_author_provided_provenance_is_not_overwritten(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "n.csv").write_text("value\n2\n", encoding="utf-8")
+    registry = Registry()
+
+    @derivation(
+        inputs={"n": Dataset("n")},
+        serve=serve.components(),
+        registry=registry,
+        name="facts",
+    )
+    def facts(ctx: Context) -> Artifact:
+        return Artifact.components(
+            [
+                {
+                    "id": "test/rule",
+                    "type": "domain_knowledge",
+                    "scope": {"dataset": "n"},
+                    "statement": "Analysts should double-check n above 100.",
+                    "provenance": {"source": "human", "author": "analyst@example.com"},
+                }
+            ]
+        )
+
+    bindings = DataBindings(bindings={"n": "n.csv"})
+    serving = Serving(
+        registry, lambda: Runner(registry, bindings=bindings, base_dir=tmp_path)
+    )
+
+    async def scenario() -> ServeOutcome:
+        return await serving.serve("facts")
+
+    outcome = asyncio.run(scenario())
+    provenance = _stamped(outcome)["provenance"]
+    assert provenance["source"] == "human"
+    assert provenance["author"] == "analyst@example.com"
+    assert provenance["derivation"] == "facts"  # gap-filled, not overwritten
+
+
 def test_serving_internal_derivation_is_rejected(tmp_path: Path) -> None:
     registry = Registry()
 
