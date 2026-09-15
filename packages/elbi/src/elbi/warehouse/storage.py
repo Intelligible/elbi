@@ -162,6 +162,87 @@ def _warehouse_filesystem() -> tuple[Any, str]:
     raise ValueError(f"unsupported storage scheme for upload: {scheme}://")
 
 
+def _delta_writable_type(dtype: pa.DataType) -> pa.DataType | None:
+    """The Delta-writable form of ``dtype``, or ``None`` if it carries no writable data.
+
+    A connector infers each batch's schema from the JSON it just received, so the schema
+    describes *that page*, not the resource. Two inferred types cannot be written, and
+    both come from a field the page happened to have nothing in:
+
+    * ``null`` -- the field was None for every row in the batch. Delta has no Null type
+      ("Invalid data type for Delta Lake: Null").
+    * a struct with no fields -- the field was ``{}``, such as Stripe's ``metadata`` on
+      an object carrying none. Parquet refuses it ("Parquet does not support writing
+      empty structs").
+
+    Both are dropped rather than coerced, because either way the page tells us nothing
+    about the field's real type, and **guessing one is worse than having none**. Casting
+    a null to string looks harmless and poisons the table: the next page that carries a
+    real value of a different shape cannot merge into it, and the sync fails with
+    "Unsupported CAST from Struct(...) to Struct(...)". Dropped, the field is simply
+    absent until a page supplies its real type, at which point schema merge adds it --
+    in either order, with earlier rows reading back as null. Nothing is lost that the
+    data ever contained.
+
+    Recursive, because a null or empty struct nested inside a struct or list is
+    rejected exactly as a top-level one is; the error gains an "External error:"
+    per level, which is its only outward sign. Dropping bubbles up: a struct left
+    with no fields is itself unwritable, so it goes too.
+    """
+    if pa.types.is_null(dtype):
+        return None
+    if pa.types.is_struct(dtype):
+        kept = [
+            pa.field(field.name, writable, field.nullable)
+            for field in dtype
+            if (writable := _delta_writable_type(field.type)) is not None
+        ]
+        return pa.struct(kept) if kept else None
+    if pa.types.is_large_list(dtype):
+        value = _delta_writable_type(dtype.value_type)
+        return pa.large_list(value) if value is not None else None
+    if pa.types.is_list(dtype):
+        value = _delta_writable_type(dtype.value_type)
+        return pa.list_(value) if value is not None else None
+    if pa.types.is_map(dtype):
+        key = _delta_writable_type(dtype.key_type)
+        item = _delta_writable_type(dtype.item_type)
+        return pa.map_(key, item) if key is not None and item is not None else None
+    return dtype
+
+
+def _coerce_for_delta(data: pa.Table) -> pa.Table:
+    """Drop the parts of an inferred Arrow table that Delta cannot store.
+
+    See :func:`_delta_writable_type` for what goes and why.
+    """
+    names: list[str] = []
+    fields: list[pa.Field] = []
+    dropped: list[str] = []
+    for field in data.schema:
+        writable = _delta_writable_type(field.type)
+        if writable is None:
+            dropped.append(field.name)
+            continue
+        names.append(field.name)
+        fields.append(pa.field(field.name, writable, field.nullable))
+
+    target = pa.schema(fields)
+    if target == data.schema:
+        return data
+
+    if dropped:
+        # A column vanishing with no trace is its own bug report later. Say so here,
+        # where the reason is still known, rather than leaving the absence to be
+        # discovered downstream by a derivation that expected the field.
+        logger.info(
+            "dropped %d field(s) this batch carried no value for: %s",
+            len(dropped),
+            ", ".join(dropped),
+        )
+    return data.select(names).cast(target)
+
+
 def write_arrow(table: str, data: pa.Table, *, mode: str = "append") -> str:
     """Write an Arrow table to its Delta table; return the table URI.
 
@@ -178,7 +259,7 @@ def write_arrow(table: str, data: pa.Table, *, mode: str = "append") -> str:
     overwrite = mode == "overwrite"
     write_deltalake(
         uri,
-        data,
+        _coerce_for_delta(data),
         mode="overwrite" if overwrite else "append",
         schema_mode="overwrite" if overwrite else "merge",
         storage_options=storage_options() or None,
