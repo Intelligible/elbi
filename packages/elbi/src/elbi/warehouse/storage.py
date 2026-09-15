@@ -211,11 +211,105 @@ def _delta_writable_type(dtype: pa.DataType) -> pa.DataType | None:
     return dtype
 
 
+#: Encode every list-of-struct column as a JSON string instead of typed columns.
+#: Off by default: it trades column-level access for a sync that cannot break on shape.
+_JSON_LISTS_ENV = "WAREHOUSE_JSON_NESTED_LISTS"
+
+
+def _json_nested_lists_enabled() -> bool:
+    """Whether list-of-struct columns are stored as JSON text."""
+    return (env(_JSON_LISTS_ENV) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _contains_a_struct_list(dtype: pa.DataType) -> bool:
+    """Whether ``dtype`` holds a list of structs at any depth.
+
+    The whole column is encoded when it does, not just the offending sub-field: Stripe
+    nests the list one level down (``lines`` is a struct whose ``data`` is the list), so
+    a rule that only looked at top-level list columns would miss the very case this
+    exists for. Rebuilding one nested field inside a struct is also far more fiddly than
+    encoding the column, for no gain -- a column holding an unmergeable list is not
+    projectable in the part that matters either way.
+    """
+    if pa.types.is_list(dtype) or pa.types.is_large_list(dtype):
+        return _holds_a_struct(dtype.value_type)
+    if pa.types.is_struct(dtype):
+        return any(_contains_a_struct_list(field.type) for field in dtype)
+    return False
+
+
+def _holds_a_struct(dtype: pa.DataType) -> bool:
+    """Whether ``dtype`` is, or contains, a struct."""
+    if pa.types.is_struct(dtype):
+        return True
+    if pa.types.is_list(dtype) or pa.types.is_large_list(dtype):
+        return _holds_a_struct(dtype.value_type)
+    return False
+
+
+def _json_encode_struct_lists(data: pa.Table) -> pa.Table:
+    """Replace each column holding a list of structs with its JSON text.
+
+    A list of structs is where per-page schema inference stops being survivable. Delta
+    merges a struct column that gains a field, and merges a list that gains one, but a
+    list whose element struct *diverges between pages* while also gaining a list-typed
+    field cannot be evolved:
+
+        Unsupported CAST from Struct("data": List(Struct(...))) to Struct(...)
+
+    Stripe's ``invoices`` does exactly this: a line item's ``parent`` differs depending
+    on whether the line came from a subscription or an invoice item, and only some
+    carry ``taxes``. No amount of type coercion reconciles two genuinely different
+    shapes, so the choice is to store the shape faithfully or to store the *text*.
+
+    This is what the managed-pipeline vendors settled on (Fivetran, Airbyte): a nested
+    collection becomes one JSON column, and the consumer unpacks the parts it wants --
+    DuckDB, Athena and Spark all read JSON text natively. The cost is real: no
+    column-level projection or predicate pushdown into that field. That is why it is
+    opt-in rather than the default, and why the trade belongs to whoever runs the
+    warehouse rather than to this function.
+    """
+    import json
+
+    names: list[str] = []
+    columns: list[pa.Array | pa.ChunkedArray] = []
+    encoded: list[str] = []
+    for index, field in enumerate(data.schema):
+        column = data.column(index)
+        if not _contains_a_struct_list(field.type):
+            names.append(field.name)
+            columns.append(column)
+            continue
+
+        encoded.append(field.name)
+        names.append(field.name)
+        as_text = [
+            None if value is None else json.dumps(value) for value in column.to_pylist()
+        ]
+        columns.append(pa.array(as_text, type=pa.string()))
+
+    if not encoded:
+        return data
+
+    logger.info(
+        "stored %d list-of-struct field(s) as JSON text (%s=1): %s",
+        len(encoded),
+        _JSON_LISTS_ENV,
+        ", ".join(encoded),
+    )
+    return pa.Table.from_arrays(columns, names=names)
+
+
 def _coerce_for_delta(data: pa.Table) -> pa.Table:
     """Drop the parts of an inferred Arrow table that Delta cannot store.
 
     See :func:`_delta_writable_type` for what goes and why.
     """
+    if _json_nested_lists_enabled():
+        # Before dropping, not after: a null inside an encoded column is representable
+        # in JSON, and dropping it first would silently lose the key from the text.
+        data = _json_encode_struct_lists(data)
+
     names: list[str] = []
     fields: list[pa.Field] = []
     dropped: list[str] = []
@@ -229,7 +323,7 @@ def _coerce_for_delta(data: pa.Table) -> pa.Table:
 
     target = pa.schema(fields)
     if target == data.schema:
-        return data
+        return _json_encode_struct_lists(data) if _json_nested_lists_enabled() else data
 
     if dropped:
         # A column vanishing with no trace is its own bug report later. Say so here,
