@@ -121,7 +121,7 @@ export function EditSourceDialog({
         {loading ? (
           <div className="text-sm text-text-tertiary">Loading…</div>
         ) : (
-          <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
+          <div className="flex max-h-[65vh] min-h-0 flex-col gap-4 overflow-y-auto">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="edit-source-name" className="font-medium text-sm">
                 Name
@@ -143,20 +143,27 @@ export function EditSourceDialog({
               const value = String(config[field.name] ?? "")
               const set = (v: string) => setConfig((c) => ({ ...c, [field.name]: v }))
               return (
-                <div key={field.name} className="flex flex-col gap-1.5">
+                <div
+                  key={field.name}
+                  className={
+                    field.type === "textarea"
+                      ? "flex min-h-0 flex-1 flex-col gap-1.5"
+                      : "flex flex-col gap-1.5"
+                  }
+                >
                   <label htmlFor={`edit-${field.name}`} className="font-medium text-sm">
                     {field.label}
                   </label>
                   {field.type === "textarea" ? (
                     // A manifest is a document, not a line: monospace, and tall enough
-                    // to read its structure. Capped against the viewport rather than
-                    // fixed, so on a short screen it yields instead of pushing the
-                    // credential field below the fold.
+                    // to read its structure. It takes the space the other fields leave
+                    // rather than a height of its own, so the credential below it stays
+                    // on screen however many fields a connector declares.
                     <Textarea
                       id={`edit-${field.name}`}
                       rows={12}
                       spellCheck={false}
-                      className="max-h-[38vh] min-h-[10rem] resize-y font-mono text-xs leading-relaxed"
+                      className="min-h-[8rem] flex-1 resize-y font-mono text-xs leading-relaxed"
                       value={value}
                       onChange={(e) => set(e.target.value)}
                     />
