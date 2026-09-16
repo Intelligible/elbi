@@ -19,9 +19,9 @@ const FIELDS = [
 
 function setup(overrides: Partial<Parameters<typeof EditSourceDialog>[0]> = {}) {
   getSourceConfig.mockResolvedValue({
-    source_type: "custom",
+    sourceType: "custom",
     config: { manifest_json: '{"client":{}}', auth_token: "" },
-    secret_fields: ["auth_token"],
+    secretFields: ["auth_token"],
   })
   getCatalog.mockResolvedValue({ sources: [{ name: "custom", fields: FIELDS }] })
   updateSource.mockResolvedValue({})
@@ -87,5 +87,60 @@ describe("EditSourceDialog", () => {
     // operator is about to correct — not behind a closed dialog.
     expect(await screen.findByRole("alert")).toHaveTextContent(/did not finish/)
     expect(onSaved).not.toHaveBeenCalled()
+  })
+})
+
+describe("EditSourceDialog credential fields", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const FIVE_AUTH = [
+    { name: "manifest_json", label: "Manifest (JSON)", type: "textarea", options: [] },
+    { name: "auth_token", label: "Bearer token", type: "password", options: [] },
+    { name: "auth_api_key", label: "API key", type: "password", options: [] },
+    { name: "auth_password", label: "Auth password", type: "password", options: [] },
+    {
+      name: "auth_oauth2_client_secret",
+      label: "OAuth2 client secret",
+      type: "password",
+      options: [],
+    },
+  ]
+
+  function renderWith(secretFields: string[]) {
+    getSourceConfig.mockResolvedValue({
+      sourceType: "custom",
+      config: { manifest_json: "{}", auth_token: "" },
+      secretFields,
+    })
+    getCatalog.mockResolvedValue({ sources: [{ name: "custom", fields: FIVE_AUTH }] })
+    render(
+      <EditSourceDialog
+        sourceId="abc"
+        sourceType="custom"
+        open
+        onOpenChange={() => {}}
+        onSaved={() => {}}
+      />,
+    )
+  }
+
+  it("offers only the credential the source actually holds", async () => {
+    // Custom REST declares five credentials and a manifest uses one. Showing all five
+    // is noise around the only field that matters.
+    renderWith(["auth_token"])
+    await screen.findByLabelText("Bearer token")
+
+    expect(screen.queryByLabelText("API key")).toBeNull()
+    expect(screen.queryByLabelText("Auth password")).toBeNull()
+    expect(screen.queryByLabelText("OAuth2 client secret")).toBeNull()
+  })
+
+  it("offers all of them when the source holds none yet", async () => {
+    // Nothing to narrow to, and hiding them all would leave no way to add one.
+    renderWith([])
+    await screen.findByLabelText("Bearer token")
+
+    expect(screen.getByLabelText("API key")).toBeTruthy()
+    expect(screen.getByLabelText("OAuth2 client secret")).toBeTruthy()
   })
 })
