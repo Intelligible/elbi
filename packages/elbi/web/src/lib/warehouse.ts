@@ -152,7 +152,11 @@ export const setSyncFrequency = (sourceId: string, sync_frequency: SyncFrequency
 
 export interface SourceConfigView {
   sourceType: string
-  /** Secrets come back blank; an edit sends them back blank to keep them. */
+  /**
+   * Keyed by the connector's own field names (`auth_token`, not `authToken`): the API
+   * treats `config` as opaque so these survive the casing boundary. Secrets come back
+   * blank, and an edit sends them back blank to keep them.
+   */
   config: Record<string, unknown>
   secretFields: string[]
 }
