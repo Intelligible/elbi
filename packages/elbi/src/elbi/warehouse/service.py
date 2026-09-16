@@ -32,7 +32,7 @@ from ..db import (
     _now,
 )
 from . import storage, sync
-from .config import CATEGORIES
+from .config import CATEGORIES, SourceSchema
 from .sources.base import Source
 from .sources.registry import SourceRegistry
 from .sync import ColumnSpec
@@ -139,6 +139,112 @@ class WarehouseService:
                 )
             )
         return self.get_source(source_id)
+
+    def update_source(
+        self,
+        source_id: str,
+        *,
+        config: dict[str, Any] | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        sync_frequency: str | None = None,
+    ) -> ExternalDataSource:
+        """Edit an existing source in place, re-validating before anything is saved.
+
+        Without this a source can only be deleted and rebuilt, which means re-entering
+        every secret to correct a typo in a manifest — so a small fix is paid for in
+        credentials, and the tables the source produced are destroyed on the way.
+
+        Secrets are kept unless replaced. A password field left blank means "leave it
+        alone", which is how every connection form behaves and the only way editing a
+        manifest is workable: the operator is changing a query, not a key.
+        """
+        source = self.get_source(source_id)
+        connector = self._connector(source.source_type)
+        fields: dict[str, Any] = {}
+
+        if name is not None:
+            name = name.strip()
+            if not name:
+                raise WarehouseError("A source name is required.")
+            existing = self._store.get_external_source_by_name(name)
+            if existing is not None and existing.id != source_id:
+                raise WarehouseError(f"A source named {name!r} already exists.")
+            fields["name"] = name
+
+        if config is not None:
+            merged = self._merge_config(connector, self._decode_config(source), config)
+            ok, errors = connector.validate(merged)
+            if not ok:
+                raise WarehouseError(
+                    "; ".join(errors) or "Could not connect to the source"
+                )
+            fields["config_encrypted"] = self._encode_config(connector, merged)
+
+        if description is not None:
+            fields["description"] = description.strip()
+        if sync_frequency is not None:
+            fields["sync_frequency"] = _valid_frequency(sync_frequency)
+
+        # Persist before touching schemas: a rejected config leaves both untouched, and
+        # reconciliation is only right once the new config is the stored one.
+        self._store.update_external_source(source_id, **fields)
+        if config is not None:
+            self._reconcile_schemas(source, connector.schemas(merged))
+        return self.get_source(source_id)
+
+    @staticmethod
+    def _merge_config(
+        connector: Source, stored: dict[str, Any], incoming: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Overlay an edit on the stored config, keeping secrets the edit left blank."""
+        fields = connector.config.fields
+        secret_fields = {f.name for f in fields if f.type == "password"}
+        merged = dict(stored)
+        for key, value in incoming.items():
+            if key in secret_fields and not value:
+                continue  # blank means "unchanged", not "erase"
+            merged[key] = value
+        return merged
+
+    def _reconcile_schemas(
+        self, source: ExternalDataSource, schemas: list[SourceSchema]
+    ) -> None:
+        """Bring a source's tables in line with its new config.
+
+        An edited manifest can rename, add or drop resources. Tables that survive keep
+        whether they were enabled: re-ticking everything after a one-word fix to a query
+        would be its own annoyance.
+
+        A resource that disappears is **disabled, not deleted**. Its warehouse table
+        holds rows an edit did not ask to destroy, and a resource dropped by a typo
+        comes back when the typo is fixed. Deleting the source remains the way to
+        remove data, and it still says so.
+        """
+        existing = {s.name: s for s in self._store.list_external_schemas(source.id)}
+        incoming = {schema.name: schema for schema in schemas}
+
+        for name, schema in incoming.items():
+            if (current := existing.get(name)) is not None:
+                self._store.update_external_schema(
+                    current.id,
+                    incremental_fields=json.dumps(schema.incremental_fields),
+                )
+                continue
+            self._store.save_external_schema(
+                ExternalDataSchema(
+                    source_id=source.id,
+                    name=name,
+                    table=sync.warehouse_table_name(source.prefix, name),
+                    should_sync=schema.default_selected,
+                    sync_type="full_refresh",
+                    incremental_fields=json.dumps(schema.incremental_fields),
+                )
+            )
+
+        for name, stored_schema in existing.items():
+            if name not in incoming and stored_schema.should_sync:
+                self._store.update_external_schema(stored_schema.id, should_sync=False)
 
     def register_interest(self, source_type: str) -> None:
         """Record a notify-me for a coming-soon connector (audit trail of demand)."""
