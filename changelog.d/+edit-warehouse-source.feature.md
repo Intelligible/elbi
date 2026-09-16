@@ -1,8 +1,8 @@
-A warehouse source can be edited in place. `PATCH /api/warehouse/sources/{id}` already
-existed but only changed the sync cadence, so fixing a typo in a manifest meant deleting
-the source and rebuilding it — re-entering every secret, and destroying the tables it had
-produced on the way out. It now accepts `config`, `name` and `description` too. A
-password field left blank or omitted keeps the stored secret, so correcting a query does
-not cost the credentials that were already working. An edited config is re-validated
-before anything is saved, and a resource that disappears from the new config is disabled
-rather than deleted, because its table holds rows the edit did not ask to destroy.
+A warehouse source can be edited in place, from the source page. Previously the only
+`PATCH` handled was the sync cadence, so fixing a typo in a manifest meant deleting the
+source and rebuilding it — re-entering every secret, and destroying the tables it had
+produced on the way out. An **Edit** button now opens the connection form pre-filled with
+the stored config. A password field left blank keeps the stored secret, so correcting a
+query does not cost credentials that were already working. The new config is tested
+before anything is saved, and a resource that disappears from it is disabled rather than
+deleted, because its table holds rows the edit did not ask to destroy.

@@ -1947,6 +1947,14 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return service.source_detail_view(source.id)
 
+    @app.get("/api/warehouse/sources/{source_id}/config")
+    async def warehouse_source_config(source_id: str) -> dict[str, Any]:
+        """A source's config with secrets blanked, for pre-filling an edit form."""
+        try:
+            return _warehouse().source_config_view(source_id)
+        except WarehouseError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.patch("/api/warehouse/sources/{source_id}")
     async def warehouse_update_source(
         source_id: str, request: Request

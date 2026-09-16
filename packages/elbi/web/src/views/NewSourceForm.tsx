@@ -61,7 +61,7 @@ function UploadControl({ onUploaded }: { onUploaded: (path: string) => void }) {
   )
 }
 
-function Field({
+export function Field({
   field,
   value,
   onChange,

@@ -220,3 +220,28 @@ def test_the_stored_config_round_trips_encrypted(service) -> None:
         )["token"]
         == "secret-abc"
     )
+
+
+def test_the_config_view_blanks_secrets_but_keeps_everything_else(service) -> None:
+    # An edit form needs the manifest to pre-fill and must never receive the key.
+    svc, _ = service
+    source_id = _create(svc)
+
+    view = svc.source_config_view(source_id)
+
+    assert view["config"]["query"] == "SELECT 1"
+    assert view["config"]["token"] == "", "a secret must not leave the server"
+    assert view["secret_fields"] == ["token"]
+
+
+def test_the_config_view_round_trips_through_an_edit(service) -> None:
+    # The contract that makes an edit form work: hand back what the view gave you,
+    # with only the field you changed, and the secret survives untouched.
+    svc, _ = service
+    source_id = _create(svc)
+
+    view = svc.source_config_view(source_id)
+    edited = {**view["config"], "query": "SELECT 7"}
+    svc.update_source(source_id, config=edited)
+
+    assert FakeConnector.seen[-1] == {"query": "SELECT 7", "token": "secret-abc"}
