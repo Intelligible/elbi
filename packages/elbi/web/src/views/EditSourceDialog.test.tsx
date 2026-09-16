@@ -30,6 +30,8 @@ function setup(overrides: Partial<Parameters<typeof EditSourceDialog>[0]> = {}) 
     <EditSourceDialog
       sourceId="abc"
       sourceType="custom"
+      initialName="posthog"
+      initialDescription=""
       open
       onOpenChange={() => {}}
       onSaved={onSaved}
@@ -71,8 +73,41 @@ describe("EditSourceDialog", () => {
 
     await waitFor(() => expect(updateSource).toHaveBeenCalled())
     expect(updateSource).toHaveBeenCalledWith("abc", {
+      name: "posthog",
+      description: "",
       config: { manifest_json: "edited", auth_token: "" },
     })
+  })
+
+  it("renaming does not re-test the connection", async () => {
+    // Sending `config` makes the server fetch from the API. A lapsed credential should
+    // not stand between an operator and a typo in a name.
+    const user = userEvent.setup()
+    setup()
+    await screen.findByDisplayValue('{"client":{}}')
+
+    await user.clear(screen.getByLabelText("Name"))
+    await user.type(screen.getByLabelText("Name"), "posthog-funnel")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    await waitFor(() => expect(updateSource).toHaveBeenCalled())
+    const [, patch] = updateSource.mock.calls[0]
+    expect(patch.name).toBe("posthog-funnel")
+    expect(patch).not.toHaveProperty("config")
+  })
+
+  it("edits the description without touching the connection", async () => {
+    const user = userEvent.setup()
+    setup()
+    await screen.findByDisplayValue('{"client":{}}')
+
+    await user.type(screen.getByLabelText("Description"), "activation funnel")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    await waitFor(() => expect(updateSource).toHaveBeenCalled())
+    const [, patch] = updateSource.mock.calls[0]
+    expect(patch.description).toBe("activation funnel")
+    expect(patch).not.toHaveProperty("config")
   })
 
   it("keeps the dialog open and shows why when the connection test fails", async () => {
@@ -117,6 +152,8 @@ describe("EditSourceDialog credential fields", () => {
       <EditSourceDialog
         sourceId="abc"
         sourceType="custom"
+        initialName="posthog"
+        initialDescription=""
         open
         onOpenChange={() => {}}
         onSaved={() => {}}

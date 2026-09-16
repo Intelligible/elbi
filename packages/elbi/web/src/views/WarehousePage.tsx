@@ -808,6 +808,8 @@ function SourceDetailView({
       <EditSourceDialog
         sourceId={sourceId}
         sourceType={detail.sourceType}
+        initialName={detail.name}
+        initialDescription={detail.description ?? ""}
         open={editing}
         onOpenChange={setEditing}
         onSaved={load}
