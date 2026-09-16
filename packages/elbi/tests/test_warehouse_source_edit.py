@@ -245,3 +245,21 @@ def test_the_config_view_round_trips_through_an_edit(service) -> None:
     svc.update_source(source_id, config=edited)
 
     assert FakeConnector.seen[-1] == {"query": "SELECT 7", "token": "secret-abc"}
+
+
+def test_config_keys_are_not_camel_cased_on_the_wire() -> None:
+    """A source's config is keyed by the connector's own field names.
+
+    `auth_token` is what the connector declares and what `_merge_config` looks for, so
+    camelCasing it at the API boundary would break the round-trip: the edit form would
+    send back `authToken`, the merge would not recognise it as a secret, and the blank
+    would be stored as a new field beside the real one.
+    """
+    from elbi.casing import camelize
+
+    payload = camelize(
+        {"source_type": "custom", "config": {"auth_token": "", "manifest_json": "{}"}}
+    )
+
+    assert payload["sourceType"] == "custom", "API fields are still camelCased"
+    assert set(payload["config"]) == {"auth_token", "manifest_json"}
