@@ -32,6 +32,7 @@ export function EditSourceDialog({
   onSaved: () => void
 }) {
   const [fields, setFields] = useState<SourceField[]>([])
+  const [inUse, setInUse] = useState<string[]>([])
   const [config, setConfig] = useState<Record<string, unknown>>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -44,12 +45,34 @@ export function EditSourceDialog({
     Promise.all([getSourceConfig(sourceId), getCatalog()])
       .then(([view, catalog]) => {
         setConfig(view.config)
+        setInUse(view.secretFields)
         const entry = catalog.sources.find((s) => s.name === sourceType)
         setFields(entry?.fields ?? [])
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false))
   }, [open, sourceId, sourceType])
+
+  // A field with `dependsOn` appears only once the field it names holds the right
+  // value, and only if that field is itself showing -- the same rule the create form
+  // applies, so the two render a connector identically.
+  const visible = (field: SourceField, seen: Set<string> = new Set()): boolean => {
+    if (!field.dependsOn || seen.has(field.name)) return true
+    const parent = fields.find((f) => f.name === field.dependsOn)
+    if (!parent) return true
+    if (!visible(parent, new Set([...seen, field.name]))) return false
+    const held = config[parent.name] ?? parent.default
+    return field.dependsValue ? held === field.dependsValue : Boolean(held)
+  }
+
+  // A connector can declare several credentials and use one -- Custom REST offers five,
+  // picked by the manifest's auth type. Showing all of them on an edit is noise around
+  // the one field that matters, so only the credentials the source actually holds are
+  // offered. A source with none yet shows them all, since there is nothing to narrow to.
+  const anyHeld = inUse.length > 0
+  const shown = fields.filter(
+    (f) => visible(f) && (f.type !== "password" || !anyHeld || inUse.includes(f.name)),
+  )
 
   const save = async () => {
     setSaving(true)
@@ -78,7 +101,7 @@ export function EditSourceDialog({
           <div className="text-sm text-text-tertiary">Loading…</div>
         ) : (
           <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
-            {fields.map((field) => (
+            {shown.map((field) => (
               <Field
                 key={field.name}
                 field={field}
@@ -86,10 +109,8 @@ export function EditSourceDialog({
                 onChange={(v) => setConfig((c) => ({ ...c, [field.name]: v }))}
               />
             ))}
-            {fields.some((f) => f.type === "password") ? (
-              <p className="text-xs text-text-tertiary">
-                Leave a password field blank to keep the stored value.
-              </p>
+            {shown.some((f) => f.type === "password") ? (
+              <p className="text-xs text-text-tertiary">Leave blank to keep the stored value.</p>
             ) : null}
           </div>
         )}
