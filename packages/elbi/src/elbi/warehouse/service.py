@@ -140,6 +140,29 @@ class WarehouseService:
             )
         return self.get_source(source_id)
 
+    def source_config_view(self, source_id: str) -> dict[str, Any]:
+        """A source's config with every secret removed, for pre-filling an edit form.
+
+        Password fields come back as empty strings rather than their values or a mask.
+        Empty is what the edit path already reads as "unchanged", so a form can
+        round-trip the config it was handed without the operator re-entering a key,
+        and without the key ever leaving the server.
+        """
+        source = self.get_source(source_id)
+        connector = self._connector(source.source_type)
+        secret_fields = {
+            f.name for f in connector.config.fields if f.type == "password"
+        }
+        config = self._decode_config(source)
+        return {
+            "source_type": source.source_type,
+            "config": {
+                key: ("" if key in secret_fields else value)
+                for key, value in config.items()
+            },
+            "secret_fields": sorted(secret_fields & set(config)),
+        }
+
     def update_source(
         self,
         source_id: str,

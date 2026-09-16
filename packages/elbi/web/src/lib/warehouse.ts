@@ -150,6 +150,31 @@ export const setSyncFrequency = (sourceId: string, sync_frequency: SyncFrequency
     sync_frequency,
   })
 
+export interface SourceConfigView {
+  sourceType: string
+  /** Secrets come back blank; an edit sends them back blank to keep them. */
+  config: Record<string, unknown>
+  secretFields: string[]
+}
+
+export const getSourceConfig = (sourceId: string) =>
+  json<SourceConfigView>(`/api/warehouse/sources/${id(sourceId)}/config`)
+
+/**
+ * Edit a source in place.
+ *
+ * A password field left blank keeps the stored secret, so a manifest can be corrected
+ * without the operator re-entering credentials that were already working.
+ */
+export const updateSource = (
+  sourceId: string,
+  patch: {
+    config?: Record<string, unknown>
+    name?: string
+    description?: string
+  },
+) => send<SourceDetail>("PATCH", `/api/warehouse/sources/${id(sourceId)}`, patch)
+
 export const deleteSource = (sourceId: string) =>
   json<{ ok: boolean }>(`/api/warehouse/sources/${id(sourceId)}`, {
     method: "DELETE",
