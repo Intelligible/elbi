@@ -57,7 +57,7 @@ describe("EditSourceDialog", () => {
     // would be submitted as a new value.
     const token = screen.getByLabelText("Bearer token") as HTMLInputElement
     expect(token.value).toBe("")
-    expect(screen.getByText(/blank to keep the stored value/i)).toBeTruthy()
+    expect(screen.getByPlaceholderText(/blank to keep the stored value/i)).toBeTruthy()
   })
 
   it("sends the edited manifest with the secret still blank", async () => {
