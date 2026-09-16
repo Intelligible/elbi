@@ -7,8 +7,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { getCatalog, getSourceConfig, type SourceField, updateSource } from "@/lib/warehouse"
-import { Field } from "./NewSourceForm"
 
 /**
  * Edit an existing source's connection settings.
@@ -92,7 +93,7 @@ export function EditSourceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit source</DialogTitle>
         </DialogHeader>
@@ -100,18 +101,47 @@ export function EditSourceDialog({
         {loading ? (
           <div className="text-sm text-text-tertiary">Loading…</div>
         ) : (
-          <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
-            {shown.map((field) => (
-              <Field
-                key={field.name}
-                field={field}
-                value={config[field.name]}
-                onChange={(v) => setConfig((c) => ({ ...c, [field.name]: v }))}
-              />
-            ))}
-            {shown.some((f) => f.type === "password") ? (
-              <p className="text-xs text-text-tertiary">Leave blank to keep the stored value.</p>
-            ) : null}
+          <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
+            {shown.map((field) => {
+              const value = String(config[field.name] ?? "")
+              const set = (v: string) => setConfig((c) => ({ ...c, [field.name]: v }))
+              return (
+                <div key={field.name} className="flex flex-col gap-1.5">
+                  <label htmlFor={`edit-${field.name}`} className="font-medium text-sm">
+                    {field.label}
+                  </label>
+                  {field.type === "textarea" ? (
+                    // A manifest is a document, not a line: monospace, and tall enough
+                    // to read its structure. Capped against the viewport rather than
+                    // fixed, so on a short screen it yields instead of pushing the
+                    // credential field below the fold.
+                    <Textarea
+                      id={`edit-${field.name}`}
+                      rows={12}
+                      spellCheck={false}
+                      className="max-h-[38vh] min-h-[10rem] resize-y font-mono text-xs leading-relaxed"
+                      value={value}
+                      onChange={(e) => set(e.target.value)}
+                    />
+                  ) : (
+                    <Input
+                      id={`edit-${field.name}`}
+                      type={field.type === "password" ? "password" : "text"}
+                      placeholder={
+                        field.type === "password"
+                          ? "Leave blank to keep the stored value"
+                          : field.placeholder
+                      }
+                      value={value}
+                      onChange={(e) => set(e.target.value)}
+                    />
+                  )}
+                  {field.caption ? (
+                    <p className="text-text-tertiary text-xs">{field.caption}</p>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
         )}
 
