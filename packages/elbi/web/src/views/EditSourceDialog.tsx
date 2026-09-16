@@ -22,12 +22,16 @@ import { getCatalog, getSourceConfig, type SourceField, updateSource } from "@/l
 export function EditSourceDialog({
   sourceId,
   sourceType,
+  initialName,
+  initialDescription,
   open,
   onOpenChange,
   onSaved,
 }: {
   sourceId: string
   sourceType: string
+  initialName: string
+  initialDescription: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => void
@@ -35,6 +39,12 @@ export function EditSourceDialog({
   const [fields, setFields] = useState<SourceField[]>([])
   const [inUse, setInUse] = useState<string[]>([])
   const [config, setConfig] = useState<Record<string, unknown>>({})
+  const [name, setName] = useState(initialName)
+  const [description, setDescription] = useState(initialDescription)
+  // What the server last gave us, so a save can tell whether the connection actually
+  // changed. It matters: a config change is re-tested against the live API, and a
+  // lapsed key should not stand between an operator and a typo in a description.
+  const [loaded, setLoaded] = useState("")
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,13 +56,16 @@ export function EditSourceDialog({
     Promise.all([getSourceConfig(sourceId), getCatalog()])
       .then(([view, catalog]) => {
         setConfig(view.config)
+        setLoaded(JSON.stringify(view.config))
         setInUse(view.secretFields)
+        setName(initialName)
+        setDescription(initialDescription)
         const entry = catalog.sources.find((s) => s.name === sourceType)
         setFields(entry?.fields ?? [])
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false))
-  }, [open, sourceId, sourceType])
+  }, [open, sourceId, sourceType, initialName, initialDescription])
 
   // A field with `dependsOn` appears only once the field it names holds the right
   // value, and only if that field is itself showing -- the same rule the create form
@@ -79,7 +92,14 @@ export function EditSourceDialog({
     setSaving(true)
     setError(null)
     try {
-      await updateSource(sourceId, { config })
+      const connectionChanged = JSON.stringify(config) !== loaded
+      await updateSource(sourceId, {
+        name,
+        description,
+        // Only when it actually changed: sending it re-tests the connection, and
+        // renaming a source should not fail because a credential has since lapsed.
+        ...(connectionChanged ? { config } : {}),
+      })
       onOpenChange(false)
       onSaved()
     } catch (err) {
@@ -102,6 +122,23 @@ export function EditSourceDialog({
           <div className="text-sm text-text-tertiary">Loading…</div>
         ) : (
           <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="edit-source-name" className="font-medium text-sm">
+                Name
+              </label>
+              <Input id="edit-source-name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="edit-source-description" className="font-medium text-sm">
+                Description
+              </label>
+              <Input
+                id="edit-source-description"
+                placeholder="What this source is for"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
             {shown.map((field) => {
               const value = String(config[field.name] ?? "")
               const set = (v: string) => setConfig((c) => ({ ...c, [field.name]: v }))
