@@ -13,6 +13,7 @@ OAuth2 client-credentials). There is no token-refresh table and no egress filter
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlparse
@@ -34,6 +35,24 @@ def _resource_name(resource: Any) -> str | None:
         name = resource.get("name")
         return name if isinstance(name, str) else None
     return None
+
+
+#: How long a connection test may take before it is reported as hung. Generous enough
+#: for a slow first page, short enough that an operator is told rather than left
+#: watching a spinner.
+_PROBE_TIMEOUT = 20.0
+
+
+def _declares_paginator(manifest: dict[str, Any]) -> bool:
+    """Whether a paginator is declared on the client or on any resource."""
+    if manifest.get("client", {}).get("paginator"):
+        return True
+    return any(
+        isinstance(resource, dict)
+        and isinstance(resource.get("endpoint"), dict)
+        and resource["endpoint"].get("paginator")
+        for resource in manifest.get("resources", [])
+    )
 
 
 @SourceRegistry.register
@@ -133,7 +152,18 @@ class CustomSource(SimpleSource):
         return manifest
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
-        """Structurally validate the manifest and its base URL."""
+        """Check the manifest structurally, then prove it by fetching one record.
+
+        The structural checks alone let a manifest through that cannot sync. The case
+        that motivated the probe: a manifest with no ``paginator`` is structurally
+        perfect, and dlt then guesses one — for an endpoint answering in a single
+        response the guess chases a next page that never arrives, and the sync sits in
+        ``pending`` with no error, no timeout and nothing in the UI to act on.
+
+        Nothing short of running the extraction catches that, because auth, the URL and
+        the resource are all fine. So the probe runs the real resource through the real
+        ``rest_api``, bounded by a deadline, and stops at the first record.
+        """
         ok, errors = super().validate(config)
         if not ok:
             return ok, errors
@@ -146,6 +176,53 @@ class CustomSource(SimpleSource):
             return False, ["client.base_url must be an http(s) URL"]
         if not manifest.get("resources"):
             return False, ["Manifest must define at least one resource"]
+        return self._probe(manifest)
+
+    def _probe(self, manifest: dict[str, Any]) -> tuple[bool, list[str]]:
+        """Fetch one record from the first resource, or say why it could not.
+
+        Run on a worker thread with a deadline rather than a request timeout: a guessed
+        paginator loops over responses that each return promptly, so no per-request
+        timeout ever fires. The thread is left to die with the process if it overruns —
+        a daemon thread stuck in a dlt loop is the symptom being reported, not something
+        to wait on.
+        """
+        resources = manifest.get("resources", [])
+        name = _resource_name(resources[0]) if resources else None
+        if not name:
+            return False, ["The first resource has no name"]
+
+        outcome: dict[str, Any] = {}
+
+        def run() -> None:
+            try:
+                from ._dlt import rest_api_source
+
+                source = rest_api_source(manifest)
+                for _record in source.resources[name]:
+                    break
+                outcome["ok"] = True
+            except Exception as exc:  # any failure is the operator's to see
+                outcome["error"] = f"{type(exc).__name__}: {exc}"
+
+        worker = threading.Thread(target=run, daemon=True, name=f"probe-{name}")
+        worker.start()
+        worker.join(_PROBE_TIMEOUT)
+
+        if worker.is_alive():
+            hint = (
+                " No `paginator` is declared, so dlt guessed one. Declare it explicitly"
+                ' — `"paginator": {"type": "single_page"}` for an endpoint that'
+                " answers in one response."
+                if not _declares_paginator(manifest)
+                else " Check the `paginator` settings; a wrong one loops forever."
+            )
+            return False, [
+                f"Fetching from {name!r} did not finish within {_PROBE_TIMEOUT:.0f}s."
+                + hint
+            ]
+        if "error" in outcome:
+            return False, [f"Could not fetch from {name!r}. {outcome['error']}"]
         return True, []
 
     def schemas(self, config: dict[str, Any]) -> list[SourceSchema]:
