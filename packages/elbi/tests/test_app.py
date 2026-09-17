@@ -1608,6 +1608,8 @@ def test_llm_profile_crud_and_default(tmp_path: object) -> None:
     # another. This is what lets a user "set up multiple models" and pick between them.
     from pathlib import Path
 
+    from elbi.app import _reasoning_efforts
+
     store = open_store(f"sqlite:{Path(str(tmp_path)) / 'profiles.db'}")
     app = create_app(load_datasets=lambda: {"d": []}, client=_Scripted(), store=store)
     with TestClient(app) as http:
@@ -1621,6 +1623,11 @@ def test_llm_profile_crud_and_default(tmp_path: object) -> None:
             "/api/settings/llm/profiles/OpenAI",
             json={"model": "openai/gpt-5", "api_key": "sk-a"},
         ).json()
+        # Resolved server-side for the UI: the budgets this model accepts, per-model --
+        # gpt-5 takes neither `none` nor `xhigh` where a newer sibling takes both. Held
+        # out of the comparison below rather than spelled out in it.
+        efforts = a.pop("reasoningEfforts")
+        assert {"low", "medium", "high"} <= set(efforts) <= _reasoning_efforts()
         assert a == {
             "name": "OpenAI",
             "model": "openai/gpt-5",
@@ -1629,16 +1636,12 @@ def test_llm_profile_crud_and_default(tmp_path: object) -> None:
             # different budgets; empty leaves it to the model's own default.
             "reasoningEffort": "",
             "apiKeySet": True,
-            # Resolved server-side for the UI: which provider this routes to, and the
-            # budgets this model accepts. The ladder is per-model -- gpt-5 takes
-            # neither `none` nor `xhigh` where a newer sibling takes both -- which is
-            # the whole reason it is read from the registry and not listed here.
+            # Which provider this routes to.
             "provider": "openai",
             # A display name for the providers whose key is not presentable ("azure_ai",
             # "vertex_ai"), and the label the picker shows beside a model whose provider
             # we have no logo for.
             "providerLabel": "OpenAI",
-            "reasoningEfforts": ["minimal", "low", "medium", "high"],
         }
         assert "apiKey" not in a  # the secret is never returned
         http.put(
@@ -1903,6 +1906,8 @@ def test_reasoning_effort_can_be_turned_off_not_only_dialled_down(tmp_path) -> N
     """
     from pathlib import Path
 
+    from elbi.app import _reasoning_efforts
+
     store = open_store(f"sqlite:{Path(str(tmp_path)) / 'effort.db'}")
     app = create_app(load_datasets=lambda: {"d": []}, client=_Scripted(), store=store)
     with TestClient(app) as http:
@@ -1919,9 +1924,13 @@ def test_reasoning_effort_can_be_turned_off_not_only_dialled_down(tmp_path) -> N
             assert saved.json()["reasoningEffort"] == effort
 
         # Still empty-or-known: a typo must not reach the provider as a 400 mid-chat.
+        # The sentinel has to be a value LiteLLM will never honour, so assert that
+        # rather than assume it.
+        typo = "crazy"
+        assert typo not in _reasoning_efforts()
         bad = http.put(
             "/api/settings/llm/profiles/typo",
-            json={"model": "openai/gpt-5", "api_key": "sk", "reasoning_effort": "max"},
+            json={"model": "openai/gpt-5", "api_key": "sk", "reasoning_effort": typo},
         )
         assert bad.status_code == 400
         assert "reasoning_effort must be one of" in bad.json()["detail"]
