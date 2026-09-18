@@ -73,7 +73,11 @@ The derivation spec lives in [`spec/`](../spec). If you change
 
 Every user-facing change needs a [towncrier](https://towncrier.readthedocs.io/)
 fragment under [`changelog.d/`](../changelog.d). See that directory's README for
-the naming convention.
+the naming convention and the house style.
+
+CI checks for one. A change no user would notice does not need a fragment; label
+the pull request `skip-news` and the check is skipped. Fragments are collected
+into `CHANGELOG.md` at release time, per [RELEASING.md](../RELEASING.md).
 
 ## Commit & PR conventions
 
