@@ -1336,6 +1336,42 @@ class NotebookService:
         self._store.replace_cells(notebook_id, cells)
         return notebook_id
 
+    def create_from_sources(
+        self, name: str, sources: Sequence[str], heading: str | None = None
+    ) -> str:
+        """Create a notebook seeded with several code cells, in the order given.
+
+        The single-cell :meth:`create_from_source` cannot express "this needs that
+        bound first", which a derivation reading an upstream derivation requires.
+        """
+        from elbi_core.notebook import new_id
+
+        notebook_id = self._store.create_notebook(name)
+        seeded = self._store.get_cells(notebook_id)[0].id
+        cells: list[NotebookCell] = []
+        if heading:
+            cells.append(
+                NotebookCell(
+                    id=seeded,
+                    notebook_id=notebook_id,
+                    position=0,
+                    cell_type="markdown",
+                    source=heading,
+                )
+            )
+        for source in sources:
+            cells.append(
+                NotebookCell(
+                    id=new_id() if cells else seeded,
+                    notebook_id=notebook_id,
+                    position=len(cells),
+                    cell_type="code",
+                    source=source,
+                )
+            )
+        self._store.replace_cells(notebook_id, cells)
+        return notebook_id
+
     def duplicate(self, notebook_id: str) -> str | None:
         """Copy a notebook into a new one; ``None`` if the original is not found.
 
@@ -1383,11 +1419,18 @@ class NotebookService:
         return new_notebook_id
 
     def create_from_derivation(self, name: str) -> str | None:
-        """Open a stored derivation's source in a new notebook cell for iteration.
+        """Open a stored derivation's source in a new notebook, ready to run.
 
         Editing a certified derivation is a first-class task; this scaffolds a notebook
         with the derivation's code as a code cell (plus a heading), so a change can be
         explored here and re-promoted as a new version.
+
+        A derivation's stored source is captured with ``inspect.getsource(fn)`` — the
+        decorated function and nothing else, because imports live at module level.
+        Pasted into a notebook alone it cannot run: the kernel binds ``data`` and
+        ``sql`` and no more, so the first line dies on ``@derivation``. The scaffold
+        seeds what the source needs before it: the SDK names it references, and any
+        upstream derivation it reads, defined before the cell that reads it.
 
         ``None`` when there is no derivation of that name.
         """
@@ -1395,9 +1438,89 @@ class NotebookService:
         if derivation is None:
             return None
         heading = f"# Editing derivation `{name}`\n\n{derivation.question}".rstrip()
-        return self.create_from_source(
-            f"Editing {name}", derivation.source, heading=heading
+        return self.create_from_sources(
+            f"Editing {name}",
+            [*self._derivation_prelude(derivation.source), derivation.source],
+            heading=heading,
         )
+
+    def _derivation_prelude(self, source: str) -> list[str]:
+        """The cells a derivation's source needs bound before it, in order.
+
+        The closure matters, not just the one source. A derivation reading an upstream
+        one needs that upstream *and whatever the upstream itself references* — seeding
+        the sibling without its own ``Dataset`` import only moves the ``NameError`` one
+        cell down.
+
+        Three kinds of free name across that closure, and only two are answerable from
+        what is stored:
+
+        * **SDK names** — ``derivation``, ``Dataset``, ``serve`` and the rest are
+          attributes of ``elbi_core``, so an import line is exact.
+        * **Upstream derivations** — a derivation naming a sibling in its ``inputs`` is
+          reading another row of the same table, so its source is seeded first, and its
+          own upstreams before that.
+        * **Everything else** — ``defaultdict``, a third-party client. These come from
+          module-level imports that ``inspect.getsource`` never captured and nothing
+          here can recover. They are named in a comment instead, turning a
+          ``NameError`` on line one into a one-line fix the reader can make.
+        """
+        import builtins
+
+        import elbi_core
+        from elbi_core.notebook.dependencies import analyze_code
+
+        ordered: list[str] = []
+        refs: set[str] = set()
+        seen: set[str] = set()
+
+        def walk(code: str) -> None:
+            """Collect a source's refs, seeding its upstreams depth-first first."""
+            deps = analyze_code(code)
+            if deps.syntax_error:
+                return
+            for ref in sorted(deps.refs):
+                refs.add(ref)
+                if ref in seen or hasattr(builtins, ref) or hasattr(elbi_core, ref):
+                    continue
+                row = self._store.get_derivation(ref)
+                if row is None:
+                    continue
+                # Marked before recursing, so a cycle between two derivations
+                # terminates rather than seeding each other forever.
+                seen.add(ref)
+                walk(row.source)
+                ordered.append(row.source)
+
+        walk(source)
+
+        sdk = sorted(
+            ref
+            for ref in refs
+            if not hasattr(builtins, ref) and hasattr(elbi_core, ref)
+        )
+        unresolved = sorted(
+            ref
+            for ref in refs
+            if not hasattr(builtins, ref)
+            and not hasattr(elbi_core, ref)
+            and ref not in seen
+        )
+
+        header: list[str] = []
+        if sdk:
+            header.append(f"from elbi_core import {', '.join(sdk)}")
+        if unresolved:
+            header.append(
+                "# These names could not be resolved from the derivation's source, "
+                "which\n# holds no module-level imports. Add the import each needs:\n"
+                + "\n".join(f"#   {name}" for name in unresolved)
+            )
+        cells: list[str] = []
+        if header:
+            cells.append("\n".join(header))
+        cells.extend(ordered)
+        return cells
 
     # -- interchange -------------------------------------------------------------
     def export_ipynb(
