@@ -18,7 +18,7 @@ Write a Python function. `elbi` serves it to AI agents over the
 That function is a *derivation*: declared inputs, a transform, a declared output format.
 
 ```python
-from elbi import Artifact, Context, Dataset, derivation, serve
+from elbi_core import Artifact, Context, Dataset, derivation, serve
 
 
 @derivation(
