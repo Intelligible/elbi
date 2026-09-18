@@ -1203,11 +1203,12 @@ def test_derivations_that_reference_each_other_still_terminate(tmp_path: Path) -
         service.close()
 
 
-def test_a_derivation_notebook_ends_on_something_that_runs_it(tmp_path: Path) -> None:
-    """Defining a derivation displays nothing, so the scaffold has to call it.
+def test_a_derivation_notebook_ends_on_the_derivation_itself(tmp_path: Path) -> None:
+    """Nothing but the thing being edited. Running it is the kernel's job.
 
-    A decorated `def` is a statement: a notebook has no value to echo, which leaves
-    someone editing a derivation unable to see what their edit did.
+    The scaffold used to seed a cell that called the derivation; that put the runner's
+    plumbing on screen beside the derivation, and re-imported names the environment had
+    already bound.
     """
     from elbi.db import Derivation
 
@@ -1224,9 +1225,43 @@ def test_a_derivation_notebook_ends_on_something_that_runs_it(tmp_path: Path) ->
         notebook_id = service.create_from_derivation("totals")
         last = service.view(notebook_id)["cells"][-1]["source"]
 
-        assert last.rstrip().endswith("run(totals)")
-        # It must resolve inputs the way the runner does, not assume there are none.
-        assert "isinstance(spec, Dataset)" in last
-        assert "Table(data[spec.name])" in last
+        assert last.rstrip().endswith("return Artifact.table([])")
+        assert "def run(" not in last
+        assert "isinstance(spec, Dataset)" not in last
+    finally:
+        service.close()
+
+
+def test_a_derivation_notebook_hides_the_environment_it_needs(tmp_path: Path) -> None:
+    """Imports and helpers have to run, but they are not what anyone opened."""
+    from elbi.db import Derivation
+    from elbi.notebooks import SETUP_ROLE
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    store.save_derivation(
+        Derivation(
+            name="totals",
+            source=(
+                "from elbi_core import Artifact, derivation\n"
+                "SCALE = 2\n"
+                "@derivation()\n"
+                "def totals(ctx):\n"
+                "    return Artifact.table([{'n': SCALE}])"
+            ),
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        cells = service.view(service.create_from_derivation("totals"))["cells"]
+        setup = [c for c in cells if c["metadata"].get("elbi", {}).get("role") == SETUP_ROLE]
+
+        assert len(setup) == 1
+        assert "SCALE = 2" in setup[0]["source"]
+        assert "from elbi_core import" in setup[0]["source"]
+        # Exactly once: the environment is bound there and nowhere else.
+        visible = "\n".join(c["source"] for c in cells if c not in setup)
+        assert "SCALE = 2" not in visible
+        assert "from elbi_core import" not in visible
     finally:
         service.close()

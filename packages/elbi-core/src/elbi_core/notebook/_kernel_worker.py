@@ -360,6 +360,52 @@ def _split_last_expr(tree: ast.Module) -> ast.Expression | None:
     return None
 
 
+def _derivation_result(tree: ast.Module, namespace: dict[str, Any]) -> Any:
+    """Run a derivation the cell just defined, so defining one shows what it returns.
+
+    A decorated ``def`` is a statement, so a notebook editing a derivation would
+    otherwise display nothing and an edit would show no effect. Returns ``None`` when
+    the cell did not end on a derivation, or when running it would mean inventing
+    something: parameters have no values here, and a dataset input needs a binding.
+    """
+    defs = (ast.FunctionDef, ast.AsyncFunctionDef)
+    if not tree.body or not isinstance(tree.body[-1], defs):
+        return None
+    from elbi_core.derivation import Derivation
+
+    target = namespace.get(tree.body[-1].name)
+    if not isinstance(target, Derivation):
+        return None
+    return _compute_derivation(target, namespace)
+
+
+def _compute_derivation(target: Any, namespace: dict[str, Any]) -> Any:
+    """Resolve a derivation's inputs the way the runner does, then compute it.
+
+    A dataset input comes from the notebook's own ``data``; an upstream derivation is
+    computed first. ``None`` when an input cannot be resolved without guessing, which
+    the caller reads as "nothing to show" rather than as an error.
+    """
+    from elbi_core import Context, Dataset
+    from elbi_core.data import Table
+
+    if target.params:
+        return None
+    data = namespace.get("data")
+    resolved: dict[str, Any] = {}
+    for key, spec in target.inputs.items():
+        if isinstance(spec, Dataset):
+            if data is None or spec.name not in data:
+                return None
+            resolved[key] = Table(data[spec.name])
+            continue
+        upstream = _compute_derivation(spec, namespace)
+        if upstream is None:
+            return None
+        resolved[key] = upstream
+    return target.compute(Context(resolved, {}))
+
+
 def _run_cell(namespace: dict[str, Any], code: str, execution_count: int) -> str:
     """Execute one cell, streaming its outputs; return ``ok``/``error``/``interrupted``.
 
@@ -367,7 +413,9 @@ def _run_cell(namespace: dict[str, Any], code: str, execution_count: int) -> str
     ``%line-magic`` and ``!shell`` lines are rewritten to helper calls and the body runs
     in ``exec`` mode; when its final statement is a bare expression, that expression is
     evaluated separately so its value becomes the result: the REPL behavior a notebook
-    user expects (``df.head()`` on the last line shows the table). The namespace
+    user expects (``df.head()`` on the last line shows the table). A cell ending on a
+    ``@derivation`` is the one extension: it is run and its artifact shown, because a
+    statement has no value to echo and editing a derivation is the point. The namespace
     persists, so a later cell sees what this one defined.
     """
     global _CURRENT_CONTEXT
@@ -393,6 +441,8 @@ def _run_cell(namespace: dict[str, Any], code: str, execution_count: int) -> str
                 value = None
                 if last_expr is not None:
                     value = eval(compile(last_expr, "<cell>", "eval"), namespace)  # noqa: S307
+                else:
+                    value = _derivation_result(tree, namespace)
                 _capture_figures()
                 if value is not None:
                     namespace["_"] = value

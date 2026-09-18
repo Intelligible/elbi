@@ -301,31 +301,9 @@ class _WarmPool:
             return counts
 
 
-def _run_cell(name: str) -> str:
-    """A cell that runs the derivation and shows what it returns.
-
-    Defining a derivation displays nothing — a decorated ``def`` is a statement, so a
-    notebook has no value to echo — which leaves someone editing one with no way to see
-    the effect of an edit. This resolves its inputs the way the runner does (a dataset
-    from the notebook's own ``data``, an upstream derivation by running it first) and
-    ends on an expression, so the result renders.
-    """
-    return f'''# Run it, and show the result. Re-run this after editing above.
-from elbi_core import Dataset
-from elbi_core.data import Table
-
-
-def run(target):
-    """Resolve a derivation's inputs here, then compute it."""
-    resolved = {{
-        key: Table(data[spec.name]) if isinstance(spec, Dataset) else run(spec)
-        for key, spec in target.inputs.items()
-    }}
-    return target.compute(Context(resolved, {{}}))
-
-
-run({name})
-'''
+#: Cells the editor does not draw: environment a derivation needs bound, not the
+#: thing being edited. They still run.
+SETUP_ROLE = "setup"
 
 
 class NotebookService:
@@ -1364,12 +1342,20 @@ class NotebookService:
         return notebook_id
 
     def create_from_sources(
-        self, name: str, sources: Sequence[str], heading: str | None = None
+        self,
+        name: str,
+        sources: Sequence[str],
+        heading: str | None = None,
+        setup: str | None = None,
     ) -> str:
         """Create a notebook seeded with several code cells, in the order given.
 
         The single-cell :meth:`create_from_source` cannot express "this needs that
         bound first", which a derivation reading an upstream derivation requires.
+
+        ``setup`` is seeded as a hidden cell before them: it runs, binding what the
+        visible cells reference, but the editor does not draw it. Imports and a data
+        contract are environment, not the thing being edited.
         """
         from elbi_core.notebook import new_id
 
@@ -1384,6 +1370,17 @@ class NotebookService:
                     position=0,
                     cell_type="markdown",
                     source=heading,
+                )
+            )
+        if setup:
+            cells.append(
+                NotebookCell(
+                    id=new_id() if cells else seeded,
+                    notebook_id=notebook_id,
+                    position=len(cells),
+                    cell_type="code",
+                    source=setup,
+                    metadata_json=json.dumps({"elbi": {"role": SETUP_ROLE}}),
                 )
             )
         for source in sources:
@@ -1468,19 +1465,21 @@ class NotebookService:
         from elbi_core._source import split_stored
 
         _, own = split_stored(derivation.source)
+        setup, bodies = self._derivation_prelude(derivation.source)
         return self.create_from_sources(
             f"Editing {name}",
-            [*self._derivation_prelude(derivation.source), own, _run_cell(name)],
+            [*bodies, own],
             heading=heading,
+            setup=setup,
         )
 
-    def _derivation_prelude(self, source: str) -> list[str]:
-        """The cells a derivation's source needs bound before it, in order.
+    def _derivation_prelude(self, source: str) -> tuple[str, list[str]]:
+        """What a derivation needs bound before it: its environment, then its upstreams.
 
         Each stored source is self-contained — it carries the imports, constants and
         helpers its module gave it — so seeding a derivation beside its upstream would
-        repeat that context in every cell. It is split back out here and hoisted into
-        one cell, leaving each derivation cell as just the derivation.
+        repeat that context in every cell. It is split back out here and merged into one
+        environment, leaving each visible cell as just a derivation.
 
         The closure matters, not just the one source: a derivation reading an upstream
         needs that upstream *and* whatever the upstream itself references.
@@ -1517,9 +1516,8 @@ class NotebookService:
             add(statements)
 
         walk(source)
-        return (
-            [" \n".join(preamble).replace(" \n", "\n")] if preamble else []
-        ) + bodies
+        environment = " \n".join(preamble).replace(" \n", "\n") if preamble else ""
+        return environment, bodies
 
     # -- interchange -------------------------------------------------------------
     def export_ipynb(
