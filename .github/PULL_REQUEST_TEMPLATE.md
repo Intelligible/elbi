@@ -18,5 +18,5 @@ Closes #
 - [ ] `uv run mypy` passes
 - [ ] `uv run pytest` passes with coverage above the threshold
 - [ ] Tests added or updated for the change
-- [ ] A news fragment was added under `changelog.d/`
+- [ ] A news fragment was added under `changelog.d/`, or this pull request is labelled `skip-news`
 - [ ] I have read and agree to the [Code of Conduct](./CODE_OF_CONDUCT.md)

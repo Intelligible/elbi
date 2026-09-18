@@ -472,6 +472,29 @@ jobs:
       - name: Build docs (strict)
         run: uv run mkdocs build --strict
 
+  # A change a user would notice should say so in the changelog before it merges, rather than
+  # being reconstructed from the commit log at release time by whoever cuts the release.
+  #
+  # Skipped rather than failed when the pull request carries `skip-news`, because `ci-ok`
+  # passes a skipped job: that label is how a change no user would notice opts out.
+  news:
+    if: >-
+      github.event_name == 'pull_request' &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-news')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          # The checkout token is not needed after cloning.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Check for a news fragment
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uvx towncrier@25.8.0 check --compare-with "origin/$BASE_REF"
+
   # One check to require, reporting for all of them. A branch rule naming the jobs above
   # directly would block any pull request that legitimately skipped one, because a skipped
   # job never reports; this always runs and reads their results instead.
@@ -482,7 +505,7 @@ jobs:
   ci-ok:
     if: always()
     needs:
-      [changes, workflows, dependency-review, lint, test, postgres, spec-conformance, docs]
+      [changes, workflows, dependency-review, lint, test, postgres, spec-conformance, docs, news]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
