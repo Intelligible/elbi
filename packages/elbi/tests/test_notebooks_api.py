@@ -1201,3 +1201,32 @@ def test_derivations_that_reference_each_other_still_terminate(tmp_path: Path) -
         assert len(service.view(notebook_id)["cells"]) < 10
     finally:
         service.close()
+
+
+def test_a_derivation_notebook_ends_on_something_that_runs_it(tmp_path: Path) -> None:
+    """Defining a derivation displays nothing, so the scaffold has to call it.
+
+    A decorated `def` is a statement: a notebook has no value to echo, which leaves
+    someone editing a derivation unable to see what their edit did.
+    """
+    from elbi.db import Derivation
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    store.save_derivation(
+        Derivation(
+            name="totals",
+            source="@derivation()\ndef totals(ctx):\n    return Artifact.table([])",
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        notebook_id = service.create_from_derivation("totals")
+        last = service.view(notebook_id)["cells"][-1]["source"]
+
+        assert last.rstrip().endswith("run(totals)")
+        # It must resolve inputs the way the runner does, not assume there are none.
+        assert "isinstance(spec, Dataset)" in last
+        assert "Table(data[spec.name])" in last
+    finally:
+        service.close()

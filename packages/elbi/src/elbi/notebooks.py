@@ -301,6 +301,33 @@ class _WarmPool:
             return counts
 
 
+def _run_cell(name: str) -> str:
+    """A cell that runs the derivation and shows what it returns.
+
+    Defining a derivation displays nothing — a decorated ``def`` is a statement, so a
+    notebook has no value to echo — which leaves someone editing one with no way to see
+    the effect of an edit. This resolves its inputs the way the runner does (a dataset
+    from the notebook's own ``data``, an upstream derivation by running it first) and
+    ends on an expression, so the result renders.
+    """
+    return f'''# Run it, and show the result. Re-run this after editing above.
+from elbi_core import Dataset
+from elbi_core.data import Table
+
+
+def run(target):
+    """Resolve a derivation's inputs here, then compute it."""
+    resolved = {{
+        key: Table(data[spec.name]) if isinstance(spec, Dataset) else run(spec)
+        for key, spec in target.inputs.items()
+    }}
+    return target.compute(Context(resolved, {{}}))
+
+
+run({name})
+'''
+
+
 class NotebookService:
     """Owns notebook persistence and the pool of live kernels.
 
@@ -1443,7 +1470,7 @@ class NotebookService:
         _, own = split_stored(derivation.source)
         return self.create_from_sources(
             f"Editing {name}",
-            [*self._derivation_prelude(derivation.source), own],
+            [*self._derivation_prelude(derivation.source), own, _run_cell(name)],
             heading=heading,
         )
 
