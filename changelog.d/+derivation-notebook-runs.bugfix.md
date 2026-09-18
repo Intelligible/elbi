@@ -10,10 +10,13 @@ followed into the sibling module and emitted as definitions, and a notebook kern
 registers into a registry where re-declaring replaces. Discovery still fails loudly on a
 duplicate name, which is a project error rather than an edit.
 
-The notebook also shows what the derivation returned. Defining a derivation displays
-nothing — a decorated `def` is a statement — so the seeded notebook now ends on a cell
-that resolves the derivation's inputs the way the runner does (a dataset from the
-notebook's own data, an upstream derivation by running it first) and calls it. An
-`Artifact` renders itself: a table draws as a table and markdown as markdown, rather
-than as a dataclass repr. Notebook markdown no longer reads `$` as inline TeX, which
-was turning every dollar amount into an integrand.
+The notebook also shows what the derivation returned, without putting the machinery on
+screen. Defining a derivation displays nothing — a decorated `def` is a statement — so
+a notebook cell ending on one is now run by the kernel and its artifact shown, inputs
+resolved the way the runner does: a dataset from the notebook's own data, an upstream
+derivation by running it first. A derivation taking parameters is left alone rather than
+run on invented values. An `Artifact` renders itself: a table draws as a table and
+markdown as markdown, rather than as a dataclass repr. The imports, constants and
+contract a seeded derivation needs are bound by a cell that runs but is not drawn — they
+are environment, not the thing being edited. Notebook markdown no longer reads `$` as
+inline TeX, which was turning every dollar amount into an integrand.
