@@ -1947,21 +1947,43 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return service.source_detail_view(source.id)
 
+    @app.get("/api/warehouse/sources/{source_id}/config")
+    async def warehouse_source_config(source_id: str) -> dict[str, Any]:
+        """A source's config with secrets blanked, for pre-filling an edit form."""
+        try:
+            return _warehouse().source_config_view(source_id)
+        except WarehouseError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.patch("/api/warehouse/sources/{source_id}")
     async def warehouse_update_source(
         source_id: str, request: Request
     ) -> dict[str, Any]:
-        """Change a source's auto-sync cadence (e.g. daily, 6-hourly, manual)."""
+        """Edit a source: its config, name, description, or auto-sync cadence.
+
+        Omit a password field, or send it blank, to keep the stored secret. Correcting a
+        manifest should not cost the operator credentials that were already working.
+        """
         service = _warehouse()
         body = await request.json()
-        frequency = body.get("sync_frequency")
-        if frequency is None:
-            raise HTTPException(status_code=400, detail="sync_frequency is required")
+        editable = ("config", "name", "description", "sync_frequency")
+        if not any(body.get(field) is not None for field in editable):
+            raise HTTPException(
+                status_code=400, detail=f"One of {', '.join(editable)} is required"
+            )
         try:
-            return service.set_sync_frequency(source_id, str(frequency))
+            source = await run_in_threadpool(
+                service.update_source,
+                source_id,
+                config=body.get("config"),
+                name=body.get("name"),
+                description=body.get("description"),
+                sync_frequency=body.get("sync_frequency"),
+            )
         except WarehouseError as exc:
             status = 404 if "not found" in str(exc).lower() else 400
             raise HTTPException(status_code=status, detail=str(exc)) from exc
+        return service.source_detail_view(source.id)
 
     @app.get("/api/warehouse/sources/{source_id}")
     async def warehouse_source_detail(source_id: str) -> dict[str, Any]:
