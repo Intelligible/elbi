@@ -122,6 +122,52 @@ def _preamble(
     return list(reversed(keep)), wanted
 
 
+def split_stored(source: str) -> tuple[list[str], str]:
+    """Split a stored source back into its preamble statements and its derivation.
+
+    :func:`compute_source` joins the two, and the store keeps the joined string. A
+    caller laying several derivations out together needs them apart again, and parsing
+    is how: everything up to the decorated function is context, the rest is the
+    derivation. A source with no decorated function is all derivation and no context,
+    which is what an agent-authored one looks like.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return [], source
+
+    for node in tree.body:
+        if not _is_derivation(node):
+            continue
+        cut = min([node.lineno, *(d.lineno for d in node.decorator_list)]) - 1
+        lines = source.splitlines()
+        preamble = [
+            segment
+            for statement in tree.body
+            if statement.lineno < cut + 1
+            and statement is not node
+            and (segment := ast.get_source_segment(source, statement))
+        ]
+        return preamble, "\n".join(lines[cut:]).strip("\n")
+    return [], source
+
+
+def source_parts(fn: Any) -> tuple[list[str], str]:
+    """A derivation's compute, and the module-level statements it needs, separately.
+
+    Kept apart for callers that lay the two out themselves: seeding a derivation and its
+    upstream into one notebook would otherwise repeat a shared import, constant and
+    helper in every cell, since each source is self-contained on its own.
+    """
+    try:
+        own = textwrap.dedent(inspect.getsource(fn))
+    except (OSError, TypeError):
+        return [], ""
+
+    statements, _ = _preamble(inspect.getmodule(fn), _free_names(own), set())
+    return statements, own
+
+
 def compute_source(fn: Any) -> str:
     """A derivation's compute with the module-level context it needs to run.
 
@@ -129,11 +175,6 @@ def compute_source(fn: Any) -> str:
     compute), and the bare function when its module cannot be read, which is what this
     returned before the preamble existed.
     """
-    try:
-        own = textwrap.dedent(inspect.getsource(fn))
-    except (OSError, TypeError):
-        return ""
-
-    statements, _ = _preamble(inspect.getmodule(fn), _free_names(own), set())
+    statements, own = source_parts(fn)
     preamble = "\n".join(statements)
     return f"{preamble}\n\n{own}" if preamble else own

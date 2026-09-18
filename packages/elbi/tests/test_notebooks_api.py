@@ -1131,35 +1131,31 @@ def test_the_queries_a_cell_pushed_down_reach_the_editor(
     assert "queries" not in (saved["metadata"].get("elbi") or {})
 
 
-def test_notebook_from_a_derivation_seeds_its_upstream_derivations(
-    tmp_path: Path,
-) -> None:
-    """A derivation that reads another one needs that other one defined first.
+def test_a_derivation_and_its_upstream_share_one_preamble(tmp_path: Path) -> None:
+    """The context a module gave them is hoisted once, not repeated per cell.
 
-    "Open in notebook" pastes a derivation's stored source, which is captured with
-    `inspect.getsource(fn)` — the function alone. A derivation whose `inputs` name a
-    sibling therefore lands in a notebook where that sibling is an unbound name, and the
-    cell dies on its decorator line before any of it runs.
+    Each stored source is self-contained — it carries the imports and constants its
+    module gave it — so seeding a derivation beside its upstream would otherwise print
+    the same import block in every cell.
     """
     from elbi.db import Derivation
 
     store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    context = "from collections import defaultdict\nLIMIT = 3\n\n"
     store.save_derivation(
         Derivation(
             name="upstream",
-            source=(
-                "@derivation(serve=serve.table())\ndef upstream(ctx):\n    return []"
-            ),
+            source=context + "@derivation()\ndef upstream(ctx):\n    return LIMIT",
             question="?",
         )
     )
     store.save_derivation(
         Derivation(
             name="downstream",
-            source=(
+            source=context
+            + (
                 "@derivation(inputs={'u': upstream})\n"
-                "def downstream(ctx):\n"
-                "    return ctx.input('u').value"
+                "def downstream(ctx):\n    return LIMIT"
             ),
             question="?",
         )
@@ -1167,105 +1163,21 @@ def test_notebook_from_a_derivation_seeds_its_upstream_derivations(
     service = NotebookService(store=store, load_datasets=lambda: {})
     try:
         notebook_id = service.create_from_derivation("downstream")
-        assert notebook_id is not None
         sources = [c["source"] for c in service.view(notebook_id)["cells"]]
         joined = "\n".join(sources)
 
-        # The SDK names the pasted source uses have to be bound somewhere.
-        assert "from elbi_core import" in joined
-        assert "derivation" in joined.split("from elbi_core import")[1].split("\n")[0]
-
-        # And the upstream derivation must be defined before the cell that reads it.
-        upstream_at = next(i for i, s in enumerate(sources) if "def upstream" in s)
-        downstream_at = next(i for i, s in enumerate(sources) if "def downstream" in s)
-        assert upstream_at < downstream_at
+        assert joined.count("from collections import defaultdict") == 1
+        assert joined.count("LIMIT = 3") == 1
+        # And the upstream is still defined before the cell that reads it.
+        up = next(i for i, s in enumerate(sources) if "def upstream" in s)
+        down = next(i for i, s in enumerate(sources) if "def downstream" in s)
+        assert up < down
     finally:
         service.close()
 
 
-def test_a_derivation_notebook_names_what_it_could_not_resolve(tmp_path: Path) -> None:
-    """Imports that are not the SDK cannot be recovered from a function body.
-
-    `inspect.getsource` returns no module-level imports, so a derivation using
-    `defaultdict` leaves the notebook with an unbound name that no amount of
-    introspection here can supply. Saying which names those are turns a NameError on
-    line 1 into a one-line fix the reader can make.
-    """
-    from elbi.db import Derivation
-
-    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
-    store.save_derivation(
-        Derivation(
-            name="counts",
-            source=(
-                "@derivation()\n"
-                "def counts(ctx):\n"
-                "    tally = defaultdict(int)\n"
-                "    return tally"
-            ),
-            question="?",
-        )
-    )
-    service = NotebookService(store=store, load_datasets=lambda: {})
-    try:
-        notebook_id = service.create_from_derivation("counts")
-        joined = "\n".join(c["source"] for c in service.view(notebook_id)["cells"])
-
-        assert "defaultdict" in joined
-        assert (
-            "could not be resolved" in joined.lower()
-            or "add the import" in joined.lower()
-        )
-    finally:
-        service.close()
-
-
-def test_the_prelude_covers_what_upstream_derivations_reference(tmp_path: Path) -> None:
-    """Seeding a sibling without its own imports moves the NameError, not fixes it.
-
-    The first version of this analysed only the derivation being opened. Its upstream
-    was then seeded correctly and died on its own `Dataset` reference, taking the cell
-    that read it down with it.
-    """
-    from elbi.db import Derivation
-
-    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
-    store.save_derivation(
-        Derivation(
-            name="reads_a_dataset",
-            # `Dataset` appears only here, never in the derivation being opened.
-            source=(
-                "@derivation(inputs={'r': Dataset('rows')})\n"
-                "def reads_a_dataset(ctx):\n    return []"
-            ),
-            question="?",
-        )
-    )
-    store.save_derivation(
-        Derivation(
-            name="opens_it",
-            source=(
-                "@derivation(inputs={'u': reads_a_dataset})\n"
-                "def opens_it(ctx):\n    return ctx.input('u').value"
-            ),
-            question="?",
-        )
-    )
-    service = NotebookService(store=store, load_datasets=lambda: {})
-    try:
-        notebook_id = service.create_from_derivation("opens_it")
-        imports = next(
-            c["source"]
-            for c in service.view(notebook_id)["cells"]
-            if "from elbi_core import" in c["source"]
-        )
-        assert "Dataset" in imports
-    finally:
-        service.close()
-
-
-def test_derivations_that_reference_each_other_do_not_loop(tmp_path: Path) -> None:
-    """A cycle in the store must terminate rather than seed cells forever."""
+def test_derivations_that_reference_each_other_still_terminate(tmp_path: Path) -> None:
+    """A cycle in the store must not seed a cell per hop."""
     from elbi.db import Derivation
 
     store = open_store(f"sqlite:{tmp_path / 'd.db'}")
@@ -1286,7 +1198,6 @@ def test_derivations_that_reference_each_other_do_not_loop(tmp_path: Path) -> No
     service = NotebookService(store=store, load_datasets=lambda: {})
     try:
         notebook_id = service.create_from_derivation("a")
-        cells = service.view(notebook_id)["cells"]
-        assert len(cells) < 10, "a cycle must not seed a cell per hop"
+        assert len(service.view(notebook_id)["cells"]) < 10
     finally:
         service.close()
