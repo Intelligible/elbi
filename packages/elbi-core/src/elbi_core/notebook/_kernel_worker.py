@@ -471,6 +471,12 @@ def _seed_namespace(
     namespace[_magics.LINE_MAGIC_FN] = _nb_line_magic
     namespace[_magics.SYSTEM_FN] = _nb_system
     namespace[_magics.GETOUTPUT_FN] = _nb_getoutput
+    # A bare `@derivation` writes to whichever registry is active. Point it at one that
+    # lets a re-run redefine, because a cell defining a derivation would otherwise run
+    # exactly once and raise on every run after — including the reactive engine's own.
+    from elbi_core.registry import NotebookRegistry, _active_registry
+
+    _active_registry.set(NotebookRegistry())
     return namespace
 
 

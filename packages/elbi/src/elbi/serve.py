@@ -7,13 +7,11 @@ The LLM client reads ``ANTHROPIC_API_KEY`` from the environment (bring-your-own-
 
 from __future__ import annotations
 
-import inspect
 import json
 import logging
 import os
 import shutil
 import subprocess
-import textwrap
 import threading
 import time
 import urllib.request
@@ -41,6 +39,7 @@ from elbi_core import (
 )
 from elbi_core import cache as cache_policies
 from elbi_core import serve as serve_builders
+from elbi_core._source import compute_source
 from elbi_core.cache import LocalCacheStore, derivation_tag
 from elbi_core.config import DataBindings, DatasetSpec, SourceSpec
 from elbi_core.data import Table
@@ -402,13 +401,17 @@ def build(
         """The Python source of a repo derivation's compute, best-effort.
 
         Repo derivations carry their logic as a function (unlike agent-authored ones,
-        whose source is stored text), so it is read back from the function object for
-        display. Empty when the source is unavailable (a REPL- or C-defined compute).
+        whose source is stored text), so it is read back from the function object.
+
+        With the module-level context it depends on: the imports, constants, contracts
+        and helpers a derivation reads all live outside the function, so the function
+        alone is something to look at rather than something to run. Anything that pastes
+        this where it will execute — opening a derivation in a notebook — needs the
+        whole of it. Sibling derivations are left out, being their own records.
+
+        Empty when the source is unavailable (a REPL- or C-defined compute).
         """
-        try:
-            return textwrap.dedent(inspect.getsource(derivation.compute))
-        except (OSError, TypeError):
-            return ""
+        return compute_source(derivation.compute)
 
     def _sync_repo_derivations() -> None:
         """Record repo-authored derivations in the store so the UI reads them there.

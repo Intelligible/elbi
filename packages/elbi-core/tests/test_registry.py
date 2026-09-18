@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from elbi_core import (
+    Artifact,
     Bm25Retriever,
     Context,
     DuplicateDerivationError,
@@ -129,3 +130,37 @@ def test_search_respects_limit(bm25_registry: Registry) -> None:
     _searchable(bm25_registry)
     # Both match "by"/"scores"? Use a shared term and a limit of 1.
     assert len(bm25_registry.search("region revenue churn", limit=1)) == 1
+
+
+def test_a_notebook_registry_lets_a_rerun_redefine() -> None:
+    """Re-running a cell that defines a derivation must not collide with itself.
+
+    A notebook re-runs constantly — the reactive engine does it unprompted whenever an
+    upstream cell changes. Under the strict registry a derivation cell runs exactly
+    once and raises on every run after, which makes iterating on one impossible.
+    """
+    from elbi_core.registry import NotebookRegistry, use_registry
+
+    registry = NotebookRegistry()
+    code = "@derivation()\ndef demo(ctx):\n    return Artifact.table([])"
+    namespace = {"derivation": derivation, "Artifact": Artifact, "Context": Context}
+
+    with use_registry(registry):
+        exec(compile(code, "<cell>", "exec"), namespace)
+        exec(compile(code, "<cell>", "exec"), namespace)
+
+    assert registry.get("demo").name == "demo"
+
+
+def test_the_strict_registry_still_refuses_a_duplicate() -> None:
+    """Discovery must keep failing loudly: two files claiming one name is an error."""
+    from elbi_core.registry import use_registry
+
+    registry = Registry()
+    code = "@derivation()\ndef demo(ctx):\n    return Artifact.table([])"
+    namespace = {"derivation": derivation, "Artifact": Artifact, "Context": Context}
+
+    with use_registry(registry):
+        exec(compile(code, "<cell>", "exec"), namespace)
+        with pytest.raises(DuplicateDerivationError):
+            exec(compile(code, "<cell>", "exec"), namespace)
