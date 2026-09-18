@@ -123,6 +123,22 @@ class Registry:
 #: The registry populated by ``@derivation`` when no registry is specified.
 default_registry = Registry()
 
+class NotebookRegistry(Registry):
+    """A registry where re-declaring a derivation replaces it rather than colliding.
+
+    Discovery wants a duplicate name to fail loudly: two files claiming one name is a
+    project error, and the last import winning silently would be worse than stopping. A
+    notebook inverts that. Re-running a cell is its normal motion — the reactive engine
+    does it unprompted whenever an upstream cell changes — so a second run must redefine
+    what the first one declared. Without this a derivation cell runs exactly once, which
+    makes "open this derivation and iterate on it" impossible by construction.
+    """
+
+    def register(self, derivation: Derivation) -> None:
+        """Insert ``derivation``, overwriting any existing entry of its name."""
+        self.replace(derivation)
+
+
 _active_registry: ContextVar[Registry] = ContextVar(
     "elbi_active_registry", default=default_registry
 )

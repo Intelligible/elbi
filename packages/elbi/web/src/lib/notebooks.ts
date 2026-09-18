@@ -39,6 +39,13 @@ export type Cell = {
   execution_count: number | null
 }
 
+/** Cells the editor does not draw: environment a derivation needs bound, not the thing
+ * being edited. They still run, and `Run all` still runs them. */
+export function isSetupCell(cell: Cell): boolean {
+  const elbi = cell.metadata?.elbi
+  return typeof elbi === "object" && elbi !== null && (elbi as { role?: unknown }).role === "setup"
+}
+
 export type CellDeps = {
   defs: string[]
   refs: string[]
