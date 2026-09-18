@@ -306,6 +306,12 @@ class _WarmPool:
 SETUP_ROLE = "setup"
 
 
+def _is_setup(cell: Any) -> bool:
+    """Whether a cell is environment rather than something someone opened to edit."""
+    elbi = (cell.metadata or {}).get("elbi")
+    return isinstance(elbi, dict) and elbi.get("role") == SETUP_ROLE
+
+
 class NotebookService:
     """Owns notebook persistence and the pool of live kernels.
 
@@ -933,6 +939,51 @@ class NotebookService:
         """The dataflow graph over the notebook's current code-cell sources."""
         return DependencyGraph(self._document(notebook_id).dependency_pairs())
 
+    def _with_environment(
+        self,
+        runtime: _Runtime,
+        doc: NotebookDoc,
+        graph: DependencyGraph,
+        sources: Mapping[str, str],
+        plan: list[str],
+    ) -> list[str]:
+        """Put whatever the run reads but nothing has defined yet at the front of it.
+
+        Reactivity runs a cell's *dependents*; a dependency is the other direction, and
+        a cell whose inputs were never bound cannot run at all. That is the ordinary
+        shape of a seeded derivation notebook — imports in a cell the editor does not
+        draw, then each upstream derivation, then the one being edited — so running the
+        one you are editing has to bind the chain behind it.
+
+        Only what never ran on this kernel. An upstream that ran and has since changed
+        is stale, which the reactive engine already owns; re-running it here would
+        recompute someone's expensive cell behind their back. A setup cell is the
+        exception: it has no Run button, so an edit to one can only be picked up here.
+        """
+        cells = {cell.id: cell for cell in doc.code_cells()}
+        needed: set[str] = set()
+        stack = list(plan)
+        while stack:
+            for producer in graph.upstream.get(stack.pop(), ()):
+                cell = cells.get(producer)
+                if cell is None or producer in plan or producer in needed:
+                    continue
+                if not self._needs_binding(runtime, cell, sources):
+                    continue
+                needed.add(producer)
+                stack.append(producer)
+        return [cell_id for cell_id in graph.topo_order() if cell_id in needed] + plan
+
+    def _needs_binding(
+        self, runtime: _Runtime, cell: Any, sources: Mapping[str, str]
+    ) -> bool:
+        """Whether a cell has to run for what it defines to exist on this kernel."""
+        if cell.id not in runtime.run_seq:
+            return True
+        return _is_setup(cell) and runtime.ran.get(cell.id) != _hash(
+            sources.get(cell.id, "")
+        )
+
     def _stale(
         self, runtime: _Runtime, doc: NotebookDoc, graph: DependencyGraph
     ) -> set[str]:
@@ -1040,6 +1091,7 @@ class NotebookService:
         yield from self._apply_run_installs(notebook_id, plan, sources)
         row = self._store.get_notebook(notebook_id) or row
         runtime = self._runtime(notebook_id, self._provision_deps(row))
+        plan = self._with_environment(runtime, doc, graph, sources, plan)
 
         events: queue.Queue[dict[str, Any] | None] = queue.Queue()
 

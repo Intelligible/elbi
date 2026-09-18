@@ -1265,3 +1265,129 @@ def test_a_derivation_notebook_hides_the_environment_it_needs(tmp_path: Path) ->
         assert "from elbi_core import" not in visible
     finally:
         service.close()
+
+
+def test_running_one_cell_binds_the_hidden_environment_first(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """A setup cell is not drawn, so it has no Run button to press.
+
+    Running a derivation cell on its own has to bind what the hidden cell defines, or
+    the cell dies on an import nobody can see, let alone run.
+    """
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Hidden"}).json()["id"]
+    setup = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{setup}",
+        json={"source": "SCALE = 7", "metadata": {"elbi": {"role": "setup"}}},
+    )
+    visible = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "SCALE * 2"}
+    ).json()["id"]
+
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [visible]})
+    )
+
+    started = [e["cell"] for e in events if e["event"] == "cell_start"]
+    assert started == [setup, visible]
+    results = {
+        e["cell"]: e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    }
+    assert results[visible] == "14"
+
+
+def test_a_bound_environment_is_not_rerun_for_every_cell(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """Once it has run in this kernel and has not changed, it is already bound."""
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Hidden"}).json()["id"]
+    setup = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{setup}",
+        json={"source": "counter = globals().get('counter', 0) + 1"},
+    )
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{setup}",
+        json={"metadata": {"elbi": {"role": "setup"}}},
+    )
+    visible = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "counter"}
+    ).json()["id"]
+
+    _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [visible]}))
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [visible]})
+    )
+
+    started = [e["cell"] for e in events if e["event"] == "cell_start"]
+    assert started == [visible]
+    results = [
+        e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    ]
+    assert results == ["1"]
+
+
+def test_running_a_cell_binds_upstreams_that_never_ran(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """A seeded derivation reads an upstream derivation defined in an earlier cell.
+
+    Running the one being edited, on a kernel where the earlier cell has not run, has
+    to define it first — reactivity cascades to dependents, and a dependency is the
+    other direction.
+    """
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Chain"}).json()["id"]
+    first = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(f"/api/notebooks/{notebook_id}/cells/{first}", json={"source": "base = 3"})
+    middle = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "mid = base * 2"}
+    ).json()["id"]
+    last = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "mid + 1"}
+    ).json()["id"]
+
+    events = _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]}))
+
+    started = [e["cell"] for e in events if e["event"] == "cell_start"]
+    assert started == [first, middle, last]
+    results = [
+        e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    ]
+    assert results == ["7"]
+
+
+def test_an_upstream_that_already_ran_is_left_alone(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """Bound once is bound. Re-running it is the reactive engine's business, not this."""
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Chain"}).json()["id"]
+    first = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{first}",
+        json={"source": "runs = globals().get('runs', 0) + 1"},
+    )
+    last = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "runs"}
+    ).json()["id"]
+
+    _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]}))
+    events = _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]}))
+
+    assert [e["cell"] for e in events if e["event"] == "cell_start"] == [last]
+    results = [
+        e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    ]
+    assert results == ["1"]

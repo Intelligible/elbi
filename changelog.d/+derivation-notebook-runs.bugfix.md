@@ -20,3 +20,11 @@ markdown as markdown, rather than as a dataclass repr. The imports, constants an
 contract a seeded derivation needs are bound by a cell that runs but is not drawn — they
 are environment, not the thing being edited. Notebook markdown no longer reads `$` as
 inline TeX, which was turning every dollar amount into an integrand.
+
+Running a single cell now binds what it reads. Reactivity runs a cell's dependents; a
+dependency is the other direction, so running the derivation you are editing on a fresh
+kernel died on the upstream derivation it reads — and, once the environment stopped
+being drawn, on the imports too. Cells the run needs that never ran on this kernel are
+run first, in dependency order. An upstream that ran and has since changed is left
+alone: that is staleness, which the reactive engine already owns.
+
