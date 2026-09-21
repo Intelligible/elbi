@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlparse
@@ -39,8 +40,12 @@ def _resource_name(resource: Any) -> str | None:
 
 #: How long a connection test may take before it is reported as hung. Generous enough
 #: for a slow first page, short enough that an operator is told rather than left
-#: watching a spinner.
+#: watching a spinner. It bounds the walk itself, not only the wait on it.
 _PROBE_TIMEOUT = 20.0
+
+#: Slack on top of that, for the walk to unwind and the thread to finish after its own
+#: deadline has passed. Only a walk that is stuck before any page arrives uses it.
+_PROBE_GRACE = 5.0
 
 
 def _declares_paginator(manifest: dict[str, Any]) -> bool:
@@ -181,11 +186,20 @@ class CustomSource(SimpleSource):
     def _probe(self, manifest: dict[str, Any]) -> tuple[bool, list[str]]:
         """Fetch one record from the first resource, or say why it could not.
 
-        Run on a worker thread with a deadline rather than a request timeout: a guessed
-        paginator loops over responses that each return promptly, so no per-request
-        timeout ever fires. The thread is left to die with the process if it overruns —
-        a daemon thread stuck in a dlt loop is the symptom being reported, not something
-        to wait on.
+        The deadline is on the walk, not only on the wait. A guessed paginator loops
+        over responses that each return promptly, so no per-request timeout ever fires,
+        and a worker thread abandoned when the join expires keeps asking for the next
+        page — hundreds a second, for the life of a server process that runs for months.
+        So the resource carries dlt's own stop: ``add_limit(max_time=...)`` closes its
+        generator at the first page past the deadline, listener or not.
+
+        Time bounds the walk rather than ``max_items`` because ``max_items`` counts
+        pages, and a walk cut short at page N with no record to show reads exactly like
+        an endpoint that is simply empty. A spent budget tells those two apart.
+
+        The thread remains as the backstop for the case the limit cannot reach: a
+        request that hangs before any page arrives, so nothing flows through the pipe
+        for the limit to close on. That is one stuck request, not an unbounded walk.
         """
         resources = manifest.get("resources", [])
         name = _resource_name(resources[0]) if resources else None
@@ -195,21 +209,29 @@ class CustomSource(SimpleSource):
         outcome: dict[str, Any] = {}
 
         def run() -> None:
+            started = time.monotonic()
             try:
                 from ._dlt import rest_api_source
 
                 source = rest_api_source(manifest)
-                for _record in source.resources[name]:
+                resource = source.resources[name].add_limit(max_time=_PROBE_TIMEOUT)
+                for _record in resource:
+                    outcome["record"] = True
                     break
-                outcome["ok"] = True
             except Exception as exc:  # any failure is the operator's to see
                 outcome["error"] = f"{type(exc).__name__}: {exc}"
+            finally:
+                outcome["elapsed"] = time.monotonic() - started
 
         worker = threading.Thread(target=run, daemon=True, name=f"probe-{name}")
         worker.start()
-        worker.join(_PROBE_TIMEOUT)
+        worker.join(_PROBE_TIMEOUT + _PROBE_GRACE)
 
-        if worker.is_alive():
+        if "error" in outcome:
+            return False, [f"Could not fetch from {name!r}. {outcome['error']}"]
+        if outcome.get("record"):
+            return True, []
+        if worker.is_alive() or outcome.get("elapsed", 0.0) >= _PROBE_TIMEOUT:
             hint = (
                 " No `paginator` is declared, so dlt guessed one. Declare it explicitly"
                 ' — `"paginator": {"type": "single_page"}` for an endpoint that'
@@ -221,8 +243,7 @@ class CustomSource(SimpleSource):
                 f"Fetching from {name!r} did not finish within {_PROBE_TIMEOUT:.0f}s."
                 + hint
             ]
-        if "error" in outcome:
-            return False, [f"Could not fetch from {name!r}. {outcome['error']}"]
+        # Nothing to fetch, but the endpoint answered and the walk ended on its own.
         return True, []
 
     def schemas(self, config: dict[str, Any]) -> list[SourceSchema]:
