@@ -31,7 +31,14 @@ import {
 } from "@/lib/dashboards"
 
 const Grid = WidthProvider(GridLayout)
-const ROW_HEIGHT = 44
+// A tile's height is `(ROW_HEIGHT + margin)h - margin`, so a row is also the step a
+// vertical resize moves in — 60px at the old 44px row, which made dragging an edge feel
+// chunky and pushed the tiles below it down in jumps. At 14 the step is 30px.
+//
+// The unit is the spec's `h`, so halving the step doubles the number of rows a given
+// height is written as: a tile that was `h: 3` is `h: 6`. Dashboards written against
+// the old unit render at half their intended height until their `h` values are doubled.
+const ROW_HEIGHT = 14
 //: The spec's default page width; a page omitting `columns` is 24 wide, not 12.
 const DEFAULT_COLUMNS = 24
 //: Resize from any edge or corner, not just the bottom-right: widening a tile against
@@ -122,10 +129,9 @@ export function DashboardPage() {
         w: w.gridPos.w,
         h: w.gridPos.h,
         minW: 2,
-        // A row is ROW_HEIGHT plus the 16px gap, so a tile is `60h - 16` px tall: 2 rows
-        // is 104px, enough for a title and a line under it. 1 row is 44px, which the
-        // header alone nearly fills.
-        minH: 2,
+        // 3 rows is 74px: a title and a line under it. The header alone is ~30px, so
+        // much below this is a title bar with a sliver of body.
+        minH: 3,
       })),
     [visibleWidgets],
   )
