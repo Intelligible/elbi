@@ -191,6 +191,8 @@ export function DashboardPage() {
           if (patch.derivation !== undefined && w.bind) {
             next.bind = { ...w.bind, derivation: patch.derivation }
           }
+          if (patch.viz !== undefined) next.viz = patch.viz
+          if (patch.gridPos !== undefined) next.gridPos = patch.gridPos
           return next
         }),
       )
@@ -365,6 +367,7 @@ export function DashboardPage() {
       <TileEditor
         widget={tileUnderEdit}
         catalog={catalog}
+        columns={columns}
         onCancel={() => setTileUnderEdit(null)}
         onSave={(widgetId, patch) => void saveTile(widgetId, patch)}
       />

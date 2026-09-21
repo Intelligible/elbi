@@ -445,3 +445,28 @@ body {
 .nb-html td {
   font-variant-numeric: tabular-nums;
 }
+
+/* react-grid-layout ships its resize handle as a faint corner triangle that stays at
+   `opacity: 0` until the tile is hovered. Against either theme it reads as nothing, so
+   a tile looks like it can only be moved. Give it a visible grip, a bigger target than
+   the 20px default, and show it on keyboard focus too. */
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se {
+  width: 26px;
+  height: 26px;
+  right: 2px;
+  bottom: 2px;
+  padding: 0;
+  background-image: none;
+  border-right: 2px solid var(--text-tertiary);
+  border-bottom: 2px solid var(--text-tertiary);
+  border-bottom-right-radius: 0.6rem;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.react-grid-item:hover > .react-resizable-handle.react-resizable-handle-se,
+.react-grid-item:focus-within > .react-resizable-handle.react-resizable-handle-se {
+  opacity: 0.55;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se:hover {
+  opacity: 1;
+}
