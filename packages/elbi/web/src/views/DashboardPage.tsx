@@ -8,6 +8,7 @@ import "react-resizable/css/styles.css"
 
 import { DashboardWidget } from "@/components/dashboard/DashboardWidget"
 import { FilterBar } from "@/components/dashboard/FilterBar"
+import { TileEditor, type TilePatch } from "@/components/dashboard/TileEditor"
 import { Scene, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,7 +22,13 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { dashboardExportUrl } from "@/lib/chat"
 import type { Dashboard, DashboardSpec, Variable, Widget, WidgetData } from "@/lib/dashboards"
-import { getDashboard, publishDashboard, resolvePage, saveDashboard } from "@/lib/dashboards"
+import {
+  bindableDerivations,
+  getDashboard,
+  publishDashboard,
+  resolvePage,
+  saveDashboard,
+} from "@/lib/dashboards"
 
 const Grid = WidthProvider(GridLayout)
 const ROW_HEIGHT = 44
@@ -54,6 +61,9 @@ export function DashboardPage() {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [catalog, setCatalog] = useState<string[]>([])
+  const [tileUnderEdit, setTileUnderEdit] = useState<Widget | null>(null)
+  const [tileToDelete, setTileToDelete] = useState<Widget | null>(null)
 
   const load = useCallback(async () => {
     const view = await getDashboard(id)
@@ -82,6 +92,13 @@ export function DashboardPage() {
   useEffect(() => {
     void resolve()
   }, [resolve])
+
+  // The names a tile may bind, for the editor's derivation field.
+  useEffect(() => {
+    void bindableDerivations()
+      .then(setCatalog)
+      .catch(() => setCatalog([]))
+  }, [])
 
   const page = useMemo(() => spec?.pages.find((p) => p.name === pageName), [spec, pageName])
   // 24, matching the spec's default and what `Page.to_manifest` omits when unchanged.
@@ -133,6 +150,66 @@ export function DashboardPage() {
       }, 600)
     },
     [dashboard, page, id],
+  )
+
+  // One place every spec edit goes through: rebuild the spec, show it immediately, and
+  // write it. Unlike a drag there is nothing to debounce — a dialog's Save and a delete
+  // are single deliberate acts, so they persist at once.
+  const writeSpec = useCallback(
+    async (nextSpec: DashboardSpec) => {
+      setDashboard((current) => (current ? { ...current, spec: nextSpec } : current))
+      await saveDashboard(id, nextSpec)
+    },
+    [id],
+  )
+
+  const mapWidgets = useCallback(
+    (change: (widgets: Widget[]) => Widget[]): DashboardSpec | null => {
+      if (!dashboard || !page) return null
+      return {
+        ...dashboard.spec,
+        pages: dashboard.spec.pages.map((p) =>
+          p.name === page.name ? { ...p, widgets: change(p.widgets) } : p,
+        ),
+      }
+    },
+    [dashboard, page],
+  )
+
+  const saveTile = useCallback(
+    async (widgetId: string, patch: TilePatch) => {
+      const nextSpec = mapWidgets((widgets) =>
+        widgets.map((w) => {
+          if (w.id !== widgetId) return w
+          const next: Widget = { ...w }
+          // An emptied title is no title, rather than an empty line above the body.
+          if (patch.title !== undefined) {
+            if (patch.title.trim()) next.title = patch.title.trim()
+            else delete next.title
+          }
+          if (patch.content !== undefined) next.content = patch.content
+          if (patch.derivation !== undefined && w.bind) {
+            next.bind = { ...w.bind, derivation: patch.derivation }
+          }
+          return next
+        }),
+      )
+      if (!nextSpec) return
+      setTileUnderEdit(null)
+      await writeSpec(nextSpec)
+      void resolve()
+    },
+    [mapWidgets, writeSpec, resolve],
+  )
+
+  const deleteTile = useCallback(
+    async (widgetId: string) => {
+      const nextSpec = mapWidgets((widgets) => widgets.filter((w) => w.id !== widgetId))
+      if (!nextSpec) return
+      setTileToDelete(null)
+      await writeSpec(nextSpec)
+    },
+    [mapWidgets, writeSpec],
   )
 
   const publish = async () => {
@@ -267,6 +344,8 @@ export function DashboardPage() {
                   data={widgets[widget.id]}
                   variables={variables}
                   onCrossFilter={(emit) => setVariables((current) => ({ ...current, ...emit }))}
+                  onEdit={() => setTileUnderEdit(widget)}
+                  onDelete={() => setTileToDelete(widget)}
                   onDrillThrough={() => {
                     const target = widget.interactions?.drillThrough?.target ?? ""
                     const [kind, ref] = target.split(":")
@@ -282,6 +361,37 @@ export function DashboardPage() {
           </Grid>
         )}
       </div>
+
+      <TileEditor
+        widget={tileUnderEdit}
+        catalog={catalog}
+        onCancel={() => setTileUnderEdit(null)}
+        onSave={(widgetId, patch) => void saveTile(widgetId, patch)}
+      />
+
+      <Dialog open={tileToDelete !== null} onOpenChange={(open) => !open && setTileToDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this tile?</DialogTitle>
+            <p className="text-sm text-text-tertiary">
+              “{tileToDelete?.title ?? tileToDelete?.id}” is removed from this page. The derivation
+              behind it is untouched, and an earlier version of the dashboard is still in its
+              history.
+            </p>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTileToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => tileToDelete && void deleteTile(tileToDelete.id)}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="max-w-3xl">
