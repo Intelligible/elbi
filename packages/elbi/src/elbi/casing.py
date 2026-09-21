@@ -7,7 +7,7 @@ instead of the historical mix of snake_case and camelCase.
 Three kinds of payload are governed by another standard or are opaque user data, and are
 left byte-for-byte: OSI documents (snake_case by the OSI spec), notebook documents
 (nbformat: ``cell_type``, ``output_type``, …), and the values of tabular-data keys
-(``rows``, ``variables``, ``claims``) whose keys are user column names or an
+(``rows``, ``variables``, ``claims``, ``value``) whose keys are user column names or an
 identity provider's claim names, not API fields.
 Route-level exemptions handle the first two; the key set handles the third. Streaming
 responses (the chat SSE) and non-JSON bodies are passed through untouched by the
@@ -34,9 +34,11 @@ _CAMEL = re.compile(r"^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)+$")
 
 #: Keys whose values are opaque data (row dicts keyed by user column names, live kernel
 #: variables, run-history cells keyed by asset name, a warehouse source's ``config``
-#: keyed by the connector's own field names): the value is copied verbatim rather than
-#: recursed into, so its data keys survive the API's casing boundary intact.
-OPAQUE_KEYS = frozenset({"rows", "variables", "cells", "claims", "config"})
+#: keyed by the connector's own field names, a derivation artifact's ``value``): the
+#: value is copied verbatim rather than recursed into, so its data keys survive the
+#: API's casing boundary intact. ``value`` is the artifact a dashboard tile renders; the
+#: API's other ``value`` fields hold scalars, which the transform never rewrites anyway.
+OPAQUE_KEYS = frozenset({"rows", "variables", "cells", "claims", "config", "value"})
 
 
 def _to_camel(key: str) -> str:

@@ -80,12 +80,20 @@ moved.
 | `chart` | A [grammar-of-graphics spec](result-history.md) over the derivation's rows. |
 | `map` | A geographic layer over a spatially-gated derivation. |
 | `table` | The derivation's rows, with paging and conditional formatting. |
-| `text` | Markdown, with `$name` variable interpolation. The one freeform surface. |
+| `text` | Markdown: either its own `content` (with `$name` variable interpolation) or the output of a `bind`ed derivation that returns markdown. The one freeform surface. |
 | `filter` | A control bound to a variable. |
 
 There is deliberately no arbitrary-code widget: a bespoke visual belongs in a
-derivation that returns markdown, rendered by a `text` widget, so it stays governed and
-sandboxed like everything else.
+derivation that returns markdown, bound to a `text` widget, so it stays governed and
+sandboxed like everything else:
+
+```json
+{ "id": "verdict", "type": "text", "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+  "bind": { "derivation": "cost_fixed_share" } }
+```
+
+A text widget takes `content` or `bind`, never both — otherwise which one renders would
+be decided somewhere other than the spec.
 
 ## Filters, variables, and interactions
 
