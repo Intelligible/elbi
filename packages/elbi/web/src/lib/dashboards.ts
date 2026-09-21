@@ -160,6 +160,12 @@ export const deleteDashboard = (dashboardId: string) =>
 export const publishDashboard = (dashboardId: string) =>
   post<{ ok: boolean }>(`/api/dashboards/${id(dashboardId)}/publish`)
 
+/** The certified derivations a widget may bind, by name. */
+export async function bindableDerivations(): Promise<string[]> {
+  const rows = await json<{ name: string }[]>("/api/dashboards/catalog")
+  return rows.map((row) => row.name)
+}
+
 export async function resolvePage(
   dashboardId: string,
   page: string,
