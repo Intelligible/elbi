@@ -122,7 +122,10 @@ export function DashboardPage() {
         w: w.gridPos.w,
         h: w.gridPos.h,
         minW: 2,
-        minH: 3,
+        // A row is ROW_HEIGHT plus the 16px gap, so a tile is `60h - 16` px tall: 2 rows
+        // is 104px, enough for a title and a line under it. 1 row is 44px, which the
+        // header alone nearly fills.
+        minH: 2,
       })),
     [visibleWidgets],
   )
