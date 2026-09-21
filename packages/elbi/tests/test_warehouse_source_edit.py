@@ -51,6 +51,11 @@ class FakeConnector(Source):
             fields=[
                 SourceField(name="query", label="Query"),
                 SourceField(name="token", label="Token", type="password"),
+                # A credential that is a document, not a line: it renders as a textarea
+                # and is still a secret.
+                SourceField(
+                    name="pem", label="Private key", type="textarea", secret=True
+                ),
             ],
         )
 
@@ -232,6 +237,37 @@ def test_the_config_view_blanks_secrets_but_keeps_everything_else(service) -> No
     assert view["config"]["query"] == "SELECT 1"
     assert view["config"]["token"] == "", "a secret must not leave the server"
     assert view["secret_fields"] == ["token"]
+
+
+def test_a_secret_that_is_not_a_password_field_is_hidden_and_kept(service) -> None:
+    """A PEM key renders as a textarea and is no less a credential.
+
+    Read off the control type, secrecy missed it: the whole key was handed back to the
+    browser, and an edit that left the box alone stored the blank over it.
+    """
+    svc, _ = service
+    source = svc.create_source(
+        "fake",
+        "keyed",
+        {"query": "SELECT 1", "token": "secret-abc", "pem": "-----BEGIN KEY-----"},
+    )
+
+    view = svc.source_config_view(source.id)
+    assert view["config"]["pem"] == "", "a key must not leave the server"
+    assert view["secret_fields"] == ["pem", "token"]
+
+    svc.update_source(source.id, config={**view["config"], "query": "SELECT 2"})
+
+    assert FakeConnector.seen[-1]["pem"] == "-----BEGIN KEY-----"
+
+
+def test_the_form_schema_says_which_fields_are_secret() -> None:
+    # The form reads one resolved flag rather than re-deriving secrecy from the control.
+    fields = {f["name"]: f for f in FakeConnector().config.to_dict()["fields"]}
+
+    assert fields["pem"]["secret"] is True
+    assert fields["token"]["secret"] is True, "a password field is secret by definition"
+    assert fields["query"]["secret"] is False
 
 
 def test_the_config_view_round_trips_through_an_edit(service) -> None:

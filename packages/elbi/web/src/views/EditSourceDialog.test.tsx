@@ -12,9 +12,11 @@ const { getSourceConfig, getCatalog, updateSource } = vi.hoisted(() => ({
 
 vi.mock("@/lib/warehouse", () => ({ getSourceConfig, getCatalog, updateSource }))
 
+// `secret` is resolved by the server: true for every password field, and for a
+// credential that renders as a textarea.
 const FIELDS = [
   { name: "manifest_json", label: "Manifest (JSON)", type: "textarea", options: [] },
-  { name: "auth_token", label: "Bearer token", type: "password", options: [] },
+  { name: "auth_token", label: "Bearer token", type: "password", secret: true, options: [] },
 ]
 
 function setup(overrides: Partial<Parameters<typeof EditSourceDialog>[0]> = {}) {
@@ -130,13 +132,20 @@ describe("EditSourceDialog credential fields", () => {
 
   const FIVE_AUTH = [
     { name: "manifest_json", label: "Manifest (JSON)", type: "textarea", options: [] },
-    { name: "auth_token", label: "Bearer token", type: "password", options: [] },
-    { name: "auth_api_key", label: "API key", type: "password", options: [] },
-    { name: "auth_password", label: "Auth password", type: "password", options: [] },
+    { name: "auth_token", label: "Bearer token", type: "password", secret: true, options: [] },
+    { name: "auth_api_key", label: "API key", type: "password", secret: true, options: [] },
+    {
+      name: "auth_password",
+      label: "Auth password",
+      type: "password",
+      secret: true,
+      options: [],
+    },
     {
       name: "auth_oauth2_client_secret",
       label: "OAuth2 client secret",
       type: "password",
+      secret: true,
       options: [],
     },
   ]
@@ -179,5 +188,66 @@ describe("EditSourceDialog credential fields", () => {
 
     expect(screen.getByLabelText("API key")).toBeTruthy()
     expect(screen.getByLabelText("OAuth2 client secret")).toBeTruthy()
+  })
+})
+
+describe("EditSourceDialog multi-line secrets", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // A PEM key is a credential that needs the multi-line control. Read off the control
+  // type, it was treated as ordinary text: offered without the hint that a blank box
+  // keeps the stored key, and never narrowed away with the other credentials.
+  const PEM_FIELDS = [
+    { name: "host", label: "Host", type: "text", options: [] },
+    {
+      name: "ssh_password",
+      label: "SSH password",
+      type: "password",
+      secret: true,
+      options: [],
+    },
+    {
+      name: "ssh_private_key",
+      label: "SSH private key",
+      type: "textarea",
+      secret: true,
+      options: [],
+    },
+  ]
+
+  function renderWith(secretFields: string[]) {
+    getSourceConfig.mockResolvedValue({
+      sourceType: "postgres",
+      config: { host: "db.internal", ssh_private_key: "" },
+      secretFields,
+    })
+    getCatalog.mockResolvedValue({ sources: [{ name: "postgres", fields: PEM_FIELDS }] })
+    render(
+      <EditSourceDialog
+        sourceId="abc"
+        sourceType="postgres"
+        initialName="warehouse"
+        initialDescription=""
+        open
+        onOpenChange={() => {}}
+        onSaved={() => {}}
+      />,
+    )
+  }
+
+  it("says a blank key keeps the stored one", async () => {
+    renderWith(["ssh_private_key"])
+
+    const key = (await screen.findByLabelText("SSH private key")) as HTMLTextAreaElement
+    expect(key.value).toBe("")
+    expect(key.placeholder).toMatch(/blank to keep the stored value/i)
+  })
+
+  it("narrows to the credential the source holds, textarea or not", async () => {
+    renderWith(["ssh_private_key"])
+    await screen.findByLabelText("SSH private key")
+
+    expect(screen.queryByLabelText("SSH password")).toBeNull()
+    expect(screen.getByLabelText("Host")).toBeTruthy()
   })
 })

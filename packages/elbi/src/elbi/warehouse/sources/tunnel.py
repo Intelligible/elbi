@@ -187,6 +187,7 @@ def tunnel_fields() -> list[SourceField]:
             name="ssh_private_key",
             label="SSH private key",
             type="textarea",
+            secret=True,
             required=False,
             placeholder="-----BEGIN OPENSSH PRIVATE KEY-----",
             caption="The whole file, including its header and footer.",
