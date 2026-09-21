@@ -3,7 +3,7 @@
 // metric, table, and text are light renderers. A widget whose derivation failed shows
 // its error in place rather than blanking.
 
-import { AlertCircle, GripVertical } from "lucide-react"
+import { AlertCircle, GripVertical, MoreHorizontal } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
@@ -16,6 +16,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { VizView } from "@/components/viz/VizView"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Widget, WidgetData } from "@/lib/dashboards"
@@ -167,12 +173,16 @@ export function DashboardWidget({
   variables,
   onCrossFilter,
   onDrillThrough,
+  onEdit,
+  onDelete,
 }: {
   widget: Widget
   data?: WidgetData
   variables: Record<string, unknown>
   onCrossFilter?: (emit: Record<string, unknown>) => void
   onDrillThrough?: () => void
+  onEdit?: () => void
+  onDelete?: () => void
 }) {
   const crossFilter = widget.interactions?.crossFilter
   const drillThrough = widget.interactions?.drillThrough
@@ -250,6 +260,28 @@ export function DashboardWidget({
             >
               Details →
             </Button>
+          ) : null}
+          {onEdit || onDelete ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Tile actions: ${widget.title ?? widget.id}`}
+                  className="dash-no-drag text-text-tertiary opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="dash-no-drag">
+                {onEdit ? <DropdownMenuItem onSelect={onEdit}>Edit…</DropdownMenuItem> : null}
+                {onDelete ? (
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                    Delete
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-tertiary/30 opacity-0 transition group-hover:opacity-100" />
         </div>
