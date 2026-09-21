@@ -9,16 +9,30 @@ const textTile: Widget = { id: "note", type: "text", gridPos: pos, content: "bef
 const boundTile: Widget = {
   id: "mrr",
   type: "metric",
-  gridPos: pos,
-  title: "MRR",
+  gridPos: { x: 6, y: 2, w: 6, h: 3 },
+  title: "Subscriptions (all)",
   bind: { derivation: "revenue_by_product" },
+  viz: { field: "subscriptions", agg: "sum" },
+}
+
+function open(widget: Widget | null, props: { catalog?: string[]; onCancel?: () => void } = {}) {
+  const onSave = vi.fn()
+  const rendered = render(
+    <TileEditor
+      widget={widget}
+      catalog={props.catalog ?? ["revenue_by_product", "collected_revenue"]}
+      columns={24}
+      onCancel={props.onCancel ?? (() => {})}
+      onSave={onSave}
+    />,
+  )
+  return { onSave, ...rendered }
 }
 
 describe("TileEditor", () => {
   it("edits a static text tile's title and content", async () => {
     const user = userEvent.setup()
-    const onSave = vi.fn()
-    render(<TileEditor widget={textTile} catalog={[]} onCancel={() => {}} onSave={onSave} />)
+    const { onSave } = open(textTile)
 
     await user.type(screen.getByLabelText("Title"), "Caveat")
     const content = screen.getByLabelText("Content")
@@ -26,20 +40,65 @@ describe("TileEditor", () => {
     await user.type(content, "after")
     await user.click(screen.getByRole("button", { name: "Save" }))
 
-    expect(onSave).toHaveBeenCalledWith("note", { title: "Caveat", content: "after" })
+    expect(onSave).toHaveBeenCalledWith("note", {
+      title: "Caveat",
+      content: "after",
+      gridPos: pos,
+    })
+  })
+
+  it("shows a metric's existing column and aggregate", () => {
+    open(boundTile)
+
+    expect(screen.getByLabelText("Column")).toHaveValue("subscriptions")
+    expect(screen.getByLabelText("Aggregate")).toHaveTextContent("Sum")
+  })
+
+  it("edits a metric's column", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    const column = screen.getByLabelText("Column")
+    await user.clear(column)
+    await user.type(column, "mrr_usd")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      "mrr",
+      expect.objectContaining({ viz: { field: "mrr_usd", agg: "sum" } }),
+    )
+  })
+
+  it("resizes a tile without touching its position", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    const width = screen.getByLabelText("Width")
+    await user.clear(width)
+    await user.type(width, "12")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      "mrr",
+      expect.objectContaining({ gridPos: { x: 6, y: 2, w: 12, h: 3 } }),
+    )
+  })
+
+  it("clamps a width wider than the page", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    const width = screen.getByLabelText("Width")
+    await user.clear(width)
+    await user.type(width, "99")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave.mock.calls[0][1].gridPos.w).toBe(24)
   })
 
   it("rebinds a data tile rather than offering it a content box", async () => {
     const user = userEvent.setup()
-    const onSave = vi.fn()
-    render(
-      <TileEditor
-        widget={boundTile}
-        catalog={["revenue_by_product", "collected_revenue"]}
-        onCancel={() => {}}
-        onSave={onSave}
-      />,
-    )
+    const { onSave } = open(boundTile)
 
     expect(screen.queryByLabelText("Content")).toBeNull()
     const field = screen.getByLabelText("Derivation")
@@ -47,22 +106,15 @@ describe("TileEditor", () => {
     await user.type(field, "collected_revenue")
     await user.click(screen.getByRole("button", { name: "Save" }))
 
-    expect(onSave).toHaveBeenCalledWith("mrr", {
-      title: "MRR",
-      derivation: "collected_revenue",
-    })
+    expect(onSave).toHaveBeenCalledWith(
+      "mrr",
+      expect.objectContaining({ derivation: "collected_revenue" }),
+    )
   })
 
   it("warns before saving a binding nothing provides", async () => {
     const user = userEvent.setup()
-    render(
-      <TileEditor
-        widget={boundTile}
-        catalog={["revenue_by_product"]}
-        onCancel={() => {}}
-        onSave={() => {}}
-      />,
-    )
+    open(boundTile, { catalog: ["revenue_by_product"] })
 
     const field = screen.getByLabelText("Derivation")
     await user.clear(field)
@@ -72,21 +124,25 @@ describe("TileEditor", () => {
   })
 
   it("shows the tile it was opened on, not the previous one", () => {
-    const { rerender } = render(
-      <TileEditor widget={textTile} catalog={[]} onCancel={() => {}} onSave={() => {}} />,
-    )
+    const { rerender } = open(textTile)
     expect(screen.getByLabelText("Content")).toHaveValue("before")
 
-    rerender(<TileEditor widget={boundTile} catalog={[]} onCancel={() => {}} onSave={() => {}} />)
+    rerender(
+      <TileEditor
+        widget={boundTile}
+        catalog={[]}
+        columns={24}
+        onCancel={() => {}}
+        onSave={() => {}}
+      />,
+    )
 
-    expect(screen.getByLabelText("Title")).toHaveValue("MRR")
+    expect(screen.getByLabelText("Title")).toHaveValue("Subscriptions (all)")
     expect(screen.queryByLabelText("Content")).toBeNull()
   })
 
   it("renders nothing when no tile is open", () => {
-    const { container } = render(
-      <TileEditor widget={null} catalog={[]} onCancel={() => {}} onSave={() => {}} />,
-    )
+    const { container } = open(null)
     expect(container).toBeEmptyDOMElement()
   })
 })
