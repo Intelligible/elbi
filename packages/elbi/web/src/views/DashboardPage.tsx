@@ -34,6 +34,10 @@ const Grid = WidthProvider(GridLayout)
 const ROW_HEIGHT = 44
 //: The spec's default page width; a page omitting `columns` is 24 wide, not 12.
 const DEFAULT_COLUMNS = 24
+//: Resize from any edge or corner, not just the bottom-right: widening a tile against
+//: the one on its left means dragging the left edge, which a single `se` handle cannot
+//: express. North and west handles move the tile's origin as well as its size.
+const RESIZE_HANDLES = ["n", "e", "s", "w", "ne", "nw", "se", "sw"] as const
 
 function initialState(spec: DashboardSpec): Record<string, unknown> {
   const state: Record<string, unknown> = {}
@@ -334,6 +338,7 @@ export function DashboardPage() {
             margin={[16, 16]}
             containerPadding={[0, 0]}
             draggableHandle=".dash-drag-handle"
+            resizeHandles={[...RESIZE_HANDLES]}
             draggableCancel=".dash-no-drag"
             onDragStop={persistLayout}
             onResizeStop={persistLayout}
