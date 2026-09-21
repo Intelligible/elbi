@@ -25,6 +25,8 @@ import { getDashboard, publishDashboard, resolvePage, saveDashboard } from "@/li
 
 const Grid = WidthProvider(GridLayout)
 const ROW_HEIGHT = 44
+//: The spec's default page width; a page omitting `columns` is 24 wide, not 12.
+const DEFAULT_COLUMNS = 24
 
 function initialState(spec: DashboardSpec): Record<string, unknown> {
   const state: Record<string, unknown> = {}
@@ -82,7 +84,9 @@ export function DashboardPage() {
   }, [resolve])
 
   const page = useMemo(() => spec?.pages.find((p) => p.name === pageName), [spec, pageName])
-  const columns = page?.columns ?? 12
+  // 24, matching the spec's default and what `Page.to_manifest` omits when unchanged.
+  // Defaulting to 12 here silently halved the grid of every page that took the default.
+  const columns = page?.columns ?? DEFAULT_COLUMNS
   const visibleWidgets = useMemo(
     () => (page?.widgets ?? []).filter((w) => w.type !== "filter"),
     [page],
