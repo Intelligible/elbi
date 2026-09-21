@@ -55,3 +55,30 @@ def test_round_trip_preserves_data_and_fields() -> None:
         "rows": [{"total_spend": 1}],
     }
     assert snakeify(camelize(payload)) == payload
+
+
+def test_camelize_leaves_an_artifact_value_verbatim() -> None:
+    """A dashboard tile's rows are a derivation's output, keyed by user column names.
+
+    Camelizing them renamed `mrr_usd` to `mrrUsd` on the wire, so a widget's
+    `viz.field` (written in the spec as the derivation writes it) matched nothing and
+    the tile rendered a dash.
+    """
+    payload = {"widget_id": "mrr", "value": [{"mrr_usd": 300.0, "is_fixed": True}]}
+
+    assert camelize(payload) == {
+        "widgetId": "mrr",
+        "value": [{"mrr_usd": 300.0, "is_fixed": True}],
+    }
+
+
+def test_camelize_leaves_a_scalar_value_alone_either_way() -> None:
+    """The other `value` fields are scalars, which the transform never rewrote."""
+    assert camelize({"value": 3, "some_field": 1}) == {"value": 3, "someField": 1}
+
+
+def test_snakeify_leaves_an_artifact_value_verbatim() -> None:
+    """The inverse direction: a filter's value must not be snake-cased into data."""
+    payload = {"widgetId": "mrr", "value": [{"mrrUsd": 300.0}]}
+
+    assert snakeify(payload) == {"widget_id": "mrr", "value": [{"mrrUsd": 300.0}]}
