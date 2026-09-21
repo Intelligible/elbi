@@ -150,9 +150,7 @@ class WarehouseService:
         """
         source = self.get_source(source_id)
         connector = self._connector(source.source_type)
-        secret_fields = {
-            f.name for f in connector.config.fields if f.type == "password"
-        }
+        secret_fields = {f.name for f in connector.config.fields if f.is_secret}
         config = self._decode_config(source)
         return {
             "source_type": source.source_type,
@@ -222,7 +220,7 @@ class WarehouseService:
     ) -> dict[str, Any]:
         """Overlay an edit on the stored config, keeping secrets the edit left blank."""
         fields = connector.config.fields
-        secret_fields = {f.name for f in fields if f.type == "password"}
+        secret_fields = {f.name for f in fields if f.is_secret}
         merged = dict(stored)
         for key, value in incoming.items():
             if key in secret_fields and not value:
@@ -768,7 +766,7 @@ class WarehouseService:
         has a value and ``APP_SECRET_KEY`` is unset, the operator must set it first.
         """
         has_secret = any(
-            f.type == "password" and config.get(f.name) for f in connector.config.fields
+            f.is_secret and config.get(f.name) for f in connector.config.fields
         )
         payload = json.dumps(config)
         if crypto.is_configured():

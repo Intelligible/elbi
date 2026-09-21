@@ -23,6 +23,10 @@ export interface SourceField {
   // When true, the form offers a file upload for this field; the uploaded file's stored
   // warehouse path fills the field value (the CSV / Parquet source).
   upload?: boolean
+  // Whether the field holds a credential. The server resolves this, so a PEM key or a
+  // JSON key file -- a secret that renders as a textarea, not a password box -- is
+  // flagged as one; never infer secrecy from `type` here.
+  secret?: boolean
 }
 
 export interface SourceConfig {

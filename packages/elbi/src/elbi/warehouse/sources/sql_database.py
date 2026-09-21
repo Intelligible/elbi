@@ -843,6 +843,7 @@ class BigQuerySource(_SqlSource):
                     name="key_file",
                     label="Google Cloud JSON key file",
                     type="textarea",
+                    secret=True,
                     placeholder='{"type": "service_account", ...}',
                     caption="A service-account key with BigQuery read access.",
                 ),

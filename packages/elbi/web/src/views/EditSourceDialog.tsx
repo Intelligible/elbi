@@ -83,9 +83,11 @@ export function EditSourceDialog({
   // picked by the manifest's auth type. Showing all of them on an edit is noise around
   // the one field that matters, so only the credentials the source actually holds are
   // offered. A source with none yet shows them all, since there is nothing to narrow to.
+  // `secret` is the server's resolved flag, not `type === "password"`: a PEM key or a
+  // JSON key file is a credential that renders as a textarea.
   const anyHeld = inUse.length > 0
   const shown = fields.filter(
-    (f) => visible(f) && (f.type !== "password" || !anyHeld || inUse.includes(f.name)),
+    (f) => visible(f) && (!f.secret || !anyHeld || inUse.includes(f.name)),
   )
 
   const save = async () => {
@@ -142,28 +144,29 @@ export function EditSourceDialog({
             {shown.map((field) => {
               const value = String(config[field.name] ?? "")
               const set = (v: string) => setConfig((c) => ({ ...c, [field.name]: v }))
+              // A stored credential arrives blank whatever control it renders as, so the
+              // hint belongs on the textarea too — otherwise a blank PEM key reads as a
+              // key the source has lost.
+              const placeholder = field.secret
+                ? "Leave blank to keep the stored value"
+                : field.placeholder
               return (
-                <div
-                  key={field.name}
-                  className={
-                    field.type === "textarea"
-                      ? "flex min-h-0 flex-1 flex-col gap-1.5"
-                      : "flex flex-col gap-1.5"
-                  }
-                >
+                <div key={field.name} className="flex flex-col gap-1.5">
                   <label htmlFor={`edit-${field.name}`} className="font-medium text-sm">
                     {field.label}
                   </label>
                   {field.type === "textarea" ? (
-                    // A manifest is a document, not a line: monospace, and tall enough
-                    // to read its structure. It takes the space the other fields leave
-                    // rather than a height of its own, so the credential below it stays
-                    // on screen however many fields a connector declares.
+                    // A manifest or a PEM key is a document, not a line: monospace, and
+                    // tall enough to read its structure. A height of its own, not a share
+                    // of the dialog: this list scrolls, so a flex-grown field has no free
+                    // space to claim, collapses to nothing and spills over the fields
+                    // below it.
                     <Textarea
                       id={`edit-${field.name}`}
                       rows={12}
                       spellCheck={false}
-                      className="min-h-[8rem] flex-1 resize-y font-mono text-xs leading-relaxed"
+                      placeholder={placeholder}
+                      className="min-h-[8rem] resize-y font-mono text-xs leading-relaxed"
                       value={value}
                       onChange={(e) => set(e.target.value)}
                     />
@@ -171,11 +174,7 @@ export function EditSourceDialog({
                     <Input
                       id={`edit-${field.name}`}
                       type={field.type === "password" ? "password" : "text"}
-                      placeholder={
-                        field.type === "password"
-                          ? "Leave blank to keep the stored value"
-                          : field.placeholder
-                      }
+                      placeholder={placeholder}
                       value={value}
                       onChange={(e) => set(e.target.value)}
                     />
