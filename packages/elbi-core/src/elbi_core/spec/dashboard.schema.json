@@ -305,7 +305,7 @@
           "type": "object"
         },
         "content": {
-          "description": "Markdown body for a 'text' widget. Supports '$name' variable interpolation.",
+          "description": "Markdown body for a 'text' widget. Supports '$name' variable interpolation. A text widget takes this or a 'bind' naming a derivation that returns markdown, not both.",
           "type": "string",
           "maxLength": 16384
         },
