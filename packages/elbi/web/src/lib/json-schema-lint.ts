@@ -1,7 +1,10 @@
 import { syntaxTree } from "@codemirror/language"
 import type { Diagnostic } from "@codemirror/lint"
 import type { EditorState } from "@codemirror/state"
-import Ajv, { type ErrorObject, type ValidateFunction } from "ajv"
+// The 2020-12 build: the spec's schema declares that draft, and ajv's default
+// export is draft-07 and throws on it.
+import type { ErrorObject, ValidateFunction } from "ajv"
+import Ajv from "ajv/dist/2020"
 
 /**
  * Validate a JSON document against a schema and mark each violation where it is.

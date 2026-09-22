@@ -91,4 +91,16 @@ describe("compileValidator", () => {
   it("compiles the whole schema when no definition is named", () => {
     expect(compileValidator({ type: "object" })).not.toBeNull()
   })
+
+  it("compiles a draft 2020-12 schema, which is the one the server serves", () => {
+    // ajv's default export is draft-07 and throws on this, which the caller's catch
+    // turned into a silent null: highlighting worked, validation quietly did nothing.
+    const validator = compileValidator(
+      { $schema: "https://json-schema.org/draft/2020-12/schema", ...SCHEMA },
+      "widget",
+    )
+
+    if (!validator) throw new Error("a draft 2020-12 schema should compile")
+    expect(schemaDiagnostics(state(widget({ type: "bogus" })), validator)).not.toEqual([])
+  })
 })
