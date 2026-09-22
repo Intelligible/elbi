@@ -8,6 +8,7 @@ import "react-resizable/css/styles.css"
 
 import { DashboardWidget } from "@/components/dashboard/DashboardWidget"
 import { FilterBar } from "@/components/dashboard/FilterBar"
+import { JsonEditor } from "@/components/dashboard/JsonEditor"
 import { TileEditor, type TilePatch } from "@/components/dashboard/TileEditor"
 import { Scene, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+import { useDarkTheme } from "@/hooks/useTheme"
 import { dashboardExportUrl } from "@/lib/chat"
 import type { Dashboard, DashboardSpec, Variable, Widget, WidgetData } from "@/lib/dashboards"
 import {
@@ -64,6 +65,7 @@ function pageVariables(spec: DashboardSpec, page: string): Variable[] {
 export function DashboardPage() {
   const { id = "" } = useParams()
   const navigate = useNavigate()
+  const dark = useDarkTheme()
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
   const [pageName, setPageName] = useState<string>("")
   const [variables, setVariables] = useState<Record<string, unknown>>({})
@@ -420,6 +422,7 @@ export function DashboardPage() {
         widget={tileUnderEdit}
         catalog={catalog}
         columns={columns}
+        dark={dark}
         onCancel={() => setTileUnderEdit(null)}
         onSave={(widgetId, patch) => void saveTile(widgetId, patch)}
       />
@@ -458,12 +461,7 @@ export function DashboardPage() {
               <code>{'{"metric": "name", "groupBy": ["…"], "grain": "month"}'}</code>).
             </p>
           </DialogHeader>
-          <Textarea
-            className="h-[60vh] font-mono text-xs"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            spellCheck={false}
-          />
+          <JsonEditor value={draft} label="Dashboard spec" dark={dark} onChange={setDraft} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(false)}>
               Cancel

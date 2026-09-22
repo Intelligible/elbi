@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { SplitButton } from "@/components/ui/split-button"
+import { useDarkTheme } from "@/hooks/useTheme"
 import {
   type DatasetColumn,
   type FeatureSource,
@@ -92,21 +93,6 @@ import type { NotebookWidgetManager } from "@/lib/widgets"
 
 // Detect the app's dark theme (a `.dark` ancestor) so CodeMirror matches it, and keep it
 // in sync if the theme toggles.
-function useDarkTheme(): boolean {
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"))
-  useEffect(() => {
-    const observer = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark")),
-    )
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    })
-    return () => observer.disconnect()
-  }, [])
-  return dark
-}
-
 export function NotebookPage() {
   const { name: notebookId = "" } = useParams()
   const navigate = useNavigate()
