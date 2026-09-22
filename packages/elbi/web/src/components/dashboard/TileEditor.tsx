@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { GridPos, Widget } from "@/lib/dashboards"
+import { JsonEditor } from "./JsonEditor"
 import { TileProvenance } from "./TileProvenance"
 
 /** What the editor can change. A grammar-of-graphics `viz` stays with the spec editor. */
@@ -58,12 +59,14 @@ export function TileEditor({
   widget,
   catalog,
   columns,
+  dark,
   onCancel,
   onSave,
 }: {
   widget: Widget | null
   catalog: string[]
   columns: number
+  dark: boolean
   onCancel: () => void
   onSave: (id: string, patch: TilePatch) => void
 }) {
@@ -217,16 +220,14 @@ export function TileEditor({
           <>
             <Field
               label="This tile's config"
-              htmlFor="tile-json"
               hint="The widget exactly as the dashboard spec stores it. Everything the fields do not reach — a chart's viz, params, interactions — is editable here."
             >
-              <Textarea
-                id="tile-json"
-                className="h-80 font-mono text-xs"
+              <JsonEditor
                 value={draft}
-                spellCheck={false}
-                onChange={(e) => {
-                  setDraft(e.target.value)
+                label="This tile's config"
+                dark={dark}
+                onChange={(next) => {
+                  setDraft(next)
                   setJsonError(null)
                 }}
               />
