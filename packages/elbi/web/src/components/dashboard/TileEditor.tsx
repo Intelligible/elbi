@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { GridPos, Widget } from "@/lib/dashboards"
+import { derivationColumns, type GridPos, type Widget } from "@/lib/dashboards"
 import { JsonEditor } from "./JsonEditor"
 import { TileProvenance } from "./TileProvenance"
 
@@ -99,6 +99,21 @@ export function TileEditor({
     setTab("fields")
     setJsonError(null)
   }, [widget])
+
+  const [columnOptions, setColumnOptions] = useState<string[]>([])
+  useEffect(() => {
+    let live = true
+    if (!derivation) {
+      setColumnOptions([])
+      return
+    }
+    void derivationColumns(derivation)
+      .then((columns) => live && setColumnOptions(columns))
+      .catch(() => live && setColumnOptions([]))
+    return () => {
+      live = false
+    }
+  }, [derivation])
 
   if (widget === null) return null
 
@@ -277,21 +292,22 @@ export function TileEditor({
 
             {bound ? (
               <Field label="Derivation" htmlFor="tile-derivation">
-                <Input
-                  id="tile-derivation"
-                  list="tile-derivation-options"
-                  value={derivation}
-                  onChange={(e) => setDerivation(e.target.value)}
-                />
-                <datalist id="tile-derivation-options">
-                  {catalog.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
+                <Select value={derivation} onValueChange={setDerivation}>
+                  <SelectTrigger id="tile-derivation">
+                    <SelectValue placeholder="Pick a derivation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {withCurrent(catalog, derivation).map((name) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {unknown ? (
                   <p className="text-xs text-destructive">
-                    Nothing named “{derivation}” is available to bind. The tile will render an error
-                    until it exists.
+                    Nothing named “{derivation}” is available to bind. It is kept so saving does not
+                    silently drop it, but the tile renders an error until it exists.
                   </p>
                 ) : null}
               </Field>
@@ -302,14 +318,30 @@ export function TileEditor({
                 <Field
                   label="Column"
                   htmlFor="tile-field"
-                  hint="A column of the bound derivation, spelled the way the derivation spells it."
+                  hint={
+                    columnOptions.length
+                      ? "The columns the bound derivation returns."
+                      : "The bound derivation returns no rows to read columns from."
+                  }
                 >
-                  <Input
-                    id="tile-field"
-                    value={field}
-                    placeholder="mrr_usd"
-                    onChange={(e) => setField(e.target.value)}
-                  />
+                  <Select value={field} onValueChange={setField}>
+                    <SelectTrigger id="tile-field">
+                      <SelectValue placeholder="Pick a column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {withCurrent(columnOptions, field).map((name) => (
+                        <SelectItem key={name} value={name}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {field && columnOptions.length > 0 && !columnOptions.includes(field) ? (
+                    <p className="text-xs text-destructive">
+                      “{field}” is not a column {derivation} returns, so the tile renders a dash. It
+                      is kept until you pick another.
+                    </p>
+                  ) : null}
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Aggregate" htmlFor="tile-agg">
@@ -420,6 +452,17 @@ function Field({
       {hint ? <p className="text-xs text-text-tertiary">{hint}</p> : null}
     </div>
   )
+}
+
+/**
+ * The options, with the current value included even when it is not among them.
+ *
+ * A Select cannot show a value it has no option for: it would render blank, and saving
+ * would write that blank over something nobody meant to clear.
+ */
+function withCurrent(options: string[], current: string): string[] {
+  if (!current || options.includes(current)) return options
+  return [current, ...options]
 }
 
 function tabClass(active: boolean): string {
