@@ -25,6 +25,7 @@ import { dashboardExportUrl } from "@/lib/chat"
 import type { Dashboard, DashboardSpec, Variable, Widget, WidgetData } from "@/lib/dashboards"
 import {
   bindableDerivations,
+  dashboardSchema,
   getDashboard,
   publishDashboard,
   resolvePage,
@@ -76,6 +77,7 @@ export function DashboardPage() {
   const [draft, setDraft] = useState("")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [catalog, setCatalog] = useState<string[]>([])
+  const [schema, setSchema] = useState<Record<string, unknown> | null>(null)
   const [tileUnderEdit, setTileUnderEdit] = useState<Widget | null>(null)
   const [tileToDelete, setTileToDelete] = useState<Widget | null>(null)
   // Snapshots of the spec before each edit, for ⌘Z. Session-only: a reload starts
@@ -110,11 +112,15 @@ export function DashboardPage() {
     void resolve()
   }, [resolve])
 
-  // The names a tile may bind, for the editor's derivation field.
+  // The names a tile may bind, for the editor's derivation field, and the schema both
+  // JSON editors check against.
   useEffect(() => {
     void bindableDerivations()
       .then(setCatalog)
       .catch(() => setCatalog([]))
+    void dashboardSchema()
+      .then(setSchema)
+      .catch(() => setSchema(null))
   }, [])
 
   const page = useMemo(() => spec?.pages.find((p) => p.name === pageName), [spec, pageName])
@@ -423,6 +429,7 @@ export function DashboardPage() {
         catalog={catalog}
         columns={columns}
         dark={dark}
+        schema={schema}
         onCancel={() => setTileUnderEdit(null)}
         onSave={(widgetId, patch) => void saveTile(widgetId, patch)}
       />
