@@ -2917,6 +2917,18 @@ def create_app(
         """The certified derivations available to bind to a widget."""
         return _dashboards().catalog()
 
+    @app.get("/api/dashboards/schema")
+    async def dashboard_schema() -> dict[str, Any]:
+        """The DashboardSpec JSON Schema, so an editor can check a spec as it is typed.
+
+        The same document the server validates against, rather than a copy of its rules
+        kept in the client: a rule that drifts would report an error the save accepts,
+        or accept one it refuses.
+        """
+        from elbi_core.dashboard.spec import load_dashboard_schema
+
+        return load_dashboard_schema()
+
     @app.post("/api/dashboards")
     async def create_dashboard(request: Request) -> dict[str, Any]:
         """Validate a dashboard manifest and store it as a new draft."""
