@@ -166,6 +166,22 @@ export async function bindableDerivations(): Promise<string[]> {
   return rows.map((row) => row.name)
 }
 
+/** What a derivation reads, for the trail from a tile back to its sources. */
+export interface Provenance {
+  derivation: string[]
+  dataset: string[]
+}
+
+export async function derivationProvenance(name: string): Promise<Provenance> {
+  const body = await json<{ feedsFrom?: Partial<Provenance> }>(
+    `/api/lineage/provenance?node=derivation:${encodeURIComponent(name)}`,
+  )
+  return {
+    derivation: body.feedsFrom?.derivation ?? [],
+    dataset: body.feedsFrom?.dataset ?? [],
+  }
+}
+
 export async function resolvePage(
   dashboardId: string,
   page: string,
