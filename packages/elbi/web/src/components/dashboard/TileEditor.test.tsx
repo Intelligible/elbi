@@ -4,6 +4,18 @@ import { MemoryRouter } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 
 // The provenance trail links to the derivation a tile binds.
+vi.mock("./JsonEditor", () => ({
+  JsonEditor: ({
+    value,
+    label,
+    onChange,
+  }: {
+    value: string
+    label: string
+    onChange: (next: string) => void
+  }) => <textarea aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />,
+}))
+
 vi.mock("@/lib/dashboards", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dashboards")>()),
   derivationProvenance: vi.fn(async () => ({
@@ -34,6 +46,7 @@ function open(widget: Widget | null, props: { catalog?: string[]; onCancel?: () 
         widget={widget}
         catalog={props.catalog ?? ["revenue_by_product", "collected_revenue"]}
         columns={24}
+        dark={false}
         onCancel={props.onCancel ?? (() => {})}
         onSave={onSave}
       />
@@ -146,6 +159,7 @@ describe("TileEditor", () => {
           widget={boundTile}
           catalog={[]}
           columns={24}
+          dark={false}
           onCancel={() => {}}
           onSave={() => {}}
         />
