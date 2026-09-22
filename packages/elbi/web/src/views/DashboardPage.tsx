@@ -29,6 +29,7 @@ import {
   resolvePage,
   saveDashboard,
 } from "@/lib/dashboards"
+import { createHistory, record, redo, undo, undoGesture } from "@/lib/history"
 
 const Grid = WidthProvider(GridLayout)
 // A tile's height is `(ROW_HEIGHT + margin)h - margin`, so a row is also the step a
@@ -75,6 +76,9 @@ export function DashboardPage() {
   const [catalog, setCatalog] = useState<string[]>([])
   const [tileUnderEdit, setTileUnderEdit] = useState<Widget | null>(null)
   const [tileToDelete, setTileToDelete] = useState<Widget | null>(null)
+  // Snapshots of the spec before each edit, for ⌘Z. Session-only: a reload starts
+  // clean, and the dashboard's own version history is the durable record.
+  const history = useRef(createHistory<DashboardSpec>())
 
   const load = useCallback(async () => {
     const view = await getDashboard(id)
@@ -156,6 +160,10 @@ export function DashboardPage() {
               },
         ),
       }
+      // react-grid-layout reports a drag that moved nothing (a click on the header), and
+      // an undo entry for that would be a keystroke that appears to do nothing.
+      if (JSON.stringify(nextSpec) === JSON.stringify(dashboard.spec)) return
+      record(history.current, dashboard.spec)
       setDashboard({ ...dashboard, spec: nextSpec })
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
@@ -169,12 +177,39 @@ export function DashboardPage() {
   // write it. Unlike a drag there is nothing to debounce — a dialog's Save and a delete
   // are single deliberate acts, so they persist at once.
   const writeSpec = useCallback(
-    async (nextSpec: DashboardSpec) => {
+    async (nextSpec: DashboardSpec, previous?: DashboardSpec) => {
+      if (previous) record(history.current, previous)
       setDashboard((current) => (current ? { ...current, spec: nextSpec } : current))
       await saveDashboard(id, nextSpec)
     },
     [id],
   )
+
+  // ⌘Z / Ctrl-Z steps back through this session's edits; ⇧⌘Z steps forward. A drag, a
+  // dialog's Save and a delete are each one entry, so one keystroke undoes one act.
+  const stepHistory = useCallback(
+    (direction: "undo" | "redo") => {
+      if (!dashboard) return
+      const step = direction === "undo" ? undo : redo
+      const restored = step(history.current, dashboard.spec)
+      if (!restored) return
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      setDashboard({ ...dashboard, spec: restored })
+      void saveDashboard(id, restored).then(() => resolve())
+    },
+    [dashboard, id, resolve],
+  )
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const gesture = undoGesture(event)
+      if (!gesture) return
+      event.preventDefault()
+      stepHistory(gesture)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [stepHistory])
 
   const mapWidgets = useCallback(
     (change: (widgets: Widget[]) => Widget[]): DashboardSpec | null => {
@@ -211,10 +246,10 @@ export function DashboardPage() {
       )
       if (!nextSpec) return
       setTileUnderEdit(null)
-      await writeSpec(nextSpec)
+      await writeSpec(nextSpec, dashboard?.spec)
       void resolve()
     },
-    [mapWidgets, writeSpec, resolve],
+    [mapWidgets, writeSpec, resolve, dashboard?.spec],
   )
 
   const deleteTile = useCallback(
@@ -222,9 +257,9 @@ export function DashboardPage() {
       const nextSpec = mapWidgets((widgets) => widgets.filter((w) => w.id !== widgetId))
       if (!nextSpec) return
       setTileToDelete(null)
-      await writeSpec(nextSpec)
+      await writeSpec(nextSpec, dashboard?.spec)
     },
-    [mapWidgets, writeSpec],
+    [mapWidgets, writeSpec, dashboard?.spec],
   )
 
   const publish = async () => {

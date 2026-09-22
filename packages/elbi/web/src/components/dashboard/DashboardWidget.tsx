@@ -120,7 +120,9 @@ function TableBody({
   const columns = Array.isArray(viz.columns) ? (viz.columns as string[]) : Object.keys(rows[0])
   const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50
   return (
-    <div className="overflow-auto">
+    // Fills the tile rather than sizing to the rows: a taller tile shows more of them,
+    // and a shorter one scrolls, instead of leaving the extra height as padding.
+    <div className="h-full overflow-auto">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-background">
           <tr className="border-b border-border text-left text-muted-foreground">
