@@ -34,7 +34,7 @@ export function TileProvenance({ derivation }: { derivation: string }) {
       <p className="text-xs text-text-tertiary">Where this tile's numbers come from</p>
       <p className="text-sm">
         <Link
-          className="text-accent underline-offset-2 hover:underline"
+          className="text-primary underline-offset-2 hover:underline"
           to={`/derivations/${derivation}`}
         >
           {derivation}
@@ -48,7 +48,7 @@ export function TileProvenance({ derivation }: { derivation: string }) {
             <span key={name}>
               {i > 0 ? ", " : ""}
               <Link
-                className="text-accent underline-offset-2 hover:underline"
+                className="text-primary underline-offset-2 hover:underline"
                 to={`/derivations/${name}`}
               >
                 {name}
@@ -59,7 +59,7 @@ export function TileProvenance({ derivation }: { derivation: string }) {
           {upstream.dataset.map((name, i) => (
             <span key={name}>
               {i > 0 ? ", " : ""}
-              <Link className="text-accent underline-offset-2 hover:underline" to="/warehouse">
+              <Link className="text-primary underline-offset-2 hover:underline" to="/warehouse">
                 {name}
               </Link>
               <span> (dataset)</span>
