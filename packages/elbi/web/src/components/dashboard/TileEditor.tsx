@@ -292,18 +292,13 @@ export function TileEditor({
 
             {bound ? (
               <Field label="Derivation" htmlFor="tile-derivation">
-                <Select value={derivation} onValueChange={setDerivation}>
-                  <SelectTrigger id="tile-derivation">
-                    <SelectValue placeholder="Pick a derivation" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {withCurrent(catalog, derivation).map((name) => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Picker
+                  id="tile-derivation"
+                  value={derivation}
+                  options={named(withCurrent(catalog, derivation))}
+                  placeholder="Pick a derivation"
+                  onChange={setDerivation}
+                />
                 {unknown ? (
                   <p className="text-xs text-destructive">
                     Nothing named “{derivation}” is available to bind. It is kept so saving does not
@@ -324,18 +319,13 @@ export function TileEditor({
                       : "The bound derivation returns no rows to read columns from."
                   }
                 >
-                  <Select value={field} onValueChange={setField}>
-                    <SelectTrigger id="tile-field">
-                      <SelectValue placeholder="Pick a column" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {withCurrent(columnOptions, field).map((name) => (
-                        <SelectItem key={name} value={name}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Picker
+                    id="tile-field"
+                    value={field}
+                    options={named(withCurrent(columnOptions, field))}
+                    placeholder="Pick a column"
+                    onChange={setField}
+                  />
                   {field && columnOptions.length > 0 && !columnOptions.includes(field) ? (
                     <p className="text-xs text-destructive">
                       “{field}” is not a column {derivation} returns, so the tile renders a dash. It
@@ -345,32 +335,22 @@ export function TileEditor({
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Aggregate" htmlFor="tile-agg">
-                    <Select value={agg} onValueChange={setAgg}>
-                      <SelectTrigger id="tile-agg">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AGGREGATES.map((a) => (
-                          <SelectItem key={a.value} value={a.value}>
-                            {a.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Picker
+                      id="tile-agg"
+                      value={agg}
+                      options={AGGREGATES}
+                      placeholder="How to reduce it"
+                      onChange={setAgg}
+                    />
                   </Field>
                   <Field label="Format" htmlFor="tile-format">
-                    <Select value={format} onValueChange={setFormat}>
-                      <SelectTrigger id="tile-format">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FORMATS.map((f) => (
-                          <SelectItem key={f.value} value={f.value}>
-                            {f.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Picker
+                      id="tile-format"
+                      value={format}
+                      options={FORMATS}
+                      placeholder="How to render it"
+                      onChange={setFormat}
+                    />
                   </Field>
                 </div>
                 {format === "percent" ? (
@@ -463,6 +443,48 @@ function Field({
 function withCurrent(options: string[], current: string): string[] {
   if (!current || options.includes(current)) return options
   return [current, ...options]
+}
+
+/**
+ * A select that behaves like a dropdown rather than a native picker.
+ *
+ * Radix defaults to `item-aligned`, which positions the list so the selected item
+ * covers the trigger — the list jumps over the fields above it, and where it lands
+ * depends on which item is selected. `popper` drops it below, left-aligned, at the
+ * trigger's width, which is what the surrounding inputs look like.
+ */
+function Picker({
+  id,
+  value,
+  options,
+  placeholder,
+  onChange,
+}: {
+  id: string
+  value: string
+  options: { value: string; label: string }[]
+  placeholder: string
+  onChange: (next: string) => void
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent position="popper" align="start" sideOffset={4} className="max-h-72">
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            <span className="truncate">{option.label}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/** Plain names as options: the value is the label. */
+function named(values: string[]): { value: string; label: string }[] {
+  return values.map((value) => ({ value, label: value }))
 }
 
 function tabClass(active: boolean): string {
