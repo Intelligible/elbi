@@ -4780,10 +4780,8 @@ def create_app(
     async def test_data_source(body: dict[str, Any]) -> dict[str, Any]:
         """Test an unsaved connection payload before saving it.
 
-        Gated to data-source managers: it opens a connection to an arbitrary host, so an
-        unprivileged caller must not probe internal services through it. Private-network
-        hosts are intentionally allowed (on-prem data lives there), so the permission
-        gate, not IP filtering, is the control.
+        Opens a connection to the host named in the payload, private-network
+        addresses included, and reports what the driver answered.
         """
         return datasources.test_connection(_source_from_body(body, None))
 

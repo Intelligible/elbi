@@ -63,18 +63,28 @@ def connection_url(source: DataSource) -> str:
     ).render_as_string(hide_password=False)
 
 
+def _without_secret(source: DataSource, message: str) -> str:
+    """``message`` with the source's password masked out."""
+    secret = _password(source)
+    return message.replace(secret, "***") if secret else message
+
+
 def test_connection(source: DataSource) -> dict[str, Any]:
-    """Open a throwaway connection and run ``SELECT 1`` to validate the config."""
+    """Open a throwaway connection and run ``SELECT 1`` to validate the config.
+
+    The driver's own message is reported so a failure names the host and cause, with
+    the password masked: a dialect is free to quote the URL it was handed.
+    """
     try:
         engine = create_engine(connection_url(source), poolclass=pool.NullPool)
     except Exception as exc:  # bad URL / missing driver / unsupported kind
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": _without_secret(source, str(exc))}
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"ok": True}
     except SQLAlchemyError as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": _without_secret(source, str(exc))}
     finally:
         engine.dispose()
 
