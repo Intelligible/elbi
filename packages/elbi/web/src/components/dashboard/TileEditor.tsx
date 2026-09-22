@@ -51,8 +51,8 @@ const FORMATS = [
  * Edit one tile: what it says, what it reads, and how big it is.
  *
  * The fields here are the ones someone reaches for while laying a page out. A
- * chart's `viz` is a grammar-of-graphics spec and stays with the whole-spec editor,
- * which is a better surface for it than a dialog of one input per key.
+ * chart's `viz` is a grammar-of-graphics spec, so it lives on the JSON tab rather than
+ * as a dialog of one input per key.
  */
 export function TileEditor({
   widget,
@@ -347,8 +347,7 @@ export function TileEditor({
 
             {widget.type !== "metric" && widget.type !== "text" ? (
               <p className="text-xs text-text-tertiary">
-                This tile’s <code>viz</code> is a grammar-of-graphics spec. Use “Edit spec” to
-                change how it draws.
+                This tile's <code>viz</code> is a grammar-of-graphics spec. The JSON tab has it.
               </p>
             ) : null}
 
