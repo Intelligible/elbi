@@ -166,6 +166,9 @@ export async function bindableDerivations(): Promise<string[]> {
   return rows.map((row) => row.name)
 }
 
+/** The DashboardSpec JSON Schema, for checking a spec as it is typed. */
+export const dashboardSchema = () => json<Record<string, unknown>>("/api/dashboards/schema")
+
 /** What a derivation reads, for the trail from a tile back to its sources. */
 export interface Provenance {
   derivation: string[]
