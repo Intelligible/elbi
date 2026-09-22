@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
@@ -22,9 +22,11 @@ vi.mock("@/lib/dashboards", async (importOriginal) => ({
     derivation: ["analyses_clean"],
     dataset: ["posthog_analyses"],
   })),
+  derivationColumns: vi.fn(async () => ["subscriptions", "mrr_usd", "nominal"]),
 }))
 
 import type { Widget } from "@/lib/dashboards"
+import { derivationColumns } from "@/lib/dashboards"
 import { TileEditor } from "./TileEditor"
 
 const pos = { x: 0, y: 0, w: 12, h: 6 }
@@ -36,6 +38,21 @@ const boundTile: Widget = {
   title: "Subscriptions (all)",
   bind: { derivation: "revenue_by_product" },
   viz: { field: "subscriptions", agg: "sum" },
+}
+
+/**
+ * The column picker is filled from a request, and a Select opened before it lands keeps
+ * the list it opened with. Wait for the columns, then choose.
+ */
+async function columnsReady() {
+  await waitFor(() => expect(vi.mocked(derivationColumns)).toHaveBeenCalled())
+  await waitFor(() => expect(screen.getByLabelText("Column")).toBeInTheDocument())
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function pick(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
+  await user.click(screen.getByLabelText(label))
+  await user.click(await screen.findByRole("option", { name: option }))
 }
 
 function open(widget: Widget | null, props: { catalog?: string[]; onCancel?: () => void } = {}) {
@@ -76,17 +93,38 @@ describe("TileEditor", () => {
   it("shows a metric's existing column and aggregate", () => {
     open(boundTile)
 
-    expect(screen.getByLabelText("Column")).toHaveValue("subscriptions")
+    expect(screen.getByLabelText("Column")).toHaveTextContent("subscriptions")
     expect(screen.getByLabelText("Aggregate")).toHaveTextContent("Sum")
+  })
+
+  it("offers the columns the bound derivation actually returns", async () => {
+    const user = userEvent.setup()
+    open(boundTile)
+    await columnsReady()
+
+    await user.click(screen.getByLabelText("Column"))
+
+    const offered = (await screen.findAllByRole("option")).map((o) => o.textContent)
+    expect(offered).toEqual(["subscriptions", "mrr_usd", "nominal"])
+  })
+
+  it("keeps a column the derivation no longer returns, rather than blanking it", async () => {
+    const user = userEvent.setup()
+    const stale: Widget = { ...boundTile, viz: { field: "gone_away", agg: "sum" } }
+    open(stale)
+    await columnsReady()
+
+    expect(screen.getByLabelText("Column")).toHaveTextContent("gone_away")
+    await user.click(screen.getByLabelText("Column"))
+    const offered = (await screen.findAllByRole("option")).map((o) => o.textContent)
+    expect(offered[0]).toBe("gone_away")
   })
 
   it("edits a metric's column", async () => {
     const user = userEvent.setup()
     const { onSave } = open(boundTile)
 
-    const column = screen.getByLabelText("Column")
-    await user.clear(column)
-    await user.type(column, "mrr_usd")
+    await pick(user, "Column", "mrr_usd")
     await user.click(screen.getByRole("button", { name: "Save" }))
 
     expect(onSave).toHaveBeenCalledWith(
@@ -127,9 +165,7 @@ describe("TileEditor", () => {
     const { onSave } = open(boundTile)
 
     expect(screen.queryByLabelText("Content")).toBeNull()
-    const field = screen.getByLabelText("Derivation")
-    await user.clear(field)
-    await user.type(field, "collected_revenue")
+    await pick(user, "Derivation", "collected_revenue")
     await user.click(screen.getByRole("button", { name: "Save" }))
 
     expect(onSave).toHaveBeenCalledWith(
@@ -138,15 +174,18 @@ describe("TileEditor", () => {
     )
   })
 
-  it("warns before saving a binding nothing provides", async () => {
-    const user = userEvent.setup()
-    open(boundTile, { catalog: ["revenue_by_product"] })
-
-    const field = screen.getByLabelText("Derivation")
-    await user.clear(field)
-    await user.type(field, "no_such_derivation")
+  it("warns about a binding nothing provides, and keeps it selectable", () => {
+    // A tile bound to something the catalog no longer lists: the name has to survive
+    // opening the dialog, or Save would quietly clear it.
+    open(
+      { ...boundTile, bind: { derivation: "no_such_derivation" } },
+      {
+        catalog: ["revenue_by_product"],
+      },
+    )
 
     expect(screen.getByText(/Nothing named/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Derivation")).toHaveTextContent("no_such_derivation")
   })
 
   it("shows the tile it was opened on, not the previous one", () => {
@@ -194,10 +233,9 @@ describe("the JSON tab", () => {
   it("carries an unsaved field edit into the JSON", async () => {
     const user = userEvent.setup()
     open(boundTile)
+    await columnsReady()
 
-    const column = screen.getByLabelText("Column")
-    await user.clear(column)
-    await user.type(column, "mrr_usd")
+    await pick(user, "Column", "mrr_usd")
     await user.click(screen.getByRole("button", { name: "JSON" }))
 
     const config = JSON.parse(
