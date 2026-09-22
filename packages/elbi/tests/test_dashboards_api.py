@@ -294,3 +294,16 @@ def test_publish_refuses_unknown_metric(client: TestClient) -> None:
     created = client.post("/api/dashboards", json=_metric_dashboard("nope")).json()
     published = client.post(f"/api/dashboards/{created['id']}/publish")
     assert published.status_code == 409
+
+
+def test_the_dashboard_schema_is_served_for_an_editor(client: TestClient) -> None:
+    """An editor checks a spec against the same document the server validates with.
+
+    A copy of the rules kept in the client drifts, and then it reports an error the
+    save accepts, or accepts one the save refuses.
+    """
+    schema = client.get("/api/dashboards/schema").json()
+
+    assert schema["required"] == ["specVersion", "kind", "name", "pages"]
+    assert "widget" in schema["$defs"]
+    assert schema["$defs"]["widget"]["required"] == ["id", "type", "gridPos"]
