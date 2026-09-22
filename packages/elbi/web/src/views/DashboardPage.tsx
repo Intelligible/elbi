@@ -229,6 +229,9 @@ export function DashboardPage() {
       const nextSpec = mapWidgets((widgets) =>
         widgets.map((w) => {
           if (w.id !== widgetId) return w
+          // The JSON tab hands back the whole widget, so it replaces rather than merges:
+          // a key deleted in the text has to actually go.
+          if (patch.widget) return patch.widget as unknown as Widget
           const next: Widget = { ...w }
           // An emptied title is no title, rather than an empty line above the body.
           if (patch.title !== undefined) {
