@@ -445,3 +445,151 @@ body {
 .nb-html td {
   font-variant-numeric: tabular-nums;
 }
+
+/* react-grid-layout ships resize handles as faint corner triangles at `opacity: 0`
+   until the tile is hovered, and by default only the bottom-right one. Against either
+   theme that reads as nothing, so a tile looks like it can only be moved.
+
+   All eight are enabled, and restyled here: an edge handle stretches the length of its
+   edge so the whole side is grabbable, and a corner handle is a grip above the edges it
+   meets. The visible mark is drawn with ::after, so the hit area stays larger than the
+   thing you see.
+
+   Every selector names the handle twice (`.react-resizable-handle.react-resizable-handle-n`)
+   to match the specificity of the vendor rules it overrides; a single class loses to
+   them, leaving the handle rotated 225deg and pinned to the middle of its edge. */
+.react-grid-item > .react-resizable-handle.react-resizable-handle {
+  background-image: none;
+  padding: 0;
+  margin: 0;
+  transform: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.react-grid-item:hover > .react-resizable-handle.react-resizable-handle,
+.react-grid-item:focus-within > .react-resizable-handle.react-resizable-handle {
+  opacity: 0.5;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle:hover {
+  opacity: 1;
+}
+
+/* Edges: a full-length strip with 10px of hit area and a 2px line drawn inside it. */
+.react-grid-item > .react-resizable-handle.react-resizable-handle-n,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-s {
+  left: 0;
+  margin-left: 0;
+  width: 100%;
+  height: 10px;
+  cursor: ns-resize;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-e,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-w {
+  top: 0;
+  margin-top: 0;
+  height: 100%;
+  width: 10px;
+  cursor: ew-resize;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-n {
+  top: -2px;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-s {
+  bottom: -2px;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-e {
+  right: -2px;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-w {
+  left: -2px;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-n::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-s::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-e::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-w::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: var(--text-tertiary);
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-n::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-s::after {
+  left: 14%;
+  right: 14%;
+  height: 2px;
+  top: 4px;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-e::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-w::after {
+  top: 14%;
+  bottom: 14%;
+  width: 2px;
+  left: 4px;
+}
+
+/* Corners: above the edges they overlap, so the diagonal cursor wins there. */
+.react-grid-item > .react-resizable-handle.react-resizable-handle-ne,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-nw,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-sw {
+  width: 22px;
+  height: 22px;
+  z-index: 3;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-ne {
+  top: -2px;
+  right: -2px;
+  bottom: auto;
+  left: auto;
+  cursor: nesw-resize;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-nw {
+  top: -2px;
+  left: -2px;
+  bottom: auto;
+  right: auto;
+  cursor: nwse-resize;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se {
+  bottom: -2px;
+  right: -2px;
+  top: auto;
+  left: auto;
+  cursor: nwse-resize;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-sw {
+  bottom: -2px;
+  left: -2px;
+  top: auto;
+  right: auto;
+  cursor: nesw-resize;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-ne::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-nw::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se::after,
+.react-grid-item > .react-resizable-handle.react-resizable-handle-sw::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 2px solid var(--text-tertiary);
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se::after {
+  border-top: 0;
+  border-left: 0;
+  border-bottom-right-radius: 0.5rem;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-sw::after {
+  border-top: 0;
+  border-right: 0;
+  border-bottom-left-radius: 0.5rem;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-ne::after {
+  border-bottom: 0;
+  border-left: 0;
+  border-top-right-radius: 0.5rem;
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-nw::after {
+  border-bottom: 0;
+  border-right: 0;
+  border-top-left-radius: 0.5rem;
+}

@@ -160,6 +160,31 @@ export const deleteDashboard = (dashboardId: string) =>
 export const publishDashboard = (dashboardId: string) =>
   post<{ ok: boolean }>(`/api/dashboards/${id(dashboardId)}/publish`)
 
+/** The certified derivations a widget may bind, by name. */
+export async function bindableDerivations(): Promise<string[]> {
+  const rows = await json<{ name: string }[]>("/api/dashboards/catalog")
+  return rows.map((row) => row.name)
+}
+
+/** The DashboardSpec JSON Schema, for checking a spec as it is typed. */
+export const dashboardSchema = () => json<Record<string, unknown>>("/api/dashboards/schema")
+
+/** What a derivation reads, for the trail from a tile back to its sources. */
+export interface Provenance {
+  derivation: string[]
+  dataset: string[]
+}
+
+export async function derivationProvenance(name: string): Promise<Provenance> {
+  const body = await json<{ feedsFrom?: Partial<Provenance> }>(
+    `/api/lineage/provenance?node=derivation:${encodeURIComponent(name)}`,
+  )
+  return {
+    derivation: body.feedsFrom?.derivation ?? [],
+    dataset: body.feedsFrom?.dataset ?? [],
+  }
+}
+
 export async function resolvePage(
   dashboardId: string,
   page: string,
