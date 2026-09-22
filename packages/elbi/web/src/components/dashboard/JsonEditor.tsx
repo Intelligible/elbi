@@ -1,7 +1,12 @@
 import { closeBrackets } from "@codemirror/autocomplete"
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { json, jsonParseLinter } from "@codemirror/lang-json"
-import { bracketMatching, indentOnInput } from "@codemirror/language"
+import {
+  bracketMatching,
+  defaultHighlightStyle,
+  indentOnInput,
+  syntaxHighlighting,
+} from "@codemirror/language"
 import { linter, lintGutter } from "@codemirror/lint"
 import { Compartment, EditorState } from "@codemirror/state"
 import { oneDark } from "@codemirror/theme-one-dark"
@@ -61,6 +66,9 @@ export function JsonEditor({
           bracketMatching(),
           closeBrackets(),
           json(),
+          // oneDark carries its own colours; without this, the light theme has none
+          // and the JSON renders as one undifferentiated block.
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           linter(jsonParseLinter()),
           lintGutter(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
