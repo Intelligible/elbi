@@ -166,6 +166,14 @@ export async function bindableDerivations(): Promise<string[]> {
   return rows.map((row) => row.name)
 }
 
+/** The columns a derivation's rows carry, for the tile editor's field picker. */
+export async function derivationColumns(name: string): Promise<string[]> {
+  const body = await json<{ columns: string[] }>(
+    `/api/dashboards/columns/${encodeURIComponent(name)}`,
+  )
+  return body.columns
+}
+
 /** The DashboardSpec JSON Schema, for checking a spec as it is typed. */
 export const dashboardSchema = () => json<Record<string, unknown>>("/api/dashboards/schema")
 
