@@ -360,20 +360,26 @@ class _StreamingKernel:
         """
         stdout = self._proc.stdout
         if stdout is not None:
-            for line in stdout:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                try:
-                    message = json.loads(stripped)
-                except ValueError:
-                    continue
-                if message.get("type") in ("comm_open", "comm_msg", "comm_close"):
-                    listener = self._comm_listener
-                    if listener is not None:
-                        listener(message)
-                    continue
-                self._messages.put(message)
+            try:
+                for line in stdout:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    try:
+                        message = json.loads(stripped)
+                    except ValueError:
+                        continue
+                    if message.get("type") in ("comm_open", "comm_msg", "comm_close"):
+                        listener = self._comm_listener
+                        if listener is not None:
+                            listener(message)
+                        continue
+                    self._messages.put(message)
+            except ValueError:
+                # ``close()`` closes the pipe without joining this thread, so a read
+                # in flight at shutdown raises here.
+                if not stdout.closed:
+                    raise
         self._messages.put(None)
 
     def set_comm_listener(self, listener: CommListener | None) -> None:
