@@ -61,6 +61,11 @@ updates:
       - dependency-name: "@tanstack/react-table"
         update-types: ["version-update:semver-major"]
     groups:
+      # The exception to the majors rule below. @vitest/coverage-v8 peers on an exact
+      # vitest version ("5.0.1", not "^5"), so the two are one unit.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+        update-types: ["major", "minor", "patch"]
       # Majors stay out of the groups so one redesigned package cannot hold twenty
       # ordinary updates behind it -- react-grid-layout 2 and @tanstack/react-table 9
       # arrived inside a group of 23 and failed the whole pull request. Excluded here,
