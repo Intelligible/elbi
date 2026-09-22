@@ -60,6 +60,7 @@ export function TileEditor({
   catalog,
   columns,
   dark,
+  schema,
   onCancel,
   onSave,
 }: {
@@ -67,6 +68,7 @@ export function TileEditor({
   catalog: string[]
   columns: number
   dark: boolean
+  schema?: Record<string, unknown> | null
   onCancel: () => void
   onSave: (id: string, patch: TilePatch) => void
 }) {
@@ -226,6 +228,8 @@ export function TileEditor({
                 value={draft}
                 label="This tile's config"
                 dark={dark}
+                schema={schema}
+                definition="widget"
                 onChange={(next) => {
                   setDraft(next)
                   setJsonError(null)
