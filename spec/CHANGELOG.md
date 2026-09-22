@@ -3,6 +3,13 @@
 This changelog tracks the Open Derivation Spec (ODS) only. It is independent of the SDK and
 CLI changelog at the repository root.
 
+## Dashboard 1.0 (unreleased)
+
+- A `text` widget MAY now `bind` a derivation that returns markdown, in place of its
+  own `content`; it MUST have exactly one of the two. This makes a governed derivation
+  the escape hatch for a bespoke visual. Backward compatible: a `text` widget with
+  `content` is unaffected.
+
 ## 1.1 (unreleased)
 
 Adds provenance and lifecycle, supporting agent-authored derivations.
