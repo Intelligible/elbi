@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
 
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { Turn } from "./ChatView"
 
 function assistantMessage(verified: boolean): UIMessage {
@@ -31,14 +32,22 @@ async function openReceipt() {
 
 describe("Turn certificate link", () => {
   it("offers a certificate download when the result is verified", async () => {
-    render(<Turn message={assistantMessage(true)} busy={false} />)
+    render(
+      <TooltipProvider>
+        <Turn message={assistantMessage(true)} busy={false} />
+      </TooltipProvider>,
+    )
     await openReceipt()
     const link = screen.getByRole("link", { name: "Download certificate" })
     expect(link.getAttribute("href")).toBe("/api/certificates/eff")
   })
 
   it("omits the certificate download when the result is not verified", async () => {
-    render(<Turn message={assistantMessage(false)} busy={false} />)
+    render(
+      <TooltipProvider>
+        <Turn message={assistantMessage(false)} busy={false} />
+      </TooltipProvider>,
+    )
     await openReceipt()
     expect(screen.queryByRole("link", { name: "Download certificate" })).toBeNull()
   })

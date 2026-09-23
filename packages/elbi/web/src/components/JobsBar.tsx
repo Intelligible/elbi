@@ -6,6 +6,7 @@
 // agent's verified follow-up answer.
 import { useEffect, useRef, useState } from "react"
 
+import { Button } from "@/components/ui/button"
 import { cancelJob, getJobs, type Job } from "@/lib/chat"
 
 const ACTIVE = new Set(["queued", "running"])
@@ -75,13 +76,14 @@ export function JobsBar({ onCertifiedComplete }: { onCertifiedComplete?: () => v
             <span className="truncate text-xs text-text-tertiary">{job.progress}</span>
           )}
           {ACTIVE.has(job.state) && (
-            <button
-              type="button"
+            <Button
+              variant="link"
               onClick={() => void cancelJob(job.id)}
-              className="ml-auto text-xs text-text-tertiary underline hover:text-foreground"
+              aria-label={`Cancel ${job.label}`}
+              className="ml-auto h-auto p-0 text-xs font-normal text-text-tertiary underline underline-offset-auto hover:text-foreground"
             >
               Cancel
-            </button>
+            </Button>
           )}
         </div>
       ))}
