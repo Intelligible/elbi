@@ -8,6 +8,15 @@
 import { AlertTriangle } from "lucide-react"
 import { useEffect, useState } from "react"
 
+import { Button } from "@/components/ui/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { type ComputeUsageReport, getComputeUsage } from "@/lib/notebooks"
 
 const WINDOWS = [
@@ -65,25 +74,27 @@ export function ComputeUsageSection() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold">Compute usage</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-text-tertiary">
             Attributed when a kernel ends. An estimate for comparing sizes and spotting growth, not
             a bill &mdash; the rates come from your deployment&rsquo;s configuration.
           </p>
         </div>
         <div className="flex shrink-0 gap-1">
           {WINDOWS.map((window) => (
-            <button
+            <Button
               key={window.days}
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setDays(window.days)}
-              className={`rounded-md px-2 py-1 text-xs ${
+              className={`h-auto rounded-md px-2 py-1 text-xs font-normal ${
                 days === window.days
-                  ? "bg-primary/10 font-medium text-primary"
-                  : "text-muted-foreground hover:bg-muted"
+                  ? "bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary"
+                  : "text-text-tertiary hover:bg-muted hover:text-text-tertiary"
               }`}
             >
               {window.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -91,7 +102,7 @@ export function ComputeUsageSection() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {report?.alert ? (
-        <p className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-400">
+        <p className="flex gap-2 rounded-md border border-warning/30 bg-warning-tint p-2.5 text-xs text-warning">
           <AlertTriangle className="mt-px size-4 shrink-0" />
           <span>{report.alert}</span>
         </p>
@@ -112,35 +123,35 @@ export function ComputeUsageSection() {
 
       {grouped.size > 0 ? (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/50 text-left text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Profile</th>
-                <th className="px-3 py-2 font-medium">Kind</th>
-                <th className="px-3 py-2 font-medium">Sessions</th>
-                <th className="px-3 py-2 font-medium">Time</th>
-                <th className="px-3 py-2 text-right font-medium">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Profile</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Sessions</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {[...grouped.entries()]
                 .sort((a, b) => b[1].cost - a[1].cost)
                 .map(([key, row]) => (
-                  <tr key={key} className="border-t border-border">
-                    <td className="px-3 py-2 font-medium">{row.profile}</td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                  <TableRow key={key}>
+                    <TableCell className="font-medium">{row.profile}</TableCell>
+                    <TableCell className="text-text-tertiary">
                       {row.kind === "batch" ? "scheduled" : "interactive"}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">{row.runs}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{duration(row.seconds)}</td>
-                    <td className="px-3 py-2 text-right">{money(row.cost)}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-text-tertiary">{row.runs}</TableCell>
+                    <TableCell className="text-text-tertiary">{duration(row.seconds)}</TableCell>
+                    <TableCell className="text-right">{money(row.cost)}</TableCell>
+                  </TableRow>
                 ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : report ? (
-        <p className="text-sm text-muted-foreground">No compute sessions in this window.</p>
+        <p className="text-sm text-text-tertiary">No compute sessions in this window.</p>
       ) : null}
     </div>
   )
@@ -149,7 +160,7 @@ export function ComputeUsageSection() {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-3xs uppercase tracking-wide text-text-tertiary">{label}</div>
       <div className="mt-0.5 text-lg font-semibold tabular-nums">{value}</div>
     </div>
   )
