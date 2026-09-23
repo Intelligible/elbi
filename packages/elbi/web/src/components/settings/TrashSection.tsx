@@ -151,7 +151,8 @@ export function TrashSection() {
         <span className="flex items-center justify-end gap-1">
           <IconButton
             label={`Restore ${item.name}`}
-            className="text-text-tertiary hover:text-foreground"
+            size="icon-xs"
+            className="text-text-tertiary hover:bg-muted hover:text-foreground dark:hover:bg-muted"
             onClick={(e) => {
               e.stopPropagation()
               void restore(item)
@@ -161,7 +162,8 @@ export function TrashSection() {
           </IconButton>
           <IconButton
             label={`Delete ${item.name} forever`}
-            className="text-text-tertiary hover:text-danger"
+            size="icon-xs"
+            className="text-text-tertiary hover:bg-muted hover:text-danger dark:hover:bg-muted"
             onClick={(e) => {
               e.stopPropagation()
               void eraseForever(item)

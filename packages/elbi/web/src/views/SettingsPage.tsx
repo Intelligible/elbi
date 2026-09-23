@@ -160,11 +160,12 @@ function SettingsBody() {
                     <Button
                       key={s.id}
                       variant="ghost"
+                      aria-current={section === s.id ? "page" : undefined}
                       onClick={() => navigate(`/settings/${s.id}`)}
                       className={`h-auto w-full justify-start px-2 py-1.5 text-left text-sm font-normal transition-colors ${
                         section === s.id
-                          ? "bg-accent font-medium text-foreground hover:bg-accent hover:text-foreground"
-                          : "text-text-secondary hover:bg-muted/60 hover:text-foreground"
+                          ? "bg-accent font-medium text-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent dark:hover:text-foreground"
+                          : "text-text-secondary hover:bg-muted/60 hover:text-foreground dark:hover:bg-muted/60 dark:hover:text-foreground"
                       }`}
                     >
                       {s.label}
@@ -340,9 +341,9 @@ function TestButton({ input }: { input: DataSourceInput | { id: string } }) {
       title={state === "error" ? error : "Test connection"}
       className={
         state === "ok"
-          ? "border-success/40 text-success"
+          ? "border-success/40 text-success hover:bg-card hover:text-success"
           : state === "error"
-            ? "border-danger/40 text-danger"
+            ? "border-danger/40 text-danger hover:bg-card hover:text-danger"
             : "text-text-tertiary hover:text-foreground"
       }
     >
@@ -509,7 +510,10 @@ export function BudgetSection() {
         </div>
       )}
       <div className="flex items-end gap-3">
-        <FormField label="Cap (USD)">
+        {/* Fixed widths restore the old native <input>/<select>'s intrinsic (UA-default)
+            widths: both Input and SelectTrigger render narrower here, since neither has a
+            definite-width ancestor for the flex layout to size them against. */}
+        <FormField label="Cap (USD)" className="w-[253px]">
           <Input
             type="number"
             step="0.01"
@@ -518,7 +522,7 @@ export function BudgetSection() {
             placeholder="0 = no cap"
           />
         </FormField>
-        <FormField label="Window">
+        <FormField label="Window" className="w-[118px]">
           <Select value={draft.window} onValueChange={(v) => setDraft({ ...draft, window: v })}>
             <FormControl>
               <SelectTrigger className="w-full">
@@ -887,14 +891,17 @@ export function NotebookEnvironmentsSection() {
               />
               <IconButton
                 label="Remove"
-                className="text-text-tertiary hover:text-danger"
+                size="icon-xs"
+                className="size-7 text-text-tertiary hover:bg-muted hover:text-danger dark:hover:bg-muted"
                 onClick={() => setDrafts(drafts.filter((d) => d.id !== draft.id))}
               >
                 <Trash2 className="h-4 w-4" />
               </IconButton>
             </div>
+            {/* ui/textarea has field-sizing-content (auto-grows to fit its value); restore
+                the old fixed-height behaviour that `rows` used to give it. */}
             <Textarea
-              className="font-mono text-compact"
+              className="field-sizing-fixed font-mono text-compact"
               rows={4}
               spellCheck={false}
               value={draft.depsText}

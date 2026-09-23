@@ -20,7 +20,7 @@ import {
   setTitleProfile,
 } from "@/lib/chat"
 
-// A native select forbids an item with value="" (Radix), but "no title model" is a real,
+// Radix Select forbids an item with value="", but "no title model" is a real,
 // always-present choice here, not a placeholder -- so it gets a sentinel value instead.
 const DEFAULT_TITLE = "__default__"
 

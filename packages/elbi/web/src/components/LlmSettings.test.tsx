@@ -97,3 +97,29 @@ it("changing the title model saves the selection", async () => {
   await waitFor(() => expect(puts).toHaveLength(1))
   expect(puts[0]).toEqual({ name: "Local" })
 })
+
+it("selecting Default sends the empty-string name, not the sentinel value", async () => {
+  const user = userEvent.setup()
+  // Starts with a real title model set, so picking "Default" is a genuine change back to
+  // "no override" -- the sentinel used for that Radix item must not leak into the request.
+  vi.stubGlobal("fetch", (_url: string, init?: RequestInit) => {
+    if (init?.method === "PUT") {
+      puts.push(JSON.parse(String(init.body)))
+      return Promise.resolve(json({}))
+    }
+    return Promise.resolve(json({ ...LISTING, titleProfile: "Local" }))
+  })
+  render(
+    <FeedbackProvider>
+      <LlmProfilesManager />
+    </FeedbackProvider>,
+  )
+
+  const trigger = await screen.findByRole("combobox", { name: "Title model" })
+  trigger.focus()
+  await user.click(trigger)
+  await user.click(screen.getByRole("option", { name: "Default" }))
+
+  await waitFor(() => expect(puts).toHaveLength(1))
+  expect(puts[0]).toEqual({ name: "" })
+})

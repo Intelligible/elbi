@@ -86,11 +86,12 @@ export function ComputeUsageSection() {
               type="button"
               variant="ghost"
               size="sm"
+              aria-pressed={days === window.days}
               onClick={() => setDays(window.days)}
               className={`h-auto rounded-md px-2 py-1 text-xs font-normal ${
                 days === window.days
-                  ? "bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary"
-                  : "text-text-tertiary hover:bg-muted hover:text-text-tertiary"
+                  ? "bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                  : "text-text-tertiary hover:bg-muted hover:text-text-tertiary dark:hover:bg-muted dark:hover:text-text-tertiary"
               }`}
             >
               {window.label}
