@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { IconButton } from "@/components/app/IconButton"
 import { CellEditor } from "@/components/notebook/CellEditor"
 import { Scene } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
@@ -55,6 +56,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import { VizView } from "@/components/viz/VizView"
 import {
@@ -378,7 +388,7 @@ export function ExplorePage() {
             <Button size="sm" onClick={() => run()} disabled={active.running}>
               <Play className="size-3.5" />
               {active.running ? "Running…" : "Run"}
-              <span className="ml-1 text-[10px] opacity-70">⌘↵</span>
+              <span className="ml-1 text-3xs opacity-70">⌘↵</span>
             </Button>
             <div className="mx-1 h-5 w-px shrink-0 bg-border" />
             <Wand2 className="size-4 shrink-0 text-text-tertiary" />
@@ -431,27 +441,30 @@ export function ExplorePage() {
           ) : null}
 
           <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5">
-            <TabButton
-              active={active.view === "results"}
-              onClick={() => patch(active.id, { view: "results" })}
+            {/* Profile sends a request, so it activates on click (and profiles again when
+                clicked while active) rather than through the tab value. */}
+            <Tabs
+              value={active.view}
+              activationMode="manual"
+              onValueChange={(v) => {
+                if (v !== "profile") patch(active.id, { view: v as Tab })
+              }}
             >
-              <Table2 className="size-3.5" /> Results
-            </TabButton>
-            <TabButton
-              active={active.view === "chart"}
-              onClick={() => patch(active.id, { view: "chart" })}
-            >
-              <BarChart3 className="size-3.5" /> Chart
-            </TabButton>
-            <TabButton active={active.view === "profile"} onClick={showProfile}>
-              <Columns3 className="size-3.5" /> Profile
-            </TabButton>
-            <TabButton
-              active={active.view === "info"}
-              onClick={() => patch(active.id, { view: "info" })}
-            >
-              <Info className="size-3.5" /> Info
-            </TabButton>
+              <TabsList className="h-auto gap-1 bg-transparent p-0 group-data-[orientation=horizontal]/tabs:h-auto">
+                <TabsTrigger value="results" className={TAB_TRIGGER}>
+                  <Table2 className="size-3.5" /> Results
+                </TabsTrigger>
+                <TabsTrigger value="chart" className={TAB_TRIGGER}>
+                  <BarChart3 className="size-3.5" /> Chart
+                </TabsTrigger>
+                <TabsTrigger value="profile" className={TAB_TRIGGER} onClick={showProfile}>
+                  <Columns3 className="size-3.5" /> Profile
+                </TabsTrigger>
+                <TabsTrigger value="info" className={TAB_TRIGGER}>
+                  <Info className="size-3.5" /> Info
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
             {active.result && active.result.rows.length > 0 ? (
               <div className="ml-auto flex items-center gap-1">
                 <ResultActions result={active.result} name={active.name} />
@@ -636,17 +649,17 @@ function HistoryDialog({
             <p className="py-8 text-center text-sm text-text-tertiary">No history yet.</p>
           ) : (
             entries.map((e) => (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 key={e.sql}
                 onClick={() => onLoad(e)}
-                className="block w-full rounded-md border border-border bg-card px-3 py-2 text-left transition-colors hover:border-border-strong hover:bg-muted/60"
+                className="block h-auto w-full rounded-md border border-border bg-card px-3 py-2 text-left font-normal whitespace-normal hover:border-border-strong hover:bg-muted/60 dark:hover:bg-muted/60"
               >
                 <pre className="truncate font-mono text-xs text-foreground">{e.sql}</pre>
-                <div className="mt-1 text-[11px] text-text-tertiary">
+                <div className="mt-1 text-2xs text-text-tertiary">
                   {sourceName(e.sourceId)} · {relativeTime(e.at)}
                 </div>
-              </button>
+              </Button>
             ))
           )}
         </div>
@@ -664,27 +677,13 @@ function relativeTime(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium ${
-        active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
+// A compact result-view tab: the active one sits on a muted fill.
+const TAB_TRIGGER =
+  "h-auto flex-none gap-1.5 border-0 px-2.5 py-1 text-xs text-text-tertiary hover:text-foreground data-[state=active]:bg-muted data-[state=active]:text-foreground group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none dark:text-text-tertiary dark:hover:text-foreground dark:data-[state=active]:bg-muted"
+
+// A full-width schema-browser row with a flat muted hover.
+const SCHEMA_ROW =
+  "flex h-auto w-full justify-start gap-1 rounded-none px-3 py-1.5 text-left font-normal hover:bg-muted hover:text-foreground dark:hover:bg-muted"
 
 function SchemaBrowser({
   tables,
@@ -753,11 +752,12 @@ function SchemaBrowser({
           <ul className="pb-4">
             {shown.map((t) => (
               <li key={t.name}>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  aria-expanded={!!open[t.name]}
                   onClick={() => setOpen((o) => ({ ...o, [t.name]: !o[t.name] }))}
                   onDoubleClick={() => onInsert(t.name)}
-                  className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-sm hover:bg-muted"
+                  className={SCHEMA_ROW}
                 >
                   <ChevronRight
                     className={`size-3 shrink-0 text-text-tertiary transition-transform ${
@@ -767,21 +767,21 @@ function SchemaBrowser({
                   <Table2 className="size-3.5 shrink-0 text-text-tertiary" />
                   <span className="flex-1 truncate font-medium">{t.name}</span>
                   {t.rows !== undefined ? (
-                    <span className="text-[10px] text-muted-foreground">{t.rows}</span>
+                    <span className="text-3xs text-text-tertiary">{t.rows}</span>
                   ) : null}
-                </button>
+                </Button>
                 {open[t.name] ? (
                   <ul className="pb-1">
                     {t.columns.map((c) => (
                       <li key={c.name}>
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
                           onClick={() => onInsert(c.name)}
-                          className="flex w-full items-center gap-2 py-0.5 pl-9 pr-3 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                          className={`${SCHEMA_ROW} gap-2 py-0.5 pl-9 text-xs text-text-tertiary`}
                         >
                           <span className="flex-1 truncate">{c.name}</span>
-                          {c.type ? <span className="text-[10px] opacity-70">{c.type}</span> : null}
-                        </button>
+                          {c.type ? <span className="text-3xs opacity-70">{c.type}</span> : null}
+                        </Button>
                       </li>
                     ))}
                   </ul>
@@ -832,7 +832,7 @@ function ResultsGrid({ result }: { result: QueryResult | null }) {
               <span className="font-mono text-xs font-medium tracking-normal text-foreground normal-case">
                 {name}
               </span>
-              <span className="text-[10px] font-normal italic tracking-normal text-text-tertiary normal-case">
+              <span className="text-3xs leading-tight font-normal italic tracking-normal text-text-tertiary normal-case">
                 {type}
               </span>
             </span>
@@ -858,7 +858,7 @@ function ResultsGrid({ result }: { result: QueryResult | null }) {
     return (
       <Empty>
         Query results will appear here. Press{" "}
-        <kbd className="rounded border border-border bg-surface-secondary px-1 py-0.5 font-mono text-[10px]">
+        <kbd className="rounded border border-border bg-surface-secondary px-1 py-0.5 font-mono text-3xs">
           ⌘↵
         </kbd>{" "}
         to run the query.
@@ -869,31 +869,30 @@ function ResultsGrid({ result }: { result: QueryResult | null }) {
     return <Empty>The query ran, but returned no rows.</Empty>
   }
   return (
-    <>
-      <table
-        className="border-collapse text-sm tabular-nums"
-        style={{ width: table.getTotalSize(), minWidth: "100%" }}
-      >
-        <thead className="sticky top-0 z-10 bg-surface-secondary text-left">
+    // The table's own scroll wrapper fills the results pane, so the sticky header
+    // sticks to the pane's scroll rather than to a wrapper as tall as the table.
+    <div className="h-full [&>div]:h-full">
+      <Table className="text-sm" style={{ width: table.getTotalSize(), minWidth: "100%" }}>
+        <TableHeader>
           {table.getHeaderGroups().map((group) => (
-            <tr key={group.id}>
+            <TableRow key={group.id} className="hover:bg-transparent">
               {group.headers.map((header) => (
-                <th
+                <TableHead
                   key={header.id}
                   style={{ width: header.getSize() }}
-                  className="group relative select-none border-b border-border px-3 py-1.5 text-left align-bottom"
+                  className="group relative select-none py-1.5 align-bottom"
                 >
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
                     onClick={header.column.getToggleSortingHandler()}
                     aria-label={`Sort by ${header.column.id}`}
-                    className="flex w-full cursor-pointer items-end justify-between gap-2 text-left hover:opacity-80"
+                    className="flex h-auto w-full items-end justify-between gap-2 rounded-none p-0 text-left font-normal whitespace-normal hover:bg-transparent hover:opacity-80 dark:hover:bg-transparent"
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
-                    <span className="pb-0.5 text-xs text-primary">
+                    <span className="pb-0.5 text-xs font-bold text-primary">
                       {{ asc: "↑", desc: "↓" }[header.column.getIsSorted() as string] ?? ""}
                     </span>
-                  </button>
+                  </Button>
                   <hr
                     aria-orientation="vertical"
                     aria-label={`Resize the ${header.column.id} column`}
@@ -919,33 +918,33 @@ function ResultsGrid({ result }: { result: QueryResult | null }) {
                       header.column.getIsResizing() ? "bg-primary opacity-100" : "bg-border-strong"
                     }`}
                   />
-                </th>
+                </TableHead>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </thead>
-        <tbody>
+        </TableHeader>
+        <TableBody>
           {table.getRowModel().rows.map((row) => (
-            <tr
+            <TableRow
               key={row.id}
               onClick={() => setDetail(row.original)}
-              className="cursor-pointer border-t border-border transition-colors hover:bg-muted/60"
+              className="cursor-pointer"
             >
               {row.getVisibleCells().map((cell) => (
-                <td
+                <TableCell
                   key={cell.id}
                   style={{ width: cell.column.getSize() }}
-                  className="truncate px-3 py-1.5 font-mono text-xs text-foreground"
+                  className="truncate py-1.5 font-mono text-xs"
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
+                </TableCell>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       <RowDetailDialog row={detail} columns={result.columns} onClose={() => setDetail(null)} />
-    </>
+    </div>
   )
 }
 
@@ -961,36 +960,44 @@ function RowDetailDialog({
 }) {
   return (
     <Dialog open={row !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent
+        className="sm:max-w-xl"
+        // Focus the dialog itself: landing on the first copy button would open its tooltip.
+        onOpenAutoFocus={(e) => {
+          const content = e.currentTarget as HTMLElement
+          e.preventDefault()
+          content.focus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Row details</DialogTitle>
         </DialogHeader>
         {row ? (
           <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <tbody>
+            <Table className="text-sm">
+              <TableBody>
                 {columns.map((c) => (
-                  <tr key={c} className="group border-b border-border last:border-0">
-                    <td className="w-1/3 px-3 py-1.5 align-top font-mono text-xs text-text-tertiary">
+                  <TableRow key={c} className="group">
+                    <TableCell className="w-1/3 py-1.5 align-top font-mono text-xs text-text-tertiary">
                       {c}
-                    </td>
-                    <td className="px-3 py-1.5 font-mono text-xs break-all text-foreground">
+                    </TableCell>
+                    <TableCell className="py-1.5 font-mono text-xs break-all">
                       {formatCell(row[c])}
-                    </td>
-                    <td className="w-8 px-1 py-1.5 text-right">
-                      <button
-                        type="button"
+                    </TableCell>
+                    <TableCell className="w-8 px-1 py-1.5 text-right">
+                      <IconButton
+                        label={`Copy ${c}`}
+                        size="icon-xs"
                         onClick={() => void copyText(cellText(row[c]))}
-                        aria-label={`Copy ${c}`}
-                        className="rounded p-1 text-text-tertiary opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                        className="size-5 rounded-sm text-text-tertiary opacity-0 transition group-hover:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 dark:hover:bg-muted"
                       >
                         <Copy className="size-3" />
-                      </button>
-                    </td>
-                  </tr>
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : null}
       </DialogContent>
@@ -1051,7 +1058,7 @@ function AxisPicker({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs text-text-tertiary">{label}</span>
       <Select value={value || undefined} onValueChange={onChange}>
         <SelectTrigger className="h-7 w-36 text-xs">
           <SelectValue />
@@ -1073,50 +1080,48 @@ function ProfilePanel({ rows }: { rows: ColumnProfile[] | null }) {
     return <Empty>Profile a query result to see column statistics.</Empty>
   }
   return (
-    <table className="w-full border-collapse text-sm tabular-nums">
-      <thead className="sticky top-0 bg-surface-secondary text-left">
-        <tr>
-          {["Column", "Type", "Complete", "Distinct", "Min", "Max", "Top values"].map((h) => (
-            <th
-              key={h}
-              className="border-b border-border px-3 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-text-tertiary"
-            >
-              {h}
-            </th>
+    // As in the results grid: the scroll wrapper fills the pane so the header sticks.
+    <div className="h-full [&>div]:h-full">
+      <Table className="text-sm">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            {["Column", "Type", "Complete", "Distinct", "Min", "Max", "Top values"].map((h) => (
+              <TableHead key={h}>{h}</TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((c) => (
+            <TableRow key={c.name} className="[&>td]:align-top">
+              <TableCell className="font-medium">
+                {c.name}
+                {c.isUnique ? (
+                  <Badge variant="secondary" className="ml-2">
+                    unique
+                  </Badge>
+                ) : null}
+              </TableCell>
+              <TableCell className="text-text-tertiary">{c.inferredType}</TableCell>
+              <TableCell>{(c.completeness * 100).toFixed(0)}%</TableCell>
+              <TableCell>{c.distinct}</TableCell>
+              <TableCell className="font-mono text-xs">{c.minimum ?? EMPTY}</TableCell>
+              <TableCell className="font-mono text-xs">{c.maximum ?? EMPTY}</TableCell>
+              <TableCell className="text-xs text-text-tertiary">
+                {c.topValues
+                  .slice(0, 3)
+                  .map((t) => `${formatCell(t.value)} (${t.count})`)
+                  .join(", ")}
+              </TableCell>
+            </TableRow>
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((c) => (
-          <tr
-            key={c.name}
-            className="border-t border-border align-top transition-colors hover:bg-muted/60"
-          >
-            <td className="px-3 py-2 font-medium text-foreground">
-              {c.name}
-              {c.isUnique ? (
-                <Badge variant="secondary" className="ml-2">
-                  unique
-                </Badge>
-              ) : null}
-            </td>
-            <td className="px-3 py-2 text-text-tertiary">{c.inferredType}</td>
-            <td className="px-3 py-2 text-foreground">{(c.completeness * 100).toFixed(0)}%</td>
-            <td className="px-3 py-2 text-foreground">{c.distinct}</td>
-            <td className="px-3 py-2 font-mono text-xs text-foreground">{c.minimum ?? EMPTY}</td>
-            <td className="px-3 py-2 font-mono text-xs text-foreground">{c.maximum ?? EMPTY}</td>
-            <td className="px-3 py-2 text-xs text-text-tertiary">
-              {c.topValues
-                .slice(0, 3)
-                .map((t) => `${formatCell(t.value)} (${t.count})`)
-                .join(", ")}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+        </TableBody>
+      </Table>
+    </div>
   )
 }
+
+// A 24px icon button whose negative margin keeps the 14px footprint of the icon it holds.
+const ICON_14 = "-m-1.25 text-text-tertiary"
 
 function SavedQueries({
   saved,
@@ -1136,41 +1141,41 @@ function SavedQueries({
         Saved ({saved.length})
       </Button>
       {open ? (
-        <div className="absolute right-0 top-9 z-20 w-72 rounded-lg border border-border bg-popover p-1 shadow-md">
+        <div className="absolute right-0 top-9 z-20 w-72 rounded-lg border border-border bg-popover p-1 shadow-elevation">
           {saved.length === 0 ? (
-            <p className="px-2 py-2 text-xs text-muted-foreground">No saved queries.</p>
+            <p className="px-2 py-2 text-xs text-text-tertiary">No saved queries.</p>
           ) : (
             saved.map((q) => (
               <div
                 key={q.id}
                 className="flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-muted"
               >
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   onClick={() => {
                     onLoad(q)
                     setOpen(false)
                   }}
-                  className="flex-1 truncate text-left text-sm"
+                  className="h-auto min-w-0 flex-1 justify-start p-0 text-left font-normal hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
                 >
-                  {q.name}
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Duplicate ${q.name}`}
+                  <span className="truncate">{q.name}</span>
+                </Button>
+                <IconButton
+                  label={`Duplicate ${q.name}`}
+                  size="icon-xs"
                   onClick={() => onDuplicate(q.id)}
-                  className="text-text-tertiary hover:text-foreground"
+                  className={`${ICON_14} hover:text-foreground`}
                 >
                   <Copy className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Delete query"
+                </IconButton>
+                <IconButton
+                  label={`Delete query ${q.name}`}
+                  size="icon-xs"
                   onClick={() => onDelete(q.id)}
-                  className="text-text-tertiary hover:text-danger"
+                  className={`${ICON_14} hover:text-danger`}
                 >
                   <Trash2 className="size-3.5" />
-                </button>
+                </IconButton>
               </div>
             ))
           )}
@@ -1301,11 +1306,11 @@ function DraftButton({
           {draft ? (
             <div className="min-w-0 space-y-2 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Verdict</span>
+                <span className="text-text-tertiary">Verdict</span>
                 <VerdictBadge verdict={draft.verdict || (draft.ok ? "computed" : "unverified")} />
               </div>
               {draft.claim ? (
-                <p className="break-words text-xs text-muted-foreground">
+                <p className="break-words text-xs text-text-tertiary">
                   Claim: {draft.claim.x} → {draft.claim.y}
                   {draft.claim.controls?.length
                     ? ` (controls: ${draft.claim.controls.join(", ")})`
@@ -1318,7 +1323,7 @@ function DraftButton({
                 </pre>
               ) : null}
               {draft.checks?.length ? (
-                <ul className="space-y-0.5 text-xs text-muted-foreground">
+                <ul className="space-y-0.5 text-xs text-text-tertiary">
                   {draft.checks.map((c) => (
                     <li key={c[0]}>
                       {c[0]}: {c[1]}
@@ -1327,11 +1332,11 @@ function DraftButton({
                 </ul>
               ) : null}
               {draft.detail ? (
-                <p className="break-words text-xs text-muted-foreground">{draft.detail}</p>
+                <p className="break-words text-xs text-text-tertiary">{draft.detail}</p>
               ) : null}
             </div>
           ) : null}
-          {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+          {message ? <p className="text-sm text-text-tertiary">{message}</p> : null}
           <DialogFooter>
             <Button
               variant="outline"
@@ -1426,7 +1431,7 @@ function PromoteButton({
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+          {message ? <p className="text-sm text-text-tertiary">{message}</p> : null}
           <DialogFooter>
             <Button
               disabled={busy || !name}
@@ -1545,7 +1550,7 @@ function QueryInfoPanel({
   return (
     <div className="space-y-5 p-4">
       <div>
-        <div className="mb-1 text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-text-tertiary">
+        <div className="mb-1 text-2xs font-semibold uppercase tracking-[0.05em] text-text-tertiary">
           Query
         </div>
         <pre className="overflow-x-auto rounded-lg border border-border bg-surface-secondary p-3 font-mono text-xs text-foreground">
@@ -1576,22 +1581,22 @@ function QueryInfoPanel({
         ) : null}
       </div>
       <div>
-        <div className="mb-1 text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-text-tertiary">
+        <div className="mb-1 text-2xs font-semibold uppercase tracking-[0.05em] text-text-tertiary">
           Columns
         </div>
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
-            <tbody>
+          <Table className="text-sm">
+            <TableBody>
               {result.columns.map((c) => (
-                <tr key={c} className="border-b border-border last:border-0">
-                  <td className="px-3 py-1.5 font-mono text-xs text-foreground">{c}</td>
-                  <td className="px-3 py-1.5 text-right font-mono text-xs italic text-text-tertiary">
+                <TableRow key={c}>
+                  <TableCell className="py-1.5 font-mono text-xs">{c}</TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-xs italic text-text-tertiary">
                     {inferType(result.rows, c)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>

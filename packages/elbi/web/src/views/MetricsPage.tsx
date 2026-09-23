@@ -21,9 +21,11 @@ import {
   X,
 } from "lucide-react"
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
+import { IconButton } from "@/components/app/IconButton"
 import { Scene, SceneHeader } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -40,6 +42,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { VizView } from "@/components/viz/VizView"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import { metricExportUrl } from "@/lib/chat"
@@ -221,11 +231,9 @@ export function MetricsPage() {
               />
             </div>
             <label className="flex cursor-pointer items-center gap-1.5 px-1 text-xs text-text-tertiary">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={certifiedOnly}
-                onChange={(e) => setCertifiedOnly(e.target.checked)}
-                className="accent-primary"
+                onCheckedChange={(c) => setCertifiedOnly(c === true)}
               />
               Certified only
             </label>
@@ -239,12 +247,15 @@ export function MetricsPage() {
               </p>
             ) : (
               shown.map((m) => (
-                <button
+                <Button
                   key={m.name}
-                  type="button"
+                  variant="ghost"
+                  aria-current={selected === m.name ? "true" : undefined}
                   onClick={() => setSelected(m.name)}
-                  className={`flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left transition-colors ${
-                    selected === m.name ? "bg-accent" : "hover:bg-muted/60"
+                  className={`flex h-auto w-full flex-col items-stretch justify-start gap-1 px-2 py-1.5 text-left font-normal hover:text-foreground ${
+                    selected === m.name
+                      ? "bg-accent hover:bg-accent dark:hover:bg-accent"
+                      : "hover:bg-muted/60 dark:hover:bg-muted/60"
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
@@ -266,7 +277,7 @@ export function MetricsPage() {
                     )}
                     <Sparkline points={overview[m.name]?.series ?? []} />
                   </span>
-                </button>
+                </Button>
               ))
             )}
           </div>
@@ -276,9 +287,14 @@ export function MetricsPage() {
           {error ? (
             <div className="flex items-center gap-2 border-b border-danger/30 bg-danger-tint px-4 py-2 font-mono text-xs text-danger">
               <span className="flex-1">{error}</span>
-              <button type="button" aria-label="Dismiss" onClick={() => setError(null)}>
+              <IconButton
+                label="Dismiss error"
+                size="icon-xs"
+                className="-m-1.25 hover:text-danger"
+                onClick={() => setError(null)}
+              >
                 <X className="size-3.5" />
-              </button>
+              </IconButton>
             </div>
           ) : null}
           {current ? (
@@ -488,18 +504,19 @@ function MetricPanel({
               <span className="text-xs text-text-tertiary">(no dimensions)</span>
             ) : (
               dims.map((dim) => (
-                <button
+                <Button
                   key={dim}
-                  type="button"
+                  variant="ghost"
+                  aria-pressed={groupBy.includes(dim)}
                   onClick={() => toggle(dim)}
-                  className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                  className={`h-auto rounded-full border px-2.5 py-0.5 text-xs font-normal ${
                     groupBy.includes(dim)
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-text-tertiary hover:text-foreground"
+                      ? "border-primary bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary dark:hover:bg-primary/10"
+                      : "border-border text-text-tertiary hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
                   }`}
                 >
                   {dim}
-                </button>
+                </Button>
               ))
             )}
             {timeColumn && groupBy.includes(timeColumn) ? (
@@ -731,9 +748,14 @@ function FilterBuilder({
             }
             className="h-7 w-40 text-xs"
           />
-          <button type="button" aria-label="Remove filter" onClick={() => remove(id)}>
-            <X className="size-3.5 text-text-tertiary hover:text-foreground" />
-          </button>
+          <IconButton
+            label="Remove filter"
+            size="icon-xs"
+            className="-m-1.25 text-text-tertiary hover:text-foreground"
+            onClick={() => remove(id)}
+          >
+            <X className="size-3.5" />
+          </IconButton>
         </div>
       ))}
     </div>
@@ -742,24 +764,27 @@ function FilterBuilder({
 
 function ChartToggle({ chart, setChart }: { chart: ChartType; setChart: (c: ChartType) => void }) {
   const options: { key: ChartType; icon: typeof LineChart; label: string }[] = [
-    { key: "line", icon: LineChart, label: "Line" },
-    { key: "bar", icon: BarChart3, label: "Bar" },
+    { key: "line", icon: LineChart, label: "Line chart" },
+    { key: "bar", icon: BarChart3, label: "Bar chart" },
     { key: "table", icon: Table2, label: "Table" },
   ]
   return (
     <div className="inline-flex rounded-md border border-border">
       {options.map(({ key, icon: Icon, label }) => (
-        <button
+        <IconButton
           key={key}
-          type="button"
-          aria-label={label}
+          label={label}
+          size="icon-xs"
+          aria-pressed={chart === key}
           onClick={() => setChart(key)}
-          className={`flex items-center gap-1 px-2 py-1 text-xs transition-colors first:rounded-l-md last:rounded-r-md ${
-            chart === key ? "bg-accent text-foreground" : "text-text-tertiary hover:text-foreground"
+          className={`h-5.5 w-7.5 rounded-none first:rounded-l-md last:rounded-r-md ${
+            chart === key
+              ? "bg-accent text-foreground hover:text-foreground dark:hover:bg-accent"
+              : "text-text-tertiary hover:text-foreground"
           }`}
         >
           <Icon className="size-3.5" />
-        </button>
+        </IconButton>
       ))}
     </div>
   )
@@ -811,34 +836,26 @@ function MetricResult({
         </div>
       ) : null}
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <table className="w-full border-collapse text-sm tabular-nums">
-          <thead className="bg-surface-secondary text-left">
-            <tr>
+        <Table className="text-sm">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
               {result.columns.map((c) => (
-                <th
-                  key={c}
-                  className="border-b border-border px-3 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-text-tertiary"
-                >
-                  {c}
-                </th>
+                <TableHead key={c}>{c}</TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {result.rows.map((row) => (
-              <tr
-                key={rowKey(row)}
-                className="border-t border-border transition-colors hover:bg-muted/60"
-              >
+              <TableRow key={rowKey(row)}>
                 {result.columns.map((c) => (
-                  <td key={c} className="px-3 py-1.5 font-mono text-xs text-foreground">
+                  <TableCell key={c} className="py-1.5 font-mono text-xs">
                     {fmt(row[c], c === metric.name ? metric.format : undefined)}
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   )
@@ -1140,13 +1157,13 @@ function AskDialog({
         {rq ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={() => onOpen(rq.metricName)}
-                className="rounded-full border border-primary bg-primary/10 px-2 py-0.5 text-primary"
+                className="h-auto rounded-full border border-primary bg-primary/10 px-2 py-0.5 text-xs font-normal text-primary hover:bg-primary/10 hover:text-primary dark:hover:bg-primary/10"
               >
                 {rq.metricName}
-              </button>
+              </Button>
               {rq.groupBy.map((d) => (
                 <span key={d} className="rounded-full border border-border px-2 py-0.5">
                   by {d}
@@ -1169,31 +1186,28 @@ function AskDialog({
             ) : null}
             {result ? (
               <div className="max-h-64 overflow-auto rounded-lg border border-border bg-card">
-                <table className="w-full border-collapse text-sm tabular-nums">
-                  <thead className="bg-surface-secondary text-left">
-                    <tr>
+                <Table className="text-sm">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
                       {result.columns.map((c) => (
-                        <th
-                          key={c}
-                          className="border-b border-border px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-text-tertiary"
-                        >
+                        <TableHead key={c} className="py-1.5">
                           {c}
-                        </th>
+                        </TableHead>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {result.rows.map((row) => (
-                      <tr key={rowKey(row)} className="border-t border-border">
+                      <TableRow key={rowKey(row)}>
                         {result.columns.map((c) => (
-                          <td key={c} className="px-3 py-1 font-mono text-xs">
+                          <TableCell key={c} className="py-1 font-mono text-xs">
                             {fmt(row[c], c === rq.metricName ? format : undefined)}
-                          </td>
+                          </TableCell>
                         ))}
-                      </tr>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             ) : null}
           </div>
