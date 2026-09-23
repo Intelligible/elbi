@@ -152,7 +152,7 @@ const TOOL =
 
 // A text-only disclosure toggle (the trace and receipt headers).
 const DISCLOSURE =
-  "flex h-auto justify-start gap-1.5 text-xs text-text-tertiary transition hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
+  "flex h-auto justify-start gap-1.5 whitespace-normal text-xs text-text-tertiary transition hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
 
 export function ChatView({
   chat,
@@ -633,7 +633,12 @@ function Trace({ items, running }: { items: TraceItem[]; running: boolean }) {
         variant="ghost"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={cn(DISCLOSURE, "w-full rounded-none px-3 py-2 has-[>svg]:px-3")}
+        className={cn(
+          DISCLOSURE,
+          "w-full px-3 py-2 has-[>svg]:px-3",
+          // The header's corners follow the card's, so its focus ring does too.
+          open ? "rounded-t-xl rounded-b-none" : "rounded-xl",
+        )}
       >
         {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         How it got here · {tools} step{tools === 1 ? "" : "s"}
