@@ -7,6 +7,7 @@
 import { Check, Loader2, X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 
+import { IconButton } from "@/components/app/IconButton"
 import { getTrainingJobs, type TrainingJob } from "@/lib/chat"
 
 const ACTIVE = new Set<TrainingJob["state"]>(["queued", "running"])
@@ -95,12 +96,12 @@ export function TrainingStatus({ job, onDismiss }: { job: TrainingJob; onDismiss
     <div className="flex items-start gap-2.5 rounded-xl border border-border px-4 py-3 text-sm">
       {active ? (
         <>
-          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-text-tertiary" />
           <div className="min-w-0 flex-1">
             <span className="font-medium">{job.label}</span>{" "}
-            <span className="text-muted-foreground">training…</span>
+            <span className="text-text-tertiary">training…</span>
             {job.progress && (
-              <div className="truncate text-xs text-muted-foreground">{job.progress}</div>
+              <div className="truncate text-xs text-text-tertiary">{job.progress}</div>
             )}
           </div>
         </>
@@ -114,7 +115,7 @@ export function TrainingStatus({ job, onDismiss }: { job: TrainingJob; onDismiss
               {job.result.champion && " (champion)"}
             </span>
             {Object.keys(job.result.metrics).length > 0 && (
-              <div className="truncate font-mono text-xs text-muted-foreground">
+              <div className="truncate font-mono text-xs text-text-tertiary">
                 {Object.entries(job.result.metrics)
                   .map(([k, v]) => `${k.replace(/^holdout_/, "")} ${v.toFixed(4)}`)
                   .join(" · ")}
@@ -134,14 +135,16 @@ export function TrainingStatus({ job, onDismiss }: { job: TrainingJob; onDismiss
         </>
       )}
       {!active && (
-        <button
-          type="button"
+        // Same footprint as the old padding-less button: icon-xs sized down to the
+        // 16px icon itself (size-4 overrides icon-xs's default 24px).
+        <IconButton
+          label="Dismiss"
+          size="icon-xs"
+          className="size-4 text-text-tertiary hover:text-foreground"
           onClick={onDismiss}
-          className="shrink-0 text-muted-foreground transition hover:text-foreground"
-          aria-label="Dismiss"
         >
           <X className="h-4 w-4" />
-        </button>
+        </IconButton>
       )}
     </div>
   )
