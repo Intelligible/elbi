@@ -6,7 +6,7 @@ over Radix). Read `.interface-design/system.md` before touching styling.
 ## Commands
 
 - `npm run dev`: dev server (proxies `/api` to the backend on :7700).
-- `npm run lint` / `npm run lint:fix`: Biome check / autofix. Must be clean (0 errors).
+- `npm run lint` / `npm run lint:fix`: Biome check, then the ESLint design-system rules. Must be clean.
 - `npm test`: Vitest (jsdom + Testing Library).
 - `npm run build`: typecheck + production build into the Python package.
 
@@ -22,11 +22,15 @@ Search for an existing piece before adding one. In particular:
 | a menu / dropdown | `components/ui/dropdown-menu`, `command` | a hand-rolled popover |
 | a chart | `components/viz/VegaChart` (+ `lib/chart-theme`) | inline chart colors |
 | primitives (button, card, dialog, select, …) | `components/ui/*` | new one-offs |
+| a labelled form control | components/app/FormField | a label + span + fieldClass |
+| an icon-only button | components/app/IconButton | a raw <button> with an svg |
+| an empty list/page | components/app/EmptyState | a hand-rolled "No … yet" block |
+| tabs | components/ui/tabs | a hand-rolled tab strip |
 
 ## Styling
 
-- Use the **semantic** design tokens as Tailwind utilities (`bg-card`, `text-secondary`,
-  `border-border`, `text-tertiary`, …). Never hardcode a hex/`oklch` color or a raw
+- Use the **semantic** design tokens as Tailwind utilities (`bg-card`, `text-text-secondary`,
+  `border-border`, `text-text-tertiary`, …). Never hardcode a hex/`oklch` color or a raw
   `--n-*` in a component. Charts are the one exception and go through `lib/chart-theme`.
 - Depth is **borders-first**; use a shadow token only for a genuinely floating surface.
 - Never branch on theme in a component: read semantic tokens and dark mode is automatic.

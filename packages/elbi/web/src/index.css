@@ -335,6 +335,20 @@
   --shadow-panel: var(--shadow-panel);
 }
 
+/* Named steps for the sizes the app already used as arbitrary values. */
+@theme {
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.875rem;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-compact: 0.8125rem;
+  --text-compact--line-height: 1.25rem;
+  --text-title: 1.35rem;
+  --text-title--line-height: 1.2;
+  --text-display: 1.7rem;
+  --text-display--line-height: 1.15;
+}
+
 html,
 body {
   margin: 0;
