@@ -43,7 +43,7 @@ export function DerivationsPage() {
                 : "size-4 shrink-0 text-text-tertiary"
             }
           />
-          <span className="truncate font-mono text-[0.8125rem] font-medium text-foreground">
+          <span className="truncate font-mono text-compact font-medium text-foreground">
             {d.name}
           </span>
         </span>
@@ -59,7 +59,7 @@ export function DerivationsPage() {
       title: "Source",
       width: 96,
       render: (d) => (
-        <span className="rounded-full border border-border px-2 py-0.5 text-[0.6875rem] font-medium uppercase tracking-wide text-text-tertiary">
+        <span className="rounded-full border border-border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-text-tertiary">
           {d.origin === "repo" ? "Repo" : "Chat"}
         </span>
       ),

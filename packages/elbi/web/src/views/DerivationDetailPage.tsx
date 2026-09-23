@@ -251,16 +251,14 @@ function HistorySection({ name }: { name: string }) {
                 {v.changed.map((dim) => (
                   <span
                     key={dim}
-                    className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-text-tertiary"
+                    className="rounded-full bg-muted px-2 py-0.5 text-2xs text-text-tertiary"
                   >
                     {changedLabel(dim)} changed
                   </span>
                 ))}
               </div>
             ) : (
-              <div className="mt-1.5 text-[11px] text-text-tertiary/80">
-                first certified version
-              </div>
+              <div className="mt-1.5 text-2xs text-text-tertiary/80">first certified version</div>
             )}
           </li>
         ))}

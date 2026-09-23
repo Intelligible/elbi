@@ -5,6 +5,7 @@ import { Bell, CheckCheck, Settings2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 
+import { EmptyState } from "@/components/app/EmptyState"
 import { Scene, SceneBody, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,7 +19,7 @@ import {
   type NotificationItem,
   notificationRoute,
 } from "@/lib/notifications"
-import { relativeTime } from "@/lib/utils"
+import { cn, relativeTime } from "@/lib/utils"
 
 export function NotificationsPage() {
   const [items, setItems] = useState<NotificationItem[] | null>(null)
@@ -81,34 +82,36 @@ export function NotificationsPage() {
           icon={<Bell className="size-5" />}
         />
         <SceneBody width="narrow">
-          <div className="rounded-lg border border-border bg-card px-4 py-10 text-center">
-            <Bell className="mx-auto size-6 text-text-tertiary" />
-            <p className="mt-2 text-sm font-medium text-foreground">Could not load notifications</p>
-            <p className="mt-1 text-sm text-text-secondary">
-              The server did not answer. Your notifications are safe; try again.
-            </p>
-            <Button variant="outline" size="sm" className="mt-4" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          </div>
+          <EmptyState
+            className="rounded-lg border border-border bg-card"
+            icon={Bell}
+            title="Could not load notifications"
+            description="The server did not answer. Your notifications are safe; try again."
+            action={
+              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                Retry
+              </Button>
+            }
+          />
         </SceneBody>
       </Scene>
     )
   if (items === null) return <SceneSkeleton />
 
   const filterButton = (value: "all" | "unread", label: string) => (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
       onClick={() => setFilter(value)}
       aria-pressed={filter === value}
-      className={`rounded-md px-2.5 py-1 text-sm transition ${
+      className={cn(
+        "h-auto px-2.5 py-1 transition",
         filter === value
-          ? "bg-card font-medium text-foreground shadow-sm"
-          : "text-text-tertiary hover:text-foreground"
-      }`}
+          ? "bg-card font-medium text-foreground shadow-panel hover:bg-card hover:text-foreground dark:hover:bg-card"
+          : "font-normal text-text-tertiary hover:bg-transparent hover:text-foreground dark:hover:bg-transparent",
+      )}
     >
       {label}
-    </button>
+    </Button>
   )
 
   return (
@@ -151,23 +154,20 @@ export function NotificationsPage() {
           </div>
         )}
         {items.length === 0 ? (
-          <div className="rounded-lg border border-border bg-card px-4 py-10 text-center">
-            <Bell className="mx-auto size-6 text-text-tertiary" />
-            <p className="mt-2 text-sm font-medium text-foreground">
-              {filter === "unread" ? "Nothing unread" : "No notifications yet"}
-            </p>
-            <p className="mt-1 text-sm text-text-secondary">
-              When a monitor fires, a run fails, or a training finishes, it lands here.
-            </p>
-          </div>
+          <EmptyState
+            className="rounded-lg border border-border bg-card"
+            icon={Bell}
+            title={filter === "unread" ? "Nothing unread" : "No notifications yet"}
+            description="When a monitor fires, a run fails, or a training finishes, it lands here."
+          />
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border bg-card">
             {items.map((n) => (
               <li key={n.id}>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   onClick={() => void open(n)}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-panel"
+                  className="flex h-auto w-full items-start justify-start gap-3 whitespace-normal rounded-none px-4 py-3 text-left font-normal transition hover:bg-panel hover:text-foreground dark:hover:bg-panel"
                 >
                   <span
                     aria-hidden
@@ -195,7 +195,7 @@ export function NotificationsPage() {
                       {EVENT_TYPE_LABELS[n.eventType]?.label ?? n.eventType} · {relativeTime(n.at)}
                     </span>
                   </span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>

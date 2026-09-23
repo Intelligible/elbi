@@ -69,12 +69,15 @@ export function MonitorsPage() {
               </p>
             ) : (
               monitors.map((m) => (
-                <button
+                <Button
                   key={m.id}
-                  type="button"
+                  variant="ghost"
+                  aria-current={selected === m.id ? "true" : undefined}
                   onClick={() => setSelected(m.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                    selected === m.id ? "bg-accent" : "hover:bg-muted/60"
+                  className={`flex h-auto w-full justify-start gap-2 px-2 py-1.5 text-left font-normal hover:text-foreground has-[>svg]:px-2 ${
+                    selected === m.id
+                      ? "bg-accent hover:bg-accent dark:hover:bg-accent"
+                      : "hover:bg-muted/60 dark:hover:bg-muted/60"
                   }`}
                 >
                   <span className="flex-1 truncate">{m.name}</span>
@@ -83,7 +86,7 @@ export function MonitorsPage() {
                   ) : (
                     <span className="size-2 shrink-0 rounded-full bg-verified" />
                   )}
-                </button>
+                </Button>
               ))
             )}
           </div>
