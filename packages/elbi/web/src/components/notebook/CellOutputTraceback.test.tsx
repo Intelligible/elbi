@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { CellOutputs } from "./CellOutput"
 
 const ESC = String.fromCharCode(27)
@@ -13,7 +14,11 @@ const ESC = String.fromCharCode(27)
  */
 describe("CellOutputs tracebacks", () => {
   const traceback = (lines: string[]) =>
-    render(<CellOutputs outputs={[{ output_type: "error", traceback: lines } as never]} />)
+    render(
+      <TooltipProvider>
+        <CellOutputs outputs={[{ output_type: "error", traceback: lines } as never]} />
+      </TooltipProvider>,
+    )
 
   it("strips every escape sequence, not only the colour codes", () => {
     const { container } = traceback([

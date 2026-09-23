@@ -20,7 +20,7 @@ export function WidgetView({ modelId }: { modelId: string }) {
   }, [manager, modelId])
 
   if (!manager) {
-    return <div className="text-xs text-muted-foreground">[widget: kernel not connected]</div>
+    return <div className="text-xs text-text-tertiary">[widget: kernel not connected]</div>
   }
   return <div ref={host} className="jupyter-widgets-view" />
 }

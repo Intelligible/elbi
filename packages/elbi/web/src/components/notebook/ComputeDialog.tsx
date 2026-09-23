@@ -92,7 +92,7 @@ export function ComputeDialog({
         </DialogHeader>
 
         {state?.unavailable ? (
-          <p className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-400">
+          <p className="flex gap-2 rounded-md border border-warning/40 bg-warning-tint p-2.5 text-xs text-warning">
             <AlertTriangle className="mt-px size-4 shrink-0" />
 
             <span>
@@ -103,7 +103,7 @@ export function ComputeDialog({
         ) : null}
 
         {state?.drift ? (
-          <p className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-400">
+          <p className="flex gap-2 rounded-md border border-warning/40 bg-warning-tint p-2.5 text-xs text-warning">
             <AlertTriangle className="mt-px size-4 shrink-0" />
             <span>{state.drift}</span>
           </p>
@@ -121,9 +121,7 @@ export function ComputeDialog({
             />
           ))}
           {menu && menu.profiles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No compute profiles are available to you.
-            </p>
+            <p className="text-sm text-text-tertiary">No compute profiles are available to you.</p>
           ) : null}
         </div>
 
@@ -156,8 +154,10 @@ function ProfileRow({
   onSelect: () => void
 }) {
   return (
+    // eslint-disable-next-line ds/no-raw-element -- a whole profile card is the option; Button's nowrap, centring and fixed heights don't fit a multi-line row
     <button
       type="button"
+      aria-pressed={selected}
       onClick={onSelect}
       className={`flex w-full items-start gap-3 rounded-md border p-3 text-left transition-colors ${
         selected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
@@ -166,17 +166,17 @@ function ProfileRow({
       {profile.gpu > 0 ? (
         <Zap className="mt-0.5 size-4 shrink-0 text-primary" />
       ) : (
-        <Cpu className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <Cpu className="mt-0.5 size-4 shrink-0 text-text-tertiary" />
       )}
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2 text-sm font-medium">
           {profile.name}
           {isDefault ? (
-            <span className="text-xs font-normal text-muted-foreground">default</span>
+            <span className="text-xs font-normal text-text-tertiary">default</span>
           ) : null}
           {running ? <span className="text-xs font-normal text-primary">running</span> : null}
         </span>
-        <span className="mt-0.5 block text-xs text-muted-foreground">
+        <span className="mt-0.5 block text-xs text-text-tertiary">
           {profile.cpu} CPU · {profile.memory}
           {profile.gpu > 0 ? ` · ${profile.gpu}× ${profile.gpuType ?? "GPU"}` : ""} · idle{" "}
           {duration(profile.idleTimeout)}
@@ -184,7 +184,7 @@ function ProfileRow({
           {profile.egress === "none" ? " · offline" : ""}
         </span>
       </span>
-      <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+      <span className="flex shrink-0 items-center gap-2 text-xs text-text-tertiary">
         {/* An estimate for comparing sizes, not a bill -- said plainly in the docs. */}
         <span title="Estimated, for comparing sizes">~{money(profile.costPerHour)}</span>
         {selected ? <Check className="size-4 text-primary" /> : null}

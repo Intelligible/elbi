@@ -33,7 +33,7 @@ export function DataModePill({ mode }: { mode: string }) {
   return (
     <span
       title={shape.title}
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${shape.className}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-medium ${shape.className}`}
     >
       <Icon className="size-2.5" />
       {shape.label}

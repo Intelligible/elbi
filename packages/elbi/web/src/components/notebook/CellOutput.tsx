@@ -3,9 +3,11 @@ import { type ReactNode, useState } from "react"
 import { VegaEmbed } from "react-vega"
 import stripAnsi from "strip-ansi"
 import type { VisualizationSpec } from "vega-embed"
+import { IconButton } from "@/components/app/IconButton"
 import { KernelHtml } from "@/components/notebook/KernelHtml"
 import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { WidgetView } from "@/components/notebook/WidgetView"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Output } from "@/lib/notebooks"
@@ -74,7 +76,7 @@ function Bundle({ data }: { data: Record<string, unknown> }) {
     return <NotebookMarkdown>{asDisplayMath(data["text/latex"])}</NotebookMarkdown>
   }
   return (
-    <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed">
+    <pre className="whitespace-pre-wrap break-words font-mono text-compact leading-relaxed">
       {asText(data["text/plain"])}
     </pre>
   )
@@ -85,7 +87,7 @@ function OneOutput({ output }: { output: Output }) {
     const isErr = output.name === "stderr"
     return (
       <pre
-        className={`whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed ${
+        className={`whitespace-pre-wrap break-words font-mono text-compact leading-relaxed ${
           isErr ? "text-danger" : "text-foreground/80"
         }`}
       >
@@ -99,7 +101,7 @@ function OneOutput({ output }: { output: Output }) {
     // rich/pytest emit OSC hyperlinks. Matching only SGR left those bytes on screen.
     const trace = stripAnsi((output.traceback ?? []).join("\n"))
     return (
-      <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-danger-tint p-3 font-mono text-[12px] leading-relaxed text-danger">
+      <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-danger-tint p-3 font-mono text-xs leading-relaxed text-danger">
         {trace || `${output.ename}: ${output.evalue}`}
       </pre>
     )
@@ -145,11 +147,11 @@ export function CellOutputs({ outputs }: { outputs: Output[] }) {
     <div className="group/out relative flex border-t border-border/60 bg-muted/25">
       {/* An "Out" rail mirrors the code cell's run gutter, so a result reads as the
           cell's output rather than floating text; clicking it collapses the output. */}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={() => setCollapsed((c) => !c)}
         title={collapsed ? "Show output" : "Hide output"}
-        className="flex w-12 shrink-0 flex-col items-center gap-1 pt-2.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60 transition hover:text-foreground"
+        className="h-auto w-12 flex-col justify-start gap-1 rounded-none px-0 pt-2.5 font-mono has-[>svg]:px-0 text-3xs font-normal uppercase tracking-wide text-text-tertiary/60"
       >
         Out
         {collapsed ? (
@@ -157,16 +159,16 @@ export function CellOutputs({ outputs }: { outputs: Output[] }) {
         ) : (
           <ChevronsDownUp className="size-3.5 opacity-0 transition group-hover/out:opacity-100" />
         )}
-      </button>
+      </Button>
 
       {collapsed ? (
-        <button
-          type="button"
+        <Button
+          variant="link"
           onClick={() => setCollapsed(false)}
-          className="flex-1 py-2 text-left text-xs text-muted-foreground italic hover:text-foreground"
+          className="h-auto flex-1 justify-start p-0 py-2 text-xs font-normal text-text-tertiary italic hover:text-foreground"
         >
           {outputs.length} output{outputs.length === 1 ? "" : "s"} hidden: click to show
-        </button>
+        </Button>
       ) : (
         <div className="min-w-0 flex-1 space-y-1 py-2.5 pr-14">
           {outputs.map((output) => (
@@ -178,18 +180,18 @@ export function CellOutputs({ outputs }: { outputs: Output[] }) {
       {/* Hover toolbar: copy, plus full-view for a table and download for a chart. */}
       <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition group-hover/out:opacity-100">
         {tableHtml ? (
-          <OutputAction title="Open table full view" onClick={() => setExpanded(true)}>
+          <OutputAction label="Open table full view" onClick={() => setExpanded(true)}>
             <Maximize2 className="size-3.5" />
           </OutputAction>
         ) : null}
         {chartPng ? (
-          <a href={`data:image/png;base64,${asText(chartPng)}`} download="chart.png">
-            <OutputAction title="Download chart">
+          <OutputAction label="Download chart" asChild>
+            <a href={`data:image/png;base64,${asText(chartPng)}`} download="chart.png">
               <Download className="size-3.5" />
-            </OutputAction>
-          </a>
+            </a>
+          </OutputAction>
         ) : null}
-        <OutputAction title="Copy output" onClick={copy}>
+        <OutputAction label="Copy output" onClick={copy}>
           {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
         </OutputAction>
       </div>
@@ -209,22 +211,26 @@ export function CellOutputs({ outputs }: { outputs: Output[] }) {
 }
 
 function OutputAction({
-  title,
+  label,
   onClick,
+  asChild,
   children,
 }: {
-  title: string
+  label: string
   onClick?: () => void
+  asChild?: boolean
   children: ReactNode
 }) {
   return (
-    <button
-      type="button"
-      title={title}
+    <IconButton
+      label={label}
+      variant="outline"
+      size="icon-xs"
+      asChild={asChild}
       onClick={onClick}
-      className="flex size-6 items-center justify-center rounded-md border border-border/60 bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
+      className="text-text-tertiary"
     >
       {children}
-    </button>
+    </IconButton>
   )
 }
