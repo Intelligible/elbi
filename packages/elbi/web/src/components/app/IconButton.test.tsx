@@ -42,4 +42,25 @@ describe("IconButton", () => {
     expect(button).toHaveAttribute("data-variant", "ghost")
     expect(button).toHaveAttribute("data-size", "icon-sm")
   })
+
+  it("puts no button type on an asChild anchor", () => {
+    renderIn(
+      <IconButton label="Download" asChild>
+        <a href="/file">
+          <X />
+        </a>
+      </IconButton>,
+    )
+    const link = screen.getByRole("link", { name: "Download" })
+    expect(link).not.toHaveAttribute("type")
+  })
+
+  it("is type=button by default so it never submits a form", () => {
+    renderIn(
+      <IconButton label="Close">
+        <X />
+      </IconButton>,
+    )
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("type", "button")
+  })
 })

@@ -649,7 +649,7 @@ function Toolbar({
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => name !== view.name && onRename(name)}
-            className="h-auto rounded-none border-0 bg-transparent p-0 text-lg font-semibold tracking-tight"
+            className="h-auto rounded-none border-0 bg-transparent p-0 text-lg font-semibold tracking-tight focus-visible:ring-0"
           />
         }
         actions={
@@ -708,6 +708,7 @@ function Toolbar({
               <SplitButton
                 size="sm"
                 onClick={onRunAll}
+                menuLabel="More run options"
                 menu={
                   <>
                     <DropdownMenuItem onClick={onRunFresh}>

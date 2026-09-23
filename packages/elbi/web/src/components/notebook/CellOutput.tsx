@@ -151,7 +151,7 @@ export function CellOutputs({ outputs }: { outputs: Output[] }) {
         variant="ghost"
         onClick={() => setCollapsed((c) => !c)}
         title={collapsed ? "Show output" : "Hide output"}
-        className="h-auto w-12 flex-col justify-start gap-1 rounded-none px-0 pt-2.5 font-mono has-[>svg]:px-0 text-3xs font-normal uppercase tracking-wide text-text-tertiary/60"
+        className="h-auto w-12 flex-col justify-start gap-1 rounded-none px-0 pt-2.5 pb-0 font-mono has-[>svg]:px-0 text-3xs font-normal uppercase tracking-wide text-text-tertiary/60"
       >
         Out
         {collapsed ? (

@@ -96,9 +96,7 @@ async function press(user: ReturnType<typeof userEvent.setup>, el: HTMLElement) 
 }
 
 async function openMenuItem(user: ReturnType<typeof userEvent.setup>, item: RegExp) {
-  // The Run all split button's chevron shares the name; the overflow menu comes after it.
-  const more = screen.getAllByRole("button", { name: "More actions" }).at(-1) as HTMLElement
-  await press(user, more)
+  await press(user, screen.getByRole("button", { name: "More actions" }))
   await user.click(await screen.findByRole("menuitem", { name: item }))
   return screen.findByRole("dialog")
 }
@@ -187,6 +185,24 @@ describe("NotebookPage controls", () => {
     await user.type(input, "Ada")
     await user.click(screen.getByRole("button", { name: "Submit" }))
     await waitFor(() => expect(sendInput).toHaveBeenCalledWith("nb1", "Ada"))
+  })
+
+  it("masks a password input() prompt", async () => {
+    const user = userEvent.setup()
+    vi.mocked(runNotebook).mockImplementation((_id, _body, onEvent) => {
+      onEvent({ event: "input_request", cell: "c1", prompt: "Token:", password: true } as RunEvent)
+      return { done: new Promise(() => {}), abort: () => {} }
+    })
+    const { container } = renderPage()
+    const [run] = await screen.findAllByRole("button", { name: "Run cell (Shift+Enter)" })
+    await user.click(run)
+    await screen.findByText("Token:")
+    // A password field has no textbox role, so it is found by its label attribute.
+    const field = container.querySelector('input[aria-label="Cell input"]')
+    expect(field).toHaveAttribute("type", "password")
+    await user.type(field as HTMLElement, "s3cret")
+    await user.click(screen.getByRole("button", { name: "Submit" }))
+    await waitFor(() => expect(sendInput).toHaveBeenCalledWith("nb1", "s3cret"))
   })
 
   it("saves the environment's packages and base environment", async () => {

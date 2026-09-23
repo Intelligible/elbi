@@ -14,13 +14,22 @@ export function IconButton({
   label,
   variant = "ghost",
   size = "icon-sm",
+  asChild,
   children,
   ...props
 }: IconButtonProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button type="button" variant={variant} size={size} aria-label={label} {...props}>
+        <Button
+          // A slotted child (such as an <a>) is not a button, so it takes no type.
+          type={asChild ? undefined : "button"}
+          variant={variant}
+          size={size}
+          asChild={asChild}
+          aria-label={label}
+          {...props}
+        >
           {children}
         </Button>
       </TooltipTrigger>
