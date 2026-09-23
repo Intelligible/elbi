@@ -19,7 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { derivationColumns, type GridPos, type Widget } from "@/lib/dashboards"
 import { JsonEditor } from "./JsonEditor"
-import { TileProvenance } from "./TileProvenance"
+import { ProvenanceTab } from "./TileProvenance"
 
 /** What the editor can change. A grammar-of-graphics `viz` stays with the spec editor. */
 export interface TilePatch {
@@ -81,7 +81,7 @@ export function TileEditor({
   const [format, setFormat] = useState("plain")
   const [width, setWidth] = useState(1)
   const [height, setHeight] = useState(1)
-  const [tab, setTab] = useState<"fields" | "json">("fields")
+  const [tab, setTab] = useState<"fields" | "json" | "lineage">("fields")
   const [draft, setDraft] = useState("")
   const [error, setError] = useState<string | null>(null)
 
@@ -242,11 +242,27 @@ export function TileEditor({
           >
             JSON
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={tab === "lineage"}
+            className={tabClass(tab === "lineage")}
+            onClick={() => setTab("lineage")}
+          >
+            Lineage
+          </Button>
         </div>
 
-        {bound ? <TileProvenance derivation={derivation} /> : null}
-
-        {tab === "json" ? (
+        {tab === "lineage" ? (
+          <>
+            <ProvenanceTab derivation={derivation} />
+            <DialogFooter>
+              <Button variant="ghost" onClick={onCancel}>
+                Close
+              </Button>
+            </DialogFooter>
+          </>
+        ) : tab === "json" ? (
           <>
             <Field
               label="This tile's config"
