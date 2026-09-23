@@ -1,18 +1,21 @@
 const CLASS_CALLEES = new Set(["cn", "clsx", "cva", "twMerge"])
 // Under cva(...), object keys are variant names (e.g. `default`, `icon-xs`), not class strings.
 const KEY_CLASS_CALLEES = new Set(["cn", "clsx", "twMerge"])
-const CLASS_ATTRS = new Set(["className", "class"])
-// `const fieldClass = "..."`: class strings kept in a variable before reaching className.
-const CLASS_VARIABLE = /(?:class|classes|cls)$/i
+// `className`, `class`, and props such as `listClassName`.
+const isClassAttr = (name) => name === "class" || /(?:^c|C)lassName$/.test(name)
+// `const fieldClass = "..."` or `const TAB_TRIGGER = "..."`: class strings kept in a
+// variable before reaching className.
+const isClassVariable = (name) =>
+  /(?:class|classes|cls|classname)$/i.test(name) || /^[A-Z][A-Z0-9_]*$/.test(name)
 
 function inClassContext(node) {
   for (let p = node.parent; p; p = p.parent) {
-    if (p.type === "JSXAttribute") return CLASS_ATTRS.has(p.name.name)
+    if (p.type === "JSXAttribute") return isClassAttr(p.name.name)
     if (p.type === "CallExpression" && p.callee.type === "Identifier") {
       if (CLASS_CALLEES.has(p.callee.name)) return true
     }
     if (p.type === "VariableDeclarator" && p.id.type === "Identifier") {
-      return CLASS_VARIABLE.test(p.id.name)
+      return isClassVariable(p.id.name)
     }
     if (p.type === "Program") return false
   }
