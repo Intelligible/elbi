@@ -23,6 +23,10 @@ export default [
     rules: {
       "eslint-comments/require-description": ["error", { ignore: [] }],
       "ds/no-raw-element": "error",
+      "ds/no-arbitrary-value": "error",
+      "ds/no-color-literal": "error",
+      "ds/no-legacy-css": "error",
+      "ds/allowed-shadow": "error",
       "no-restricted-globals": [
         "error",
         { name: "confirm", message: "Use useFeedback().confirm (components/ui/feedback)." },
@@ -43,5 +47,10 @@ export default [
         },
       ],
     },
+  },
+  {
+    // Charts resolve palette tokens at runtime; brand icons carry third-party colours.
+    files: ["src/lib/chart-theme.ts", "src/components/viz/**", "src/components/warehouse/SourceIcon.tsx"],
+    rules: { "ds/no-color-literal": "off" },
   },
 ]
