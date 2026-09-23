@@ -138,7 +138,7 @@ export function NotebookPage() {
   // A cell's pending input() prompt (from the run stream), and the text being typed.
   const [inputPrompt, setInputPrompt] = useState<{
     cell: string
-    text: string
+    prompt: string
     password: boolean
   } | null>(null)
   const [inputValue, setInputValue] = useState("")
@@ -276,7 +276,7 @@ export function NotebookPage() {
       if (event.event === "input_request") {
         setInputPrompt({
           cell: event.cell,
-          text: event.prompt,
+          prompt: event.prompt,
           password: event.password,
         })
       }
@@ -498,7 +498,7 @@ export function NotebookPage() {
                   }}
                 >
                   <span className="font-mono text-sm text-info">
-                    {inputPrompt.text || "Input:"}
+                    {inputPrompt.prompt || "Input:"}
                   </span>
                   <Input
                     autoFocus

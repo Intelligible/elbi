@@ -28,12 +28,7 @@ export default [
       "ds/no-legacy-css": "error",
       "ds/allowed-shadow": "error",
       "ds/known-color-token": "error",
-      "no-restricted-globals": [
-        "error",
-        { name: "confirm", message: "Use useFeedback().confirm (components/ui/feedback)." },
-        { name: "alert", message: "Use useFeedback().toast (components/ui/feedback)." },
-        { name: "prompt", message: "Use a Dialog with an Input." },
-      ],
+      "ds/no-native-dialog": "error",
       "no-restricted-properties": [
         "error",
         { object: "window", property: "confirm", message: "Use useFeedback().confirm." },
