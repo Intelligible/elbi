@@ -79,6 +79,7 @@ function ModelDetailBody() {
   const { name = "" } = useParams()
   const navigate = useNavigate()
   const fb = useFeedback()
+
   const [d, setD] = useState<RegisteredModelDetail | RegistryUnavailable | "missing" | null>(null)
   const load = useCallback(() => {
     getRegisteredModel(name).then((r) => setD(r ?? "missing"))
@@ -87,6 +88,25 @@ function ModelDetailBody() {
   const { jobs, dismiss } = useTrainingJobs(load, name)
 
   const detail = d !== null && d !== "missing" && !("unavailable" in d) ? d : null
+
+  // The champion when there is one, else the newest version. Asking for neither makes
+  // the server resolve `@champion`, which a model whose only version is inconclusive
+  // does not have — the request 404s and the button appears to do nothing.
+  const trainingVersion =
+    detail === null
+      ? null
+      : (detail.championVersion ??
+        (detail.versions.length ? Math.max(...detail.versions.map((v) => v.version)) : null))
+
+  const openTrainingScript = async (version: number) => {
+    try {
+      const notebook = await notebookFromModel(detail?.name ?? "", String(version))
+      navigate(`/notebooks/${notebook.id}`)
+    } catch (err) {
+      // Most often: the version was registered without its script.
+      fb.toast("error", err instanceof Error ? err.message : `No script for v${version}`)
+    }
+  }
 
   const removeModel = async () => {
     if (!detail) return
@@ -156,14 +176,16 @@ function ModelDetailBody() {
                 <ExternalLink className="size-4" /> View in MLflow
               </a>
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => notebookFromModel(d.name).then((r) => navigate(`/notebooks/${r.id}`))}
-              title="Open the training script in a notebook"
-            >
-              <NotebookPen className="size-4" /> Open in notebook
-            </Button>
+            {trainingVersion !== null && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openTrainingScript(trainingVersion)}
+                title={`Open v${trainingVersion}'s training script in a notebook`}
+              >
+                <NotebookPen className="size-4" /> Open in notebook
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link to={`/models/train?name=${encodeURIComponent(d.name)}`}>
                 <Plus className="size-4" /> Train new version
