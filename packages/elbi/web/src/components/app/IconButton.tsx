@@ -3,7 +3,7 @@ import type { ComponentProps, ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
-type IconButtonProps = Omit<ComponentProps<typeof Button>, "size" | "children"> & {
+type IconButtonProps = Omit<ComponentProps<typeof Button>, "size" | "children" | "aria-label"> & {
   label: string
   size?: "icon" | "icon-xs" | "icon-sm" | "icon-lg"
   children: ReactNode
