@@ -84,7 +84,7 @@ export function MapHeatmap({ rows, encoding }: { rows: Row[]; encoding: Encoding
 
   if (!points.length) {
     return (
-      <div className="grid h-64 place-items-center text-sm text-muted-foreground">
+      <div className="grid h-64 place-items-center text-sm text-text-tertiary">
         no mappable coordinates in the result
       </div>
     )

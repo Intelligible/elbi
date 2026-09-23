@@ -35,7 +35,7 @@ export function VizView({
     return (
       <Suspense
         fallback={
-          <div className="grid h-full min-h-40 place-items-center text-sm text-muted-foreground">
+          <div className="grid h-full min-h-40 place-items-center text-sm text-text-tertiary">
             loading map…
           </div>
         }
