@@ -15,10 +15,19 @@ import {
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { IconButton } from "@/components/app/IconButton"
 import { Scene, SceneBody, SceneHeader, SceneSection } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import { useTheme } from "@/hooks/useTheme"
 import type {
@@ -337,26 +346,22 @@ function TabStrip({
     { id: "schedules", label: "Schedules" },
   ]
   return (
-    <div className="flex gap-1">
-      {tabs.map((t) => (
-        <button
-          type="button"
-          key={t.id}
-          onClick={() => onTab(t.id)}
-          className={
-            "flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors " +
-            (tab === t.id
-              ? "border-primary font-medium text-foreground"
-              : "border-transparent text-text-secondary hover:text-foreground")
-          }
-        >
-          {t.label}
-          {t.badge}
-        </button>
-      ))}
-    </div>
+    <Tabs value={tab} onValueChange={(v) => onTab(v as Tab)}>
+      <TabsList className="flex w-full justify-start gap-1 rounded-none bg-transparent p-0 group-data-[orientation=horizontal]/tabs:h-auto">
+        {tabs.map((t) => (
+          <TabsTrigger key={t.id} value={t.id} className={TAB_TRIGGER}>
+            {t.label}
+            {t.badge}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }
+
+// An underlined header tab: the active one carries a primary bottom border.
+const TAB_TRIGGER =
+  "h-auto flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-normal text-text-secondary transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-medium group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none dark:text-text-secondary dark:data-[state=active]:border-primary dark:data-[state=active]:bg-transparent"
 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -426,11 +431,10 @@ function RunHistoryMatrix({
         <div className="grid gap-x-1 gap-y-1" style={{ gridTemplateColumns: gridCols }}>
           <div /> {/* corner */}
           {runs.map((r) => (
-            <button
-              type="button"
+            <IconButton
               key={r.id}
-              className="flex h-6 items-center justify-center"
-              title={`${r.cause} · ${r.status} · ${ago(r.startedAt)}`}
+              label={`${r.cause} · ${r.status} · ${ago(r.startedAt)}`}
+              size="icon-xs"
               onClick={() => onSelect(r.id)}
             >
               <span
@@ -440,7 +444,7 @@ function RunHistoryMatrix({
                   boxShadow: r.id === selectedId ? "0 0 0 2px var(--primary)" : undefined,
                 }}
               />
-            </button>
+            </IconButton>
           ))}
           {history.assets.map((asset) => (
             <MatrixRow key={asset} asset={asset} runs={runs} onSelect={onSelect} />
@@ -469,23 +473,23 @@ function MatrixRow({
       {runs.map((r) => {
         const state = r.cells[asset]
         return (
-          <button
-            type="button"
+          <IconButton
             key={r.id}
-            className="flex h-5 items-center justify-center"
-            title={
+            label={
               state ? `${asset} · ${state} · ${ago(r.startedAt)}` : `${asset} · not in this run`
             }
+            size="icon-xs"
+            className="h-5"
             onClick={() => onSelect(r.id)}
           >
             <span
-              className="size-4 rounded-[3px]"
+              className="size-4 rounded-sm"
               style={{
                 background: state ? STATE_COLOR[state] : "var(--muted)",
                 opacity: state ? 1 : 0.4,
               }}
             />
-          </button>
+          </IconButton>
         )
       })}
     </>
@@ -502,7 +506,7 @@ function MatrixLegend() {
     <div className="flex flex-wrap items-center gap-4 px-1 text-xs text-text-tertiary">
       {items.map(([state, label]) => (
         <span key={state} className="flex items-center gap-1.5">
-          <span className="size-3 rounded-[3px]" style={{ background: STATE_COLOR[state] }} />
+          <span className="size-3 rounded-sm" style={{ background: STATE_COLOR[state] }} />
           {label}
         </span>
       ))}
@@ -567,14 +571,14 @@ function RunDetailPanel({
               Retry
             </Button>
           ) : null}
-          <button
-            type="button"
-            className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted/60 hover:text-foreground"
+          <IconButton
+            label="Close run detail"
+            size="icon-xs"
+            className="text-text-tertiary"
             onClick={onClose}
-            aria-label="Close run detail"
           >
             <X className="size-4" />
-          </button>
+          </IconButton>
         </div>
       </div>
       <div className="divide-y divide-border">
@@ -604,13 +608,14 @@ function StepRow({ step, left, width }: { step: RunStep; left: number; width: nu
           {step.error ? "failed" : dur(step.durationMs)}
         </span>
         {step.logs || step.error ? (
-          <button
-            type="button"
-            className="shrink-0 text-text-tertiary underline-offset-2 transition-colors hover:text-foreground hover:underline"
+          <Button
+            variant="link"
+            className="h-auto p-0 text-xs font-normal text-text-tertiary underline-offset-2 hover:text-foreground"
+            aria-expanded={showLogs}
             onClick={() => setShowLogs((v) => !v)}
           >
             {showLogs ? "hide" : "logs"}
-          </button>
+          </Button>
         ) : null}
       </div>
       {/* Gantt track (full panel width, under the label line) */}
@@ -643,7 +648,7 @@ function StepRow({ step, left, width }: { step: RunStep; left: number; width: nu
             return (
               <span
                 key={c.name}
-                className="rounded border px-1.5 py-0.5 text-[10px]"
+                className="rounded border px-1.5 py-0.5 text-3xs"
                 style={{ borderColor: color, color }}
                 title={c.error ?? c.expr}
               >
@@ -654,7 +659,7 @@ function StepRow({ step, left, width }: { step: RunStep; left: number; width: nu
         </div>
       ) : null}
       {showLogs ? (
-        <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-surface-secondary p-2 font-mono text-[11px] leading-relaxed text-text-secondary">
+        <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-surface-secondary p-2 font-mono text-2xs leading-relaxed text-text-secondary">
           {step.error ? `${step.error}\n\n` : ""}
           {step.logs || "(no output)"}
         </pre>
@@ -664,6 +669,11 @@ function StepRow({ step, left, width }: { step: RunStep; left: number; width: nu
 }
 
 type StatusFilter = "all" | Freshness
+
+// A 24px icon button whose negative margin keeps the 14px footprint of the icon it holds.
+const ICON_14 = "-m-1.25 text-text-tertiary"
+// The same for a 16px icon.
+const ICON_16 = "-m-1 text-text-tertiary"
 
 function AssetsPanel({
   assets,
@@ -741,28 +751,32 @@ function AssetsPanel({
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-0.5">
           {filters.map(([key, label]) => (
-            <button
-              type="button"
+            <Button
               key={key}
+              variant="ghost"
+              size="xs"
+              aria-pressed={filter === key}
               className={
-                "rounded-md px-2 py-1 text-xs transition-colors " +
+                "gap-0.75 font-normal " +
                 (filter === key
-                  ? "bg-accent text-foreground"
-                  : "text-text-secondary hover:text-foreground")
+                  ? "bg-accent text-foreground hover:text-foreground dark:hover:bg-accent"
+                  : "text-text-secondary")
               }
               onClick={() => setFilter(key)}
             >
               {label} <span className="tabular-nums text-text-tertiary">{counts[key]}</span>
-            </button>
+            </Button>
           ))}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="xs"
+          aria-pressed={grouped && filter === "all"}
           className={
-            "ml-auto flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs transition-colors " +
+            "ml-auto h-6.5 px-2 font-normal has-[>svg]:px-2 " +
             (grouped && filter === "all"
-              ? "bg-accent text-foreground"
-              : "text-text-secondary hover:text-foreground")
+              ? "bg-accent text-foreground hover:text-foreground"
+              : "text-text-secondary")
           }
           onClick={() => setGrouped((v) => !v)}
           disabled={filter !== "all"}
@@ -770,7 +784,7 @@ function AssetsPanel({
         >
           {grouped ? <Rows3 className="size-3.5" /> : <LayoutList className="size-3.5" />}
           Group
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-3">
@@ -798,32 +812,33 @@ function AssetsPanel({
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          aria-expanded={open}
                           className={
-                            "flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs transition-colors " +
+                            "h-5.5 font-normal " +
                             (open
-                              ? "bg-accent text-foreground"
-                              : "text-text-tertiary hover:text-foreground")
+                              ? "bg-accent text-foreground hover:text-foreground"
+                              : "text-text-tertiary")
                           }
                           onClick={() => setOpenChecks(open ? null : asset.asset)}
                           title="Data-quality checks"
                         >
                           <ShieldCheck className="size-3.5" />
                           {assetChecks.length > 0 ? assetChecks.length : "checks"}
-                        </button>
+                        </Button>
                         {asset.verdict ? <VerdictBadge verdict={asset.verdict} /> : null}
                         <Badge variant={FRESHNESS_VARIANT[asset.status]}>{asset.status}</Badge>
-                        <button
-                          type="button"
-                          className="text-text-tertiary transition-colors hover:text-foreground disabled:opacity-40"
+                        <IconButton
+                          label={`Materialize ${asset.asset}`}
+                          size="icon-xs"
+                          className={ICON_14}
                           onClick={() => onMaterialize(asset.asset)}
                           disabled={busy}
-                          aria-label={`Materialize ${asset.asset}`}
-                          title="Materialize this asset and its downstream"
                         >
                           <Play className="size-3.5" />
-                        </button>
+                        </IconButton>
                       </div>
                     </div>
                     {open ? (
@@ -852,6 +867,10 @@ function AssetsPanel({
     </div>
   )
 }
+
+// A 28px select that sits in a row of h-7 inputs. Each gets a fixed width that fits its
+// longest option, so the row does not reflow as the value changes.
+const COMPACT_TRIGGER = "justify-between gap-0 bg-card pr-0.5 pl-2 text-xs data-[size=sm]:h-7"
 
 function CheckEditor({
   asset,
@@ -890,20 +909,20 @@ function CheckEditor({
               <li key={c.id} className="flex items-center gap-2">
                 <span className="font-medium">{c.name}</span>
                 <span
-                  className="rounded border px-1 text-[10px] uppercase"
+                  className="rounded border px-1 text-3xs uppercase"
                   style={{ borderColor: color, color }}
                 >
                   {c.severity}
                 </span>
                 <code className="min-w-0 flex-1 truncate text-text-secondary">{c.expr}</code>
-                <button
-                  type="button"
-                  className="text-text-tertiary transition-colors hover:text-danger"
+                <IconButton
+                  label={`Delete check ${c.name}`}
+                  size="icon-xs"
+                  className={`${ICON_14} hover:text-danger`}
                   onClick={() => onDelete(c.id)}
-                  aria-label={`Delete check ${c.name}`}
                 >
                   <Trash2 className="size-3.5" />
-                </button>
+                </IconButton>
               </li>
             )
           })}
@@ -922,14 +941,19 @@ function CheckEditor({
           value={expr}
           onChange={(e) => setExpr(e.target.value)}
         />
-        <select
-          className="h-7 rounded-md border border-border bg-card px-1 text-xs"
-          value={severity}
-          onChange={(e) => setSeverity(e.target.value as CheckSeverity)}
-        >
-          <option value="warn">warn</option>
-          <option value="error">error</option>
-        </select>
+        <Select value={severity} onValueChange={(v) => setSeverity(v as CheckSeverity)}>
+          <SelectTrigger size="sm" aria-label="Severity" className={`${COMPACT_TRIGGER} w-14.5`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="warn" className="text-xs">
+              warn
+            </SelectItem>
+            <SelectItem value="error" className="text-xs">
+              error
+            </SelectItem>
+          </SelectContent>
+        </Select>
         <Button size="sm" variant="outline" onClick={add} disabled={!name || !expr}>
           <Plus className="size-3.5" /> Add
         </Button>
@@ -1173,17 +1197,17 @@ function WorkflowsPanel({
               <Button size="sm" variant="outline" onClick={() => load(wf)}>
                 Edit
               </Button>
-              <button
-                type="button"
-                className="text-text-tertiary transition-colors hover:text-danger"
+              <IconButton
+                label={`Delete workflow ${wf.name}`}
+                size="icon-xs"
+                className={`${ICON_16} hover:text-danger`}
                 onClick={async () => {
                   await deleteWorkflow(wf.id)
                   onChange()
                 }}
-                aria-label={`Delete workflow ${wf.name}`}
               >
                 <Trash2 className="size-4" />
-              </button>
+              </IconButton>
             </div>
           </li>
         ))}
@@ -1219,42 +1243,56 @@ function WorkflowsPanel({
                 value={step.id}
                 onChange={(e) => setStep(step.rowId, { id: e.target.value })}
               />
-              <select
-                className="h-7 rounded-md border border-border bg-card px-1"
+              <Select
                 value={step.selection}
-                onChange={(e) =>
-                  setStep(step.rowId, { selection: e.target.value as "stale" | "all" })
-                }
+                onValueChange={(v) => setStep(step.rowId, { selection: v as "stale" | "all" })}
               >
-                <option value="stale">materialize stale</option>
-                <option value="all">materialize all</option>
-              </select>
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Selection"
+                  className={`${COMPACT_TRIGGER} w-30`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="stale" className="text-xs">
+                    materialize stale
+                  </SelectItem>
+                  <SelectItem value="all" className="text-xs">
+                    materialize all
+                  </SelectItem>
+                </SelectContent>
+              </Select>
               <Input
                 className="h-7 w-40"
                 placeholder="depends on (ids)"
                 value={step.dependsOn}
                 onChange={(e) => setStep(step.rowId, { dependsOn: e.target.value })}
               />
-              <select
-                className="h-7 rounded-md border border-border bg-card px-1"
+              <Select
                 value={step.runIf}
-                onChange={(e) => setStep(step.rowId, { runIf: e.target.value as RunIf })}
+                onValueChange={(v) => setStep(step.rowId, { runIf: v as RunIf })}
               >
-                {RUN_IF_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    run if {o.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger size="sm" aria-label="Run if" className={`${COMPACT_TRIGGER} w-48`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RUN_IF_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                      run if {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {steps.length > 1 ? (
-                <button
-                  type="button"
-                  className="text-text-tertiary transition-colors hover:text-danger"
+                <IconButton
+                  label="Remove step"
+                  size="icon-xs"
+                  className={`${ICON_14} hover:text-danger`}
                   onClick={() => setSteps((prev) => prev.filter((s) => s.rowId !== step.rowId))}
-                  aria-label="Remove step"
                 >
                   <Trash2 className="size-3.5" />
-                </button>
+                </IconButton>
               ) : null}
             </div>
           ))}
@@ -1316,17 +1354,17 @@ function SchedulesPanel({
               {s.mode === "cron" ? `on “${s.cron}”` : `when ${s.dataset} changes`}
             </span>
           </span>
-          <button
-            type="button"
-            className="text-text-tertiary transition-colors hover:text-danger"
+          <IconButton
+            label="Delete schedule"
+            size="icon-xs"
+            className={`${ICON_16} hover:text-danger`}
             onClick={async () => {
               await deleteSchedule(s.id)
               onChange()
             }}
-            aria-label="Delete schedule"
           >
             <Trash2 className="size-4" />
-          </button>
+          </IconButton>
         </div>
       ))}
       {schedules.length === 0 ? (
@@ -1354,17 +1392,22 @@ function SchedulesPanel({
       </div>
       <div className="flex items-center gap-2 border-t border-border pt-3 text-xs">
         <span className="text-text-secondary">Retry a failed asset</span>
-        <select
-          className="h-7 rounded-md border border-border bg-card px-1"
-          value={retries}
-          onChange={(e) => onSetRetries(Number(e.target.value))}
-        >
-          {[0, 1, 2, 3, 5].map((n) => (
-            <option key={n} value={n}>
-              {n === 0 ? "no retries" : `${n} ${n === 1 ? "time" : "times"}`}
-            </option>
-          ))}
-        </select>
+        <Select value={String(retries)} onValueChange={(v) => onSetRetries(Number(v))}>
+          <SelectTrigger
+            size="sm"
+            aria-label="Retry a failed asset"
+            className={`${COMPACT_TRIGGER} w-20.5`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[0, 1, 2, 3, 5].map((n) => (
+              <SelectItem key={n} value={String(n)} className="text-xs">
+                {n === 0 ? "no retries" : `${n} ${n === 1 ? "time" : "times"}`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <span className="text-text-tertiary">with exponential backoff.</span>
         {compute ? (
           <span className="ml-auto text-text-tertiary">
