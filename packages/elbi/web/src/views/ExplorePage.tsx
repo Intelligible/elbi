@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/select"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import { VizView } from "@/components/viz/VizView"
+import { cellText, downloadText, toCsv } from "@/lib/download"
 import {
   type CatalogTable,
   type Cell,
@@ -1472,31 +1473,12 @@ function formatCell(value: Cell): string {
 }
 
 // ---- Result export / copy (CSV · JSON · Markdown) ---------------------------
-function cellText(v: Cell): string {
-  return v === null || v === undefined ? "" : String(v)
-}
-function toCsv(columns: string[], rows: Record<string, Cell>[]): string {
-  const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
-  const head = columns.map(esc).join(",")
-  const body = rows.map((r) => columns.map((c) => esc(cellText(r[c]))).join(",")).join("\n")
-  return `${head}\n${body}`
-}
 function toMarkdown(columns: string[], rows: Record<string, Cell>[]): string {
   const head = `| ${columns.join(" | ")} |`
   const sep = `| ${columns.map(() => "---").join(" | ")} |`
   const body = rows.map((r) => `| ${columns.map((c) => cellText(r[c])).join(" | ")} |`).join("\n")
   return `${head}\n${sep}\n${body}`
 }
-function downloadText(filename: string, text: string, mime: string): void {
-  const blob = new Blob([text], { type: mime })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 function ResultActions({ result, name }: { result: QueryResult; name: string }) {
   const base = name.replace(/\s+/g, "_").toLowerCase() || "query"
   const copy = (text: string) => void copyText(text)

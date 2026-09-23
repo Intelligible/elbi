@@ -1,0 +1,535 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+  /* Elbi's own tokens (packages/elbi/web/src/index.css), so a snapshot reads as the app. */
+  :root {
+    --bg: oklch(0.972 0 0);
+    --card: #ffffff;
+    --fg: oklch(0.185 0 0);
+    --text-2: oklch(0.44 0 0);
+    --text-3: oklch(0.535 0 0);
+    --border: oklch(0.902 0 0);
+    --grid: oklch(0.931 0 0);
+    --tab-bg: oklch(0.955 0 0);
+    --primary: oklch(0.42 0.062 50);
+    --danger: oklch(0.56 0.2 26);
+    --danger-tint: color-mix(in oklab, var(--danger) 10%, transparent);
+    --mark-neutral: oklch(0.8 0.004 50);
+    --data-1: oklch(0.55 0.11 55);
+    --data-2: oklch(0.6 0.13 280);
+    --data-3: oklch(0.6 0.1 240);
+    --data-4: oklch(0.66 0.15 130);
+    --data-5: oklch(0.64 0.16 20);
+    --data-6: oklch(0.68 0.13 90);
+    --tooltip-bg: oklch(0.242 0 0);
+    --tooltip-fg: oklch(0.972 0 0);
+    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: oklch(0.185 0 0); --card: oklch(0.225 0 0); --fg: oklch(0.97 0 0);
+      --text-2: oklch(0.75 0 0); --text-3: oklch(0.66 0 0); --border: oklch(0.29 0 0);
+      --grid: oklch(0.27 0 0); --tab-bg: oklch(0.225 0 0); --primary: oklch(0.72 0.088 65);
+      --danger: oklch(0.7 0.17 26); --mark-neutral: oklch(0.42 0.004 50);
+      --data-1: oklch(0.7 0.11 60); --data-2: oklch(0.7 0.12 280); --data-3: oklch(0.7 0.1 240);
+      --data-4: oklch(0.74 0.14 130); --data-5: oklch(0.72 0.14 20); --data-6: oklch(0.78 0.12 90);
+      --tooltip-bg: oklch(0.92 0 0); --tooltip-fg: oklch(0.185 0 0);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: oklch(0.185 0 0); --card: oklch(0.225 0 0); --fg: oklch(0.97 0 0);
+    --text-2: oklch(0.75 0 0); --text-3: oklch(0.66 0 0); --border: oklch(0.29 0 0);
+    --grid: oklch(0.27 0 0); --tab-bg: oklch(0.225 0 0); --primary: oklch(0.72 0.088 65);
+    --danger: oklch(0.7 0.17 26); --mark-neutral: oklch(0.42 0.004 50);
+    --data-1: oklch(0.7 0.11 60); --data-2: oklch(0.7 0.12 280); --data-3: oklch(0.7 0.1 240);
+    --data-4: oklch(0.74 0.14 130); --data-5: oklch(0.72 0.14 20); --data-6: oklch(0.78 0.12 90);
+    --tooltip-bg: oklch(0.92 0 0); --tooltip-fg: oklch(0.185 0 0);
+  }
+
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 48px; }
+  @media (min-width: 760px) { .wrap { padding-inline: 32px; } }
+
+  header { display: grid; gap: 10px; margin-bottom: 22px; }
+  .eyebrow { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); }
+  h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
+  .desc { margin: 0; max-width: 68ch; color: var(--text-2); }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 12px/1.4 var(--mono); color: var(--text-3); }
+  .meta b { font-weight: 500; color: var(--text-2); }
+  .notice { font-size: 12px; color: var(--text-3); }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--tab-bg); border: 1px solid var(--border); border-radius: 8px; width: fit-content; max-width: 100%; margin-bottom: 18px; }
+  .tabs button { font: 500 13px/1 var(--sans); color: var(--text-2); background: none; border: 0; border-radius: 5px; padding: 9px 12px; cursor: pointer; }
+  .tabs button:hover { color: var(--fg); }
+  .tabs button[aria-selected="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+  button:focus-visible, th:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  .grid { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); }
+  @media (max-width: 759px) { .grid { grid-template-columns: minmax(0, 1fr); } .grid > * { grid-column: 1 !important; grid-row: auto !important; } }
+
+  .w { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .w h2 { margin: 0; font-size: 13px; font-weight: 500; color: var(--text-2); text-wrap: balance; }
+  .w .body { flex: 1; min-width: 0; }
+  .w.prose { background: transparent; border-color: transparent; padding-inline: 2px; }
+  .w.prose .body { max-width: 72ch; }
+  .source { font: 11px/1.3 var(--mono); color: var(--text-3); overflow-wrap: anywhere; }
+
+  .metric-value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .metric-empty { font-size: 30px; font-weight: 600; color: var(--border); }
+  .hint { font-size: 12px; color: var(--text-3); }
+
+  .md { color: var(--fg); }
+  .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+  .md p, .md ul { margin: 0 0 10px; }
+  .md ul { padding-left: 18px; }
+  .md li { margin: 3px 0; }
+  .md code { font: 12px var(--mono); background: var(--tab-bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .md strong { font-weight: 600; }
+  .md a { color: var(--primary); }
+
+  .error { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--danger); background: var(--danger-tint); border-radius: 5px; padding: 8px 10px; }
+
+  .table-wrap { overflow: auto; max-height: 420px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { position: sticky; top: 0; background: var(--card); text-align: left; font-weight: 500; color: var(--text-3); padding: 6px 8px; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; user-select: none; }
+  th[data-num] , td[data-num] { text-align: right; }
+  th .arrow { font-size: 10px; margin-left: 4px; color: var(--primary); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  .caption { margin-top: 6px; font-size: 12px; color: var(--text-3); }
+
+  .chart { position: relative; }
+  .chart svg { display: block; overflow: visible; }
+  .chart text { font: 11px var(--sans); fill: var(--text-3); }
+  .chart .axis-title { font-weight: 500; fill: var(--text-2); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .tip { position: absolute; pointer-events: none; background: var(--tooltip-bg); color: var(--tooltip-fg); font-size: 12px; border-radius: 5px; padding: 7px 9px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.18); z-index: 2; white-space: nowrap; }
+  .tip div { display: flex; justify-content: space-between; gap: 14px; }
+  .tip span:last-child { font-variant-numeric: tabular-nums; font-weight: 500; }
+
+  footer { margin-top: 28px; font-size: 12px; color: var(--text-3); max-width: 72ch; }
+  @media (prefers-reduced-motion: no-preference) { .tabs button { transition: background-color 120ms, color 120ms; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Elbi dashboard snapshot</div>
+    <h1 id="title"></h1>
+    <p class="desc" id="desc"></p>
+    <div class="meta" id="meta"></div>
+    <div class="notice" id="notice" hidden></div>
+  </header>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <main class="grid" id="grid"></main>
+  <footer>Frozen at the time above: these figures do not update. Each tile names the derivation that produced it and a short fingerprint of the data it read, so any figure can be traced back to the governed source.</footer>
+</div>
+
+<script id="snapshot-data" type="application/json">__DATA__</script>
+<script>
+(() => {
+  const S = JSON.parse(document.getElementById("snapshot-data").textContent);
+  const EMPTY = "—";
+  const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // -- header -------------------------------------------------------------------
+  document.getElementById("title").textContent = S.title;
+  const desc = document.getElementById("desc");
+  if (S.description) desc.textContent = S.description; else desc.hidden = true;
+  const when = (iso) => {
+    if (!iso) return EMPTY;
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+  };
+  const meta = document.getElementById("meta");
+  const metaItems = [["Taken", when(S.snapshotAt)], [S.status === "published" ? "Published version" : "Draft version", S.version], ["Last edited", when(S.updatedAt)]];
+  for (const [k, v] of metaItems) { const s = $("span"); s.innerHTML = `${esc(k)} <b>${esc(v ?? EMPTY)}</b>`; meta.append(s); }
+  if (S.hasVariables) {
+    const n = document.getElementById("notice");
+    n.textContent = "This dashboard has filters. The snapshot shows them at their default values.";
+    n.hidden = false;
+  }
+
+  // -- formatting (mirrors DashboardWidget.tsx) -------------------------------------
+  function formatValue(value, format) {
+    if (value === null || value === undefined) return EMPTY;
+    const num = typeof value === "number" ? value : Number(value);
+    if (Number.isNaN(num)) return String(value);
+    if (format === "currency") return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    if (format === "percent") return num.toLocaleString(undefined, { style: "percent", maximumFractionDigits: 1 });
+    return num.toLocaleString(undefined, { maximumFractionDigits: Number.isInteger(num) ? 0 : 1 });
+  }
+  function aggregate(rows, field, agg) {
+    const nums = rows.map((r) => Number(r[field])).filter((n) => Number.isFinite(n));
+    if (!nums.length) return undefined;
+    switch (agg) {
+      case "sum": return nums.reduce((a, b) => a + b, 0);
+      case "mean": return nums.reduce((a, b) => a + b, 0) / nums.length;
+      case "min": return Math.min(...nums);
+      case "max": return Math.max(...nums);
+    }
+  }
+  const fmtCell = (v) => {
+    if (v === null || v === undefined || v === "") return EMPTY;
+    if (typeof v === "number") return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  };
+  const fmtAxis = (n) => Math.abs(n) >= 1e6 ? (n / 1e6).toLocaleString(undefined, { maximumFractionDigits: 1 }) + "M"
+    : Math.abs(n) >= 1e4 ? (n / 1e3).toLocaleString(undefined, { maximumFractionDigits: 0 }) + "k"
+    : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  // -- markdown: the subset derivations and text widgets actually write ---------------
+  function inline(s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+  function markdown(text) {
+    const out = [];
+    for (const block of String(text).trim().split(/\n\s*\n/)) {
+      const lines = block.split("\n");
+      if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {
+        out.push("<ul>" + lines.map((l) => `<li>${inline(l.replace(/^\s*[-*]\s+/, ""))}</li>`).join("") + "</ul>");
+      } else if (/^#{1,6}\s/.test(lines[0])) {
+        out.push(`<p><strong>${inline(lines[0].replace(/^#+\s*/, ""))}</strong></p>` + (lines.length > 1 ? `<p>${inline(lines.slice(1).join(" "))}</p>` : ""));
+      } else {
+        out.push(`<p>${inline(lines.join(" "))}</p>`);
+      }
+    }
+    return out.join("");
+  }
+
+  // -- widget bodies ----------------------------------------------------------------
+  const rowsOf = (data) => Array.isArray(data?.value) ? data.value : [];
+
+  function metricBody(w) {
+    const viz = w.viz || {};
+    const rows = rowsOf(w.data);
+    let raw;
+    if (viz.agg === "count") raw = rows.length;
+    else if (viz.agg && viz.field) raw = aggregate(rows, viz.field, viz.agg);
+    else if (viz.field && rows.length) raw = rows[0][viz.field];
+    else if (typeof w.data?.value === "number" || typeof w.data?.value === "string") raw = w.data.value;
+    const box = $("div");
+    if (raw === null || raw === undefined) {
+      box.append($("div", "metric-empty", EMPTY), $("div", "hint", viz.field ? `No column “${viz.field}” in the result.` : "No value."));
+    } else {
+      box.append($("div", "metric-value", formatValue(raw, viz.format)));
+    }
+    return box;
+  }
+
+  function tableBody(w, rows, note) {
+    const box = $("div");
+    if (!rows.length) { box.append($("div", "hint", "No rows.")); return box; }
+    const viz = w.viz || {};
+    const cols = Array.isArray(viz.columns) ? viz.columns : Object.keys(rows[0]);
+    const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50;
+    const numeric = new Set(cols.filter((c) => rows.every((r) => r[c] == null || typeof r[c] === "number")));
+    let sortCol = null, sortDir = 1;
+    const wrap = $("div", "table-wrap");
+    const table = $("table");
+    const thead = $("thead"), tbody = $("tbody");
+    const hr = $("tr");
+    const ths = cols.map((c) => {
+      const th = $("th", null, c);
+      th.tabIndex = 0;
+      th.setAttribute("aria-sort", "none");
+      if (numeric.has(c)) th.dataset.num = "";
+      const go = () => { sortDir = sortCol === c ? -sortDir : (numeric.has(c) ? -1 : 1); sortCol = c; draw(); };
+      th.addEventListener("click", go);
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      hr.append(th);
+      return th;
+    });
+    thead.append(hr);
+    table.append(thead, tbody);
+    wrap.append(table);
+    box.append(wrap);
+    const cap = $("div", "caption");
+    function draw() {
+      let view = rows.slice();
+      if (sortCol) view.sort((a, b) => {
+        const x = a[sortCol], y = b[sortCol];
+        if (x == null) return 1; if (y == null) return -1;
+        return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * sortDir;
+      });
+      ths.forEach((th, i) => {
+        th.querySelector(".arrow")?.remove();
+        const on = cols[i] === sortCol;
+        th.setAttribute("aria-sort", on ? (sortDir > 0 ? "ascending" : "descending") : "none");
+        if (on) th.append($("span", "arrow", sortDir > 0 ? "▲" : "▼"));
+      });
+      tbody.replaceChildren(...view.slice(0, pageSize).map((r) => {
+        const tr = $("tr");
+        for (const c of cols) { const td = $("td", null, fmtCell(r[c])); if (numeric.has(c)) td.dataset.num = ""; tr.append(td); }
+        return tr;
+      }));
+    }
+    draw();
+    const bits = [];
+    if (rows.length > pageSize) bits.push(`Showing ${pageSize} of ${rows.length} rows.`);
+    if (note) bits.push(note);
+    if (bits.length) { cap.textContent = bits.join(" "); box.append(cap); }
+    return box;
+  }
+
+  // -- charts: bar and line marks from a vega-lite encoding ----------------------------
+  const SERIES = ["--data-1", "--data-2", "--data-3", "--data-4", "--data-5", "--data-6"];
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function niceTicks(max, count = 5) {
+    if (!(max > 0)) return [0, 1];
+    const step0 = max / count, mag = 10 ** Math.floor(Math.log10(step0));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= step0);
+    const ticks = [];
+    for (let v = 0; v <= max + step * 0.001; v += step) ticks.push(+v.toFixed(10));
+    if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
+    return ticks;
+  }
+  const measure = (() => { const c = document.createElement("canvas").getContext("2d"); return (s) => { c.font = "11px " + css("--sans"); return c.measureText(s).width; }; })();
+  const clip = (s, px) => { s = String(s); if (measure(s) <= px) return s; while (s.length > 1 && measure(s + "…") > px) s = s.slice(0, -1); return s + "…"; };
+  const svgEl = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+  function chartSpec(viz) {
+    const mark = typeof viz.mark === "string" ? viz.mark : viz.mark?.type;
+    const enc = viz.encoding || {};
+    if (!["bar", "line", "point"].includes(mark) || !enc.x || !enc.y) return null;
+    const xq = enc.x.type === "quantitative", yq = enc.y.type === "quantitative";
+    if (xq === yq) return null;
+    const horizontal = xq;
+    return { mark, enc, horizontal, cat: horizontal ? enc.y : enc.x, val: horizontal ? enc.x : enc.y, catCh: horizontal ? "y" : "x", valCh: horizontal ? "x" : "y" };
+  }
+
+  function chartBody(w, rows) {
+    const spec = chartSpec(w.viz || {});
+    if (!spec) return tableBody(w, rows, "This chart type is not drawn in snapshots; its data is shown instead.");
+    const { enc, cat, val, catCh, valCh, horizontal, mark } = spec;
+    const colorField = enc.color?.field;
+
+    // Categories, each with its stacked segments, in the encoding's sort order.
+    const groups = new Map();
+    const colorKeys = [];
+    for (const r of rows) {
+      const k = r[cat.field];
+      const ck = colorField ? r[colorField] : null;
+      if (colorField && !colorKeys.some((c) => c === ck)) colorKeys.push(ck);
+      if (!groups.has(k)) groups.set(k, { key: k, total: 0, segs: [], rows: [] });
+      const g = groups.get(k);
+      const v = Number(r[val.field]) || 0;
+      g.total += v; g.segs.push({ ck, v }); g.rows.push(r);
+    }
+    let cats = [...groups.values()];
+    const sort = cat.sort === undefined ? "ascending" : cat.sort;
+    if (typeof sort === "string") {
+      const m = sort.match(/^(-?)([xy])$/);
+      if (m) {
+        const dir = m[1] ? -1 : 1;
+        cats.sort(m[2] === valCh ? (a, b) => (a.total - b.total) * dir : (a, b) => String(a.key).localeCompare(String(b.key), undefined, { numeric: true }) * dir);
+      } else if (sort === "ascending" || sort === "descending") {
+        const dir = sort === "descending" ? -1 : 1;
+        cats.sort((a, b) => String(a.key).localeCompare(String(b.key), undefined, { numeric: true }) * dir);
+      }
+    }
+    // A true/false colour reads as "flagged vs not": the flag in colour, the rest neutral.
+    const boolColor = colorKeys.length && colorKeys.every((c) => typeof c === "boolean");
+    if (boolColor) colorKeys.sort((a, b) => Number(b) - Number(a));
+    const colorOf = (ck) => !colorField ? css("--data-1")
+      : boolColor ? css(ck ? "--data-1" : "--mark-neutral")
+      : css(SERIES[Math.min(colorKeys.indexOf(ck), SERIES.length - 1)]);
+
+    const box = $("div", "chart");
+    if (colorField) {
+      const lg = $("div", "legend");
+      const title = enc.color.title ?? colorField;
+      for (const ck of colorKeys) {
+        const s = $("span"); const sw = $("i"); sw.style.background = colorOf(ck);
+        s.append(sw, document.createTextNode(boolColor ? `${title}: ${ck ? "yes" : "no"}` : String(ck)));
+        lg.append(s);
+      }
+      box.append(lg);
+    }
+    const tip = $("div", "tip"); tip.hidden = true;
+    const holder = $("div");
+    box.append(holder, tip);
+
+    const tipFields = Array.isArray(enc.tooltip) ? enc.tooltip : [cat, val];
+    function showTip(g, x, y) {
+      const r = g.rows[0];
+      tip.replaceChildren(...tipFields.map((f) => {
+        const d = $("div");
+        let v = r[f.field];
+        if (f.type === "quantitative" && g.rows.length > 1 && f.field === val.field) v = g.total;
+        d.append($("span", null, f.title || f.field), $("span", null, fmtCell(v)));
+        return d;
+      }));
+      tip.hidden = false;
+      const bw = box.clientWidth, tw = tip.offsetWidth;
+      tip.style.left = Math.max(0, Math.min(x + 12, bw - tw)) + "px";
+      tip.style.top = Math.max(0, y - tip.offsetHeight - 8) + "px";
+    }
+
+    function draw() {
+      const W = Math.max(240, holder.clientWidth || box.clientWidth || 480);
+      holder.replaceChildren();
+      if (!cats.length) { holder.append($("div", "hint", "No rows.")); return; }
+      const max = Math.max(...cats.map((g) => g.total), 0);
+      const ticks = niceTicks(max);
+      const top = ticks[ticks.length - 1];
+      const valTitle = val.title === null ? null : (val.title ?? val.field);
+      const catTitle = cat.title === null ? null : (cat.title ?? cat.field);
+      const grid = css("--grid");
+      let svg;
+      if (horizontal) {
+        const band = 26, thick = 16;
+        const labelW = Math.min(W * 0.42, Math.max(...cats.map((g) => measure(String(g.key)))) + 8);
+        const m = { l: labelW + 6, r: 16, t: 4, b: valTitle ? 40 : 24 };
+        const pw = W - m.l - m.r, H = m.t + cats.length * band + m.b;
+        const sx = (v) => m.l + (v / top) * pw;
+        svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": w.title || "chart" });
+        for (const t of ticks) {
+          svg.append(svgEl("line", { x1: sx(t), x2: sx(t), y1: m.t, y2: H - m.b, stroke: grid, "stroke-width": 1 }));
+          const tx = svgEl("text", { x: sx(t), y: H - m.b + 14, "text-anchor": "middle" }); tx.textContent = fmtAxis(t); svg.append(tx);
+        }
+        if (valTitle) { const at = svgEl("text", { x: m.l + pw / 2, y: H - 6, "text-anchor": "middle", class: "axis-title" }); at.textContent = valTitle; svg.append(at); }
+        cats.forEach((g, i) => {
+          const y = m.t + i * band + (band - thick) / 2;
+          const lab = svgEl("text", { x: m.l - 8, y: y + thick / 2 + 4, "text-anchor": "end" }); lab.textContent = clip(g.key, labelW - 4); svg.append(lab);
+          let acc = 0;
+          g.segs.forEach((s, j) => {
+            const x0 = sx(acc), x1 = sx(acc + s.v); acc += s.v;
+            const last = j === g.segs.length - 1, wpx = Math.max(0, x1 - x0 - (last ? 0 : 2));
+            if (wpx <= 0) return;
+            const r = last ? Math.min(4, wpx, thick / 2) : 0;
+            svg.append(svgEl("path", { d: `M${x0},${y}h${wpx - r}a${r},${r} 0 0 1 ${r},${r}v${thick - 2 * r}a${r},${r} 0 0 1 -${r},${r}h-${wpx - r}z`, fill: colorOf(s.ck) }));
+          });
+          const hit = svgEl("rect", { x: 0, y: m.t + i * band, width: W, height: band, fill: "transparent" });
+          hit.addEventListener("mousemove", (e) => { const b = box.getBoundingClientRect(); showTip(g, e.clientX - b.left, e.clientY - b.top); });
+          hit.addEventListener("mouseleave", () => (tip.hidden = true));
+          svg.append(hit);
+        });
+      } else {
+        const H0 = 240;
+        const yLabW = Math.max(...ticks.map((t) => measure(fmtAxis(t)))) + 8;
+        const m = { l: yLabW + (valTitle ? 18 : 4), r: 8, t: 8, b: catTitle ? 44 : 26 };
+        const pw = W - m.l - m.r, ph = H0 - m.t - m.b;
+        const sy = (v) => m.t + ph - (v / top) * ph;
+        const bw = pw / cats.length, thick = Math.min(40, Math.max(4, bw * 0.62));
+        svg = svgEl("svg", { width: W, height: H0, viewBox: `0 0 ${W} ${H0}`, role: "img", "aria-label": w.title || "chart" });
+        for (const t of ticks) {
+          svg.append(svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(t), y2: sy(t), stroke: grid, "stroke-width": 1 }));
+          const tx = svgEl("text", { x: m.l - 6, y: sy(t) + 4, "text-anchor": "end" }); tx.textContent = fmtAxis(t); svg.append(tx);
+        }
+        if (valTitle) { const at = svgEl("text", { x: 0, y: 0, "text-anchor": "middle", class: "axis-title", transform: `translate(11 ${m.t + ph / 2}) rotate(-90)` }); at.textContent = valTitle; svg.append(at); }
+        if (catTitle) { const ct = svgEl("text", { x: m.l + pw / 2, y: H0 - 6, "text-anchor": "middle", class: "axis-title" }); ct.textContent = catTitle; svg.append(ct); }
+        const every = Math.ceil(cats.length / Math.max(1, Math.floor(pw / 56)));
+        const pts = [];
+        cats.forEach((g, i) => {
+          const cx = m.l + bw * i + bw / 2;
+          if (i % every === 0) { const lab = svgEl("text", { x: cx, y: m.t + ph + 16, "text-anchor": "middle" }); lab.textContent = clip(g.key, bw * every - 4); svg.append(lab); }
+          if (mark === "bar") {
+            let acc = 0;
+            g.segs.forEach((s, j) => {
+              const y0 = sy(acc), y1 = sy(acc + s.v); acc += s.v;
+              const last = j === g.segs.length - 1, hpx = Math.max(0, y0 - y1 - (last ? 0 : 2));
+              if (hpx <= 0) return;
+              const r = last ? Math.min(4, hpx, thick / 2) : 0, x = cx - thick / 2;
+              svg.append(svgEl("path", { d: `M${x},${y0}v-${hpx - r}a${r},${r} 0 0 1 ${r},-${r}h${thick - 2 * r}a${r},${r} 0 0 1 ${r},${r}v${hpx - r}z`, fill: colorOf(s.ck) }));
+            });
+          } else pts.push([cx, sy(g.total)]);
+          const hit = svgEl("rect", { x: m.l + bw * i, y: m.t, width: bw, height: ph, fill: "transparent" });
+          hit.addEventListener("mousemove", (e) => { const b = box.getBoundingClientRect(); showTip(g, e.clientX - b.left, e.clientY - b.top); });
+          hit.addEventListener("mouseleave", () => (tip.hidden = true));
+          svg.append(hit);
+        });
+        if (pts.length) {
+          const c = css("--data-1");
+          if (mark === "line") svg.append(svgEl("polyline", { points: pts.map((p) => p.join(",")).join(" "), fill: "none", stroke: c, "stroke-width": 2, "stroke-linejoin": "round", "pointer-events": "none" }));
+          for (const [x, y] of pts) svg.append(svgEl("circle", { cx: x, cy: y, r: 4, fill: c, stroke: css("--card"), "stroke-width": 2, "pointer-events": "none" }));
+        }
+      }
+      holder.append(svg);
+    }
+    requestAnimationFrame(draw);
+    let last = 0;
+    new ResizeObserver(() => { const wd = holder.clientWidth; if (wd && Math.abs(wd - last) > 1) { last = wd; draw(); } }).observe(holder);
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+    new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return box;
+  }
+
+  function widgetEl(w) {
+    const bound = !!w.data;
+    const prose = w.type === "text" && !bound;
+    const card = $("section", "w" + (prose ? " prose" : ""));
+    if (w.title) card.append($("h2", null, w.title));
+    const body = $("div", "body");
+    if (w.data?.error) {
+      const e = $("div", "error"); e.append($("span", null, "⚠"), $("span", null, w.data.error)); body.append(e);
+    } else if (w.type === "text") {
+      const md = $("div", "md");
+      const text = bound ? (typeof w.data.value === "string" ? w.data.value : fmtCell(w.data.value)) : (w.content || "");
+      md.innerHTML = markdown(text);
+      body.append(md);
+    } else if (!bound) {
+      body.append($("div", "hint", "No data was resolved for this widget."));
+    } else if (w.type === "metric") body.append(metricBody(w));
+    else if (w.type === "table") body.append(tableBody(w, rowsOf(w.data)));
+    else if (w.type === "chart" || w.type === "map") body.append(chartBody(w, rowsOf(w.data)));
+    else body.append(tableBody(w, rowsOf(w.data)));
+    card.append(body);
+    if (bound && w.data.derivation) {
+      const src = $("div", "source", `from ${w.data.derivation}` + (w.data.data_version ? ` · data ${String(w.data.data_version).slice(0, 8)}` : ""));
+      src.title = w.data.data_version ? `data version ${w.data.data_version}` : "";
+      card.append(src);
+    }
+    return card;
+  }
+
+  // -- layout: the spec's grid, with rows sized by content ------------------------------
+  const grid = document.getElementById("grid");
+  function renderPage(page) {
+    const ws = page.widgets.slice().sort((a, b) => ((a.gridPos?.y ?? 0) - (b.gridPos?.y ?? 0)) || ((a.gridPos?.x ?? 0) - (b.gridPos?.x ?? 0)));
+    const cols = page.columns || Math.max(12, ...ws.map((w) => (w.gridPos?.x ?? 0) + (w.gridPos?.w ?? 12)));
+    const starts = [...new Set(ws.map((w) => w.gridPos?.y ?? 0))].sort((a, b) => a - b);
+    grid.style.setProperty("--cols", cols);
+    grid.replaceChildren(...ws.map((w) => {
+      const el = widgetEl(w);
+      const g = w.gridPos || { x: 0, w: cols, y: 0, h: 1 };
+      const r0 = starts.indexOf(g.y ?? 0);
+      const span = starts.filter((s) => s >= (g.y ?? 0) && s < (g.y ?? 0) + (g.h ?? 1)).length || 1;
+      el.style.gridColumn = `${(g.x ?? 0) + 1} / span ${Math.min(g.w ?? cols, cols)}`;
+      el.style.gridRow = `${r0 + 1} / span ${span}`;
+      return el;
+    }));
+  }
+
+  const tabs = document.getElementById("tabs");
+  const buttons = S.pages.map((p) => {
+    const b = $("button", null, p.title);
+    b.type = "button"; b.role = "tab"; b.id = "tab-" + p.name;
+    b.addEventListener("click", () => select(p.name, true));
+    tabs.append(b);
+    return b;
+  });
+  if (S.pages.length < 2) tabs.hidden = true;
+  function select(name, push) {
+    const i = Math.max(0, S.pages.findIndex((p) => p.name === name));
+    buttons.forEach((b, j) => b.setAttribute("aria-selected", String(i === j)));
+    renderPage(S.pages[i]);
+    if (push) try { history.replaceState(null, "", "#" + S.pages[i].name); } catch (_) { location.hash = S.pages[i].name; }
+  }
+  if (S.pages.length) select(decodeURIComponent(location.hash.slice(1)), false);
+  else grid.append($("div", "hint", "This dashboard has no pages."));
+})();
+</script>
