@@ -895,7 +895,7 @@ export function NotebookEnvironmentsSection() {
                 className="size-7 text-text-tertiary hover:bg-muted hover:text-danger dark:hover:bg-muted"
                 onClick={() => setDrafts(drafts.filter((d) => d.id !== draft.id))}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </IconButton>
             </div>
             {/* ui/textarea has field-sizing-content (auto-grows to fit its value); restore

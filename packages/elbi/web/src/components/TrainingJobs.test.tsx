@@ -1,6 +1,5 @@
-// Pins TrainingStatus's dismiss control before its raw <button> moves to IconButton
-// (task-9-brief.md R2): dismissing drives useTrainingJobs' dismissed set, which is real
-// filtering logic, not just styling.
+// Dismissing a terminal job drives useTrainingJobs' dismissed set (real filtering logic,
+// not just styling), and an active job offers no dismiss control at all.
 
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"

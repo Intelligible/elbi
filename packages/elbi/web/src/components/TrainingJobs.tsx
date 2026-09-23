@@ -135,15 +135,13 @@ export function TrainingStatus({ job, onDismiss }: { job: TrainingJob; onDismiss
         </>
       )}
       {!active && (
-        // Same footprint as the old padding-less button: icon-xs sized down to the
-        // 16px icon itself (size-4 overrides icon-xs's default 24px).
         <IconButton
           label="Dismiss"
           size="icon-xs"
           className="size-4 text-text-tertiary hover:text-foreground"
           onClick={onDismiss}
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </IconButton>
       )}
     </div>

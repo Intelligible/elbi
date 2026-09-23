@@ -1,7 +1,6 @@
-// Pins the train-model form's behaviour before its native <select>/<input type="checkbox">
-// controls move to Select/Checkbox (see task-9-brief.md R2). Each test drives a control that
-// changes the submitted request, so a mapping mistake shows up as a wrong `trainModel` call
-// rather than only as an eslint pass.
+// Pins the train-model form's behaviour: each test drives a control that changes the
+// submitted request, so a mapping mistake shows up as a wrong `trainModel` call rather
+// than only as an eslint pass.
 
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -46,7 +45,7 @@ const lastReq = () => vi.mocked(trainModel).mock.calls.at(-1)?.[0]
 
 // jsdom fires a window blur on pointerdown once an earlier test's cleanup leaves nothing
 // focused, which closes a just-opened Radix Select; focusing the trigger first keeps it
-// open. A jsdom artefact, not a product bug (see task-9-brief.md's known test gotcha).
+// open. A jsdom artefact, not a product bug.
 async function pick(
   user: ReturnType<typeof userEvent.setup>,
   label: string | RegExp,
@@ -192,6 +191,28 @@ describe("TrainModelPage", () => {
     await user.click(screen.getByRole("button", { name: "Start training" }))
 
     await waitFor(() => expect(lastReq()?.metric).toBe("f1"))
+  })
+
+  it("switching the metric back to auto sends no metric at all, never the sentinel", async () => {
+    vi.mocked(getFeatureSources).mockResolvedValue(SOURCES)
+    vi.mocked(getDatasetColumns).mockResolvedValue(COLUMNS)
+    vi.mocked(trainModel).mockResolvedValue({
+      job: { id: "j1", label: "x", state: "succeeded", progress: "", result: null, error: null },
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.type(screen.getByLabelText("Model name", { exact: false }), "m")
+    await pick(user, "Data source", "orders")
+    await pick(user, "Target column", /amount/)
+    await pick(user, "Metric", "f1")
+    await pick(user, "Metric", "auto")
+
+    await user.click(screen.getByRole("button", { name: "Start training" }))
+
+    await waitFor(() => expect(lastReq()).toBeDefined())
+    expect(lastReq()).not.toHaveProperty("metric")
+    expect(lastReq()?.metric).not.toBe("auto")
   })
 
   it("ts_forecast resets the engine to flaml, and submits the time column and horizon", async () => {

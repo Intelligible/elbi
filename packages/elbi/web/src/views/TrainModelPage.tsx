@@ -88,6 +88,7 @@ function parseFeatureList(text: string): string[] {
 
 export function TrainModelPage() {
   const ensembleId = useId()
+  const featureIdPrefix = useId()
   const navigate = useNavigate()
   const [search] = useSearchParams()
   const presetName = search.get("name") ?? ""
@@ -406,18 +407,18 @@ export function TrainModelPage() {
                   </p>
                   <div className="grid max-h-56 grid-cols-2 gap-x-3 gap-y-1 overflow-y-auto rounded-lg border border-border p-2">
                     {candidates.map((c) => (
-                      <div key={c.name} className="flex items-center gap-2 text-xs">
+                      <div key={c.name} className="flex min-w-0 items-center gap-2 text-xs">
                         <Checkbox
-                          id={`feature-${c.name}`}
+                          id={`${featureIdPrefix}-${c.name}`}
                           checked={features === null || features.has(c.name)}
                           onCheckedChange={() => toggleFeature(c.name)}
                         />
                         <Label
-                          htmlFor={`feature-${c.name}`}
-                          className="gap-0 text-xs font-normal cursor-pointer"
+                          htmlFor={`${featureIdPrefix}-${c.name}`}
+                          className="min-w-0 gap-2 text-xs font-normal cursor-pointer"
                         >
-                          <span className="truncate font-mono">{c.name}</span>
-                          {!c.numeric && <span className="text-text-tertiary">(cat)</span>}
+                          <span className="min-w-0 truncate font-mono">{c.name}</span>
+                          {!c.numeric && <span className="shrink-0 text-text-tertiary">(cat)</span>}
                         </Label>
                       </div>
                     ))}
