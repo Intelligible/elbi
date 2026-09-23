@@ -3,11 +3,17 @@ import { ruleTester } from "../rule-tester.js"
 import rule from "./no-legacy-css.js"
 
 ruleTester.run("no-legacy-css", rule, {
-  valid: [`<p className="btn-ghost-like chrome" />`, `const s = "phc"`],
+  valid: [
+    `<p className="btn-ghost-like chrome" />`,
+    `const s = "phc"`,
+    // cva variant keys are variant names (e.g. "phc"), not class strings.
+    `const v = cva("", { variants: { phc: { a: "" } } })`,
+  ],
   invalid: [
     { code: `<button className="btn btn--secondary btn--sm" />`, errors: 3 },
     { code: `<div className="title-row" />`, errors: 1 },
     { code: `<div className="phc phc-muted" />`, errors: 2 },
     { code: `<span className="btn-frame" />`, errors: 1 },
+    { code: `<p className={clsx({ phc: on })} />`, errors: 1 },
   ],
 })
