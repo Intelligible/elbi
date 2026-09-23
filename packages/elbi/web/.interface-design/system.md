@@ -67,6 +67,18 @@ Primitives come from `components/ui/*` (shadcn over Radix). For the composed pie
 reach for `components/app/FormField`, `IconButton`, `EmptyState` before hand-rolling one.
 Raw `<button>` `<select>` `<input>` `<textarea>` `<table>` are not used in app code.
 
+- **Select** is controlled with a string: `value={v}`, `""` shows the placeholder. A
+  meaningful empty choice is an item with a named sentinel, mapped to `""` only at the
+  `value` / `onValueChange` boundary. Label it via `FormField` + `FormControl` around the
+  `SelectTrigger`.
+- **Icons** in `xs` / `icon-xs` buttons carry `size-*`; without it the button sizes them to 12px.
+- **Hit boxes** of adjacent icon buttons never overlap; keep negative-margin footprints to
+  one axis.
+- **State semantics**: `aria-pressed` on segmented-control options, `aria-current` on the
+  active navigation item; every `TabsTrigger` has its `TabsContent`.
+- **Parity**: moving markup onto a component accepts that component's defaults, and restores
+  any layout the page loses.
+
 ## Enforcement
 
 `npm run lint` runs Biome, then ESLint (`eslint/design-system`). `src/test/design-system.test.ts`
