@@ -203,8 +203,11 @@ describe("OrchestrationPage", () => {
     await waitFor(() => expect(getHistory).toHaveBeenCalled())
     await user.click(tab("Runs"))
 
-    await user.click(await screen.findByRole("button", { name: /^manual · failed/ }))
+    const run = await screen.findByRole("button", { name: /^manual · failed/ })
+    expect(run).toHaveAttribute("aria-pressed", "false")
+    await user.click(run)
     await waitFor(() => expect(getRun).toHaveBeenCalledWith("r2"))
+    await waitFor(() => expect(run).toHaveAttribute("aria-pressed", "true"))
     expect(await screen.findByRole("button", { name: "Close run detail" })).toBeInTheDocument()
 
     // A cell of the selected run deselects it.
@@ -256,7 +259,7 @@ describe("OrchestrationPage", () => {
     expect(screen.queryByText("orders_clean")).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Group/ })).toBeDisabled()
 
-    await user.click(screen.getByRole("button", { name: "Materialize revenue" }))
+    await user.click(screen.getByRole("button", { name: "Materialize revenue and its downstream" }))
     await waitFor(() =>
       expect(materialize).toHaveBeenCalledWith({ assets: ["revenue"], includeDownstream: true }),
     )
@@ -273,8 +276,8 @@ describe("OrchestrationPage", () => {
     await user.type(screen.getAllByPlaceholderText("depends on (ids)")[1], "step1")
     expect(screen.getAllByRole("combobox", { name: "Selection" })).toHaveLength(2)
     expect(screen.getAllByRole("combobox", { name: "Run if" })).toHaveLength(2)
-    await pick(user, screen.getAllByRole("combobox")[2], "materialize all")
-    await pick(user, screen.getAllByRole("combobox")[3], "run if none failed")
+    await pick(user, screen.getAllByRole("combobox", { name: "Selection" })[1], "materialize all")
+    await pick(user, screen.getAllByRole("combobox", { name: "Run if" })[1], "run if none failed")
     await user.click(screen.getByRole("button", { name: "Create workflow" }))
     await waitFor(() =>
       expect(upsertWorkflow).toHaveBeenCalledWith({

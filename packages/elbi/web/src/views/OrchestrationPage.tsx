@@ -359,7 +359,9 @@ function TabStrip({
   )
 }
 
-// An underlined header tab: the active one carries a primary bottom border.
+// An underlined header tab: the active one carries a primary bottom border. The default
+// TabsList variant is overridden because the "line" variant draws its own foreground
+// underline offset below the trigger, not a primary border inside it.
 const TAB_TRIGGER =
   "h-auto flex-none rounded-none border-0 border-b-2 border-transparent px-3 py-2 font-normal text-text-secondary transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-medium group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none dark:text-text-secondary dark:data-[state=active]:border-primary dark:data-[state=active]:bg-transparent"
 
@@ -435,6 +437,7 @@ function RunHistoryMatrix({
               key={r.id}
               label={`${r.cause} · ${r.status} · ${ago(r.startedAt)}`}
               size="icon-xs"
+              aria-pressed={r.id === selectedId}
               onClick={() => onSelect(r.id)}
             >
               <span
@@ -831,7 +834,7 @@ function AssetsPanel({
                         {asset.verdict ? <VerdictBadge verdict={asset.verdict} /> : null}
                         <Badge variant={FRESHNESS_VARIANT[asset.status]}>{asset.status}</Badge>
                         <IconButton
-                          label={`Materialize ${asset.asset}`}
+                          label={`Materialize ${asset.asset} and its downstream`}
                           size="icon-xs"
                           className={ICON_14}
                           onClick={() => onMaterialize(asset.asset)}
