@@ -677,6 +677,9 @@ type StatusFilter = "all" | Freshness
 const ICON_14 = "-m-1.25 text-text-tertiary"
 // The same for a 16px icon.
 const ICON_16 = "-m-1 text-text-tertiary"
+// A 14px icon button for rows stacked 4px apart: widened sideways only, so the boxes of
+// neighbouring rows do not overlap.
+const ICON_14_STACKED = "-mx-1.25 h-3.5 text-text-tertiary"
 
 function AssetsPanel({
   assets,
@@ -921,7 +924,7 @@ function CheckEditor({
                 <IconButton
                   label={`Delete check ${c.name}`}
                   size="icon-xs"
-                  className={`${ICON_14} hover:text-danger`}
+                  className={`${ICON_14_STACKED} hover:text-danger`}
                   onClick={() => onDelete(c.id)}
                 >
                   <Trash2 className="size-3.5" />

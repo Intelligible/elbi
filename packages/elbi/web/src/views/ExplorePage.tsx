@@ -1120,8 +1120,9 @@ function ProfilePanel({ rows }: { rows: ColumnProfile[] | null }) {
   )
 }
 
-// A 24px icon button whose negative margin keeps the 14px footprint of the icon it holds.
-const ICON_14 = "-m-1.25 text-text-tertiary"
+// A 14px-wide, 24px-tall icon button: the vertical negative margin keeps the row height, and
+// the icon-wide box keeps side-by-side buttons from overlapping.
+const ICON_14 = "-my-1.25 w-3.5 text-text-tertiary"
 
 function SavedQueries({
   saved,
