@@ -72,7 +72,7 @@ jobs:
           cache: npm
           cache-dependency-path: packages/elbi/web/package-lock.json
       - run: npm ci
-      - name: Lint (Biome)
+      - name: Lint (Biome + ESLint)
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck

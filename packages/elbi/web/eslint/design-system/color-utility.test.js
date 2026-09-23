@@ -31,7 +31,7 @@ describe("classifyColorUtility", () => {
     ok("bg-data-3")
   })
   it("ignores non-colour utilities that share a prefix", () => {
-    for (const c of ["text-xs", "text-2xs", "text-center", "text-ellipsis", "text-wrap", "border", "border-2", "border-t", "border-dashed", "border-collapse", "ring-2", "ring-offset-2", "outline-none", "outline-offset-2", "divide-y", "stroke-2", "fill-none", "bg-cover", "bg-no-repeat", "bg-linear-to-r", "from-10%", "decoration-2"]) ok(c)
+    for (const c of ["text-xs", "text-2xs", "text-center", "text-ellipsis", "text-wrap", "border", "border-2", "border-t", "border-dashed", "border-collapse", "ring-2", "ring-offset-2", "outline-none", "outline-offset-2", "divide-y", "stroke-2", "fill-none", "bg-cover", "bg-no-repeat", "bg-linear-to-r", "from-10%", "decoration-2", "bg-top-left", "bg-top-right", "bg-bottom-left", "bg-bottom-right", "bg-left-top", "bg-right-bottom"]) ok(c)
   })
   it("skips arbitrary values (another rule owns them)", () => {
     ok("text-[11px]")

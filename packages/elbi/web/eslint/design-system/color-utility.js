@@ -21,7 +21,7 @@ const PREFIXES = [
   ["outline", /^(?:\d+|none|hidden|solid|dashed|dotted|double)$/],
   ["divide", /^(?:x|y|solid|dashed|dotted|double|none)$/],
   ["text", new RegExp(`^(?:${TEXT_SIZES}|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip)$`)],
-  ["bg", /^(?:fixed|local|scroll|clip-.+|origin-.+|repeat.*|no-repeat|cover|contain|auto|center|top|bottom|left|right|(?:left|right)-(?:top|bottom)|none|gradient-to-.+|linear-.+|radial.*|conic.*|blend-.+)$/],
+  ["bg", /^(?:fixed|local|scroll|clip-.+|origin-.+|repeat.*|no-repeat|cover|contain|auto|center|top|bottom|left|right|(?:left|right)-(?:top|bottom)|(?:top|bottom)-(?:left|right)|none|gradient-to-.+|linear-.+|radial.*|conic.*|blend-.+)$/],
   ["fill", /^none$/],
   ["stroke", /^(?:\d+|none)$/],
   ["from", /^\d+%$/],
