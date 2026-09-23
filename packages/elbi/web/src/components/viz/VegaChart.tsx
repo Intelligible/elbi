@@ -77,7 +77,7 @@ export function VegaChart({
   useEffect(() => {
     const element = frame.current
     if (height !== "container" || !element || typeof ResizeObserver === "undefined") return
-    const observer = new ResizeObserver(([entry]) => {
+    const observer = new ResizeObserver(([entry], _observer) => {
       setMeasured(Math.round(entry.contentRect.height))
     })
     observer.observe(element)
