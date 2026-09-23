@@ -148,6 +148,18 @@ class WarehouseService:
             target_id=source_type,
         )
 
+    def test_source(self, source_id: str) -> tuple[bool, list[str]]:
+        """Re-run an existing source's connection test, against its stored config.
+
+        Validation otherwise happens once, at creation. Everything a source depends on
+        can lapse afterwards — a rotated key, a revoked scope, an endpoint that moved —
+        and the first sign is a failed sync, or worse a sync that hangs. This makes
+        checking a source a thing an operator can do deliberately.
+        """
+        source = self.get_source(source_id)
+        connector = self._connector(source.source_type)
+        return connector.validate(self._decode_config(source))
+
     def list_sources(self) -> list[ExternalDataSource]:
         """Every configured source, newest first."""
         return self._store.list_external_sources()

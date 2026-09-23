@@ -1979,6 +1979,20 @@ def create_app(
             raise HTTPException(status_code=404, detail="source not found")
         return WireOk()
 
+    @app.post("/api/warehouse/sources/{source_id}/test")
+    async def warehouse_test_source(source_id: str) -> dict[str, Any]:
+        """Re-run a source's connection test and report what it found.
+
+        Runs off the main loop: a connection test fetches, and a source whose paginator
+        loops would otherwise block every other request until its deadline expires.
+        """
+        service = _warehouse()
+        try:
+            ok, errors = await run_in_threadpool(service.test_source, source_id)
+        except WarehouseError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"ok": ok, "errors": errors}
+
     @app.post("/api/warehouse/sources/{source_id}/sync")
     async def warehouse_sync_source(source_id: str) -> dict[str, Any]:
         """Sync every enabled table of a source into the Delta Lake warehouse."""
