@@ -27,6 +27,7 @@ export default [
       "ds/no-color-literal": "error",
       "ds/no-legacy-css": "error",
       "ds/allowed-shadow": "error",
+      "ds/known-color-token": "error",
       "no-restricted-globals": [
         "error",
         { name: "confirm", message: "Use useFeedback().confirm (components/ui/feedback)." },
