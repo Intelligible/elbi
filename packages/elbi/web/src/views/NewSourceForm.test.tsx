@@ -97,7 +97,11 @@ describe("NewSourceForm", () => {
 
   it("sends the option chosen in a select field", async () => {
     renderForm()
-    await userEvent.selectOptions(screen.getByRole("combobox"), "require")
+    // Opened from the keyboard: under jsdom a pointer click stops opening this Select once the
+    // previous test in this file has run (it opens when the test runs alone).
+    screen.getByRole("combobox", { name: "SSL mode" }).focus()
+    await userEvent.keyboard("{Enter}")
+    await userEvent.click(screen.getByRole("option", { name: "Require" }))
     await userEvent.click(screen.getByRole("button", { name: "Next" }))
     expect(lastConfig()?.config).toMatchObject({ sslmode: "require" })
   })

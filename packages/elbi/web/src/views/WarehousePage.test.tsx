@@ -131,7 +131,7 @@ describe("NewSourcePage catalog", () => {
   it("a category narrows the tiles, and a tile opens its form", async () => {
     renderAt("/warehouse/new-source")
     expect(await screen.findByText("Stripe")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: /Databases/ }))
+    await userEvent.click(screen.getByRole("tab", { name: /Databases/ }))
     expect(screen.queryByText("Stripe")).toBeNull()
     await userEvent.click(screen.getByText("PostgreSQL"))
     expect(where()).toBe("/warehouse/new-source?kind=postgres")

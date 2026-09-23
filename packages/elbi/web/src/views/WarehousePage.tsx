@@ -10,6 +10,8 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { EmptyState } from "@/components/app/EmptyState"
+import { IconButton } from "@/components/app/IconButton"
 import { Scene, SceneHeader } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,8 +31,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { Phc } from "@/components/warehouse/phc"
 import { SourceIcon } from "@/components/warehouse/SourceIcon"
 import { type Dataset, getDatasets } from "@/lib/chat"
 import { EMPTY } from "@/lib/utils"
@@ -83,11 +94,10 @@ function fmtRun(iso: string | null): string {
 }
 
 function StatusTag({ source }: { source: SourceSummary }) {
-  if (source.status === "error") return <span className="tag tag--danger">Error</span>
-  if (source.status === "syncing") return <span className="tag tag--info">Running</span>
-  if (source.syncedCount > 0)
-    return <span className="tag tag--success">{source.syncedCount} synced</span>
-  return <span className="tag tag--muted">Not syncing</span>
+  if (source.status === "error") return <Badge variant="danger">Error</Badge>
+  if (source.status === "syncing") return <Badge variant="info">Running</Badge>
+  if (source.syncedCount > 0) return <Badge variant="success">{source.syncedCount} synced</Badge>
+  return <Badge variant="neutral">Not syncing</Badge>
 }
 
 // GET /warehouse: the Data warehouse: bound datasets (declared in elbi.yaml) and managed
@@ -134,156 +144,186 @@ export function WarehousePage() {
 
   return (
     <div className="relative h-full w-full">
-      <Phc>
-        <div className="title-row">
-          <h1>Data warehouse</h1>
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => navigate("/warehouse/new-source")}
+      <div className="absolute inset-0 overflow-y-auto bg-panel text-sm text-foreground">
+        <div className="px-5 pt-4 pb-12">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <h1 className="text-title font-semibold">Data warehouse</h1>
+            <Button size="sm" onClick={() => navigate("/warehouse/new-source")}>
+              <Plus className="size-4" /> New source
+            </Button>
+          </div>
+
+          {error ? (
+            <div className="mb-4 rounded-md border border-danger/30 bg-danger-tint px-3 py-2 text-compact text-danger">
+              {error}
+            </div>
+          ) : null}
+
+          <WarehouseSection
+            title="Datasets"
+            description={
+              <>
+                Every queryable table: bound datasets from the project's <code>elbi.yaml</code> and
+                synced warehouse sources: available to every analysis and derivation.
+              </>
+            }
           >
-            <Plus className="size-4" /> New source
-          </button>
-        </div>
+            <TableFrame>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-0" />
+                    <TableHead>Dataset</TableHead>
+                    <TableHead className="text-right">Rows</TableHead>
+                    <TableHead className="text-right">Columns</TableHead>
+                    <TableHead>Origin</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {datasets === null ? (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <div className="py-8 text-center text-sm text-text-secondary">Loading…</div>
+                      </TableCell>
+                    </TableRow>
+                  ) : datasets.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <EmptyState title="No datasets bound in this project" className="py-8" />
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    datasets.map((d) => (
+                      <TableRow key={d.name}>
+                        <TableCell>
+                          <Database className="size-5.5 text-text-tertiary" />
+                        </TableCell>
+                        <TableCell className="font-semibold">{d.name}</TableCell>
+                        <TableCell className="text-right">{d.rows.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{d.columns}</TableCell>
+                        <TableCell>
+                          {d.origin === "synced" ? (
+                            <Badge variant="info">Synced</Badge>
+                          ) : (
+                            <Badge variant="neutral">Bound</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableFrame>
+          </WarehouseSection>
 
-        {error ? <div className="err">{error}</div> : null}
-
-        <div className="section">
-          <h2>Datasets</h2>
-          <p>
-            Every queryable table: bound datasets from the project's <code>elbi.yaml</code> and
-            synced warehouse sources: available to every analysis and derivation.
-          </p>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th style={{ width: 0 }} />
-                <th>Dataset</th>
-                <th className="num">Rows</th>
-                <th className="num">Columns</th>
-                <th>Origin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {datasets === null ? (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="empty">
-                      <span>Loading…</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : datasets.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="empty">
-                      <span>No datasets bound in this project</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                datasets.map((d) => (
-                  <tr key={d.name}>
-                    <td>
-                      <Database className="size-[22px] text-[var(--phc-muted)]" />
-                    </td>
-                    <td>
-                      <div className="link-title">{d.name}</div>
-                    </td>
-                    <td className="num">{d.rows.toLocaleString()}</td>
-                    <td className="num">{d.columns}</td>
-                    <td>
-                      {d.origin === "synced" ? (
-                        <span className="tag tag--info">Synced</span>
-                      ) : (
-                        <span className="tag tag--muted">Bound</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="section">
-          <h2>Managed data warehouse sources</h2>
-          <p>
-            Connect to external systems and sync their data into your warehouse. Synced tables
-            become first-class data: usable in Explore, notebooks, chat, models, and metrics, just
-            like a bound dataset.
-          </p>
-          <input
-            className="input search"
-            type="search"
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th style={{ width: 0 }} />
-                <th>Source</th>
-                <th>Table prefix</th>
-                <th>Last Successful Run</th>
-                <th className="num">Total Rows Synced</th>
-                <th>Status</th>
-                <th style={{ width: 0 }} />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <div className="empty">
-                      <span>{q ? "No sources matching your search" : "No managed sources"}</span>
-                      <button
-                        type="button"
-                        className="btn btn--secondary btn--sm"
-                        onClick={() => navigate("/warehouse/new-source")}
+          <WarehouseSection
+            title="Managed data warehouse sources"
+            description="Connect to external systems and sync their data into your warehouse. Synced tables become first-class data: usable in Explore, notebooks, chat, models, and metrics, just like a bound dataset."
+          >
+            <Input
+              className="mb-2 max-w-80 bg-card"
+              type="search"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <TableFrame>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-0" />
+                    <TableHead>Source</TableHead>
+                    <TableHead>Table prefix</TableHead>
+                    <TableHead>Last Successful Run</TableHead>
+                    <TableHead className="text-right">Total Rows Synced</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-0" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7}>
+                        <EmptyState
+                          title={q ? "No sources matching your search" : "No managed sources"}
+                          className="py-8"
+                          action={
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate("/warehouse/new-source")}
+                            >
+                              <Plus className="size-4" /> New source
+                            </Button>
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((s) => (
+                      <TableRow
+                        key={s.id}
+                        className="group cursor-pointer"
+                        onClick={() => navigate(`/warehouse/sources/${s.id}`)}
                       >
-                        <Plus className="size-4" /> New source
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((s) => (
-                  <tr key={s.id} onClick={() => navigate(`/warehouse/sources/${s.id}`)}>
-                    <td>
-                      <SourceIcon type={s.sourceType} size={28} />
-                    </td>
-                    <td>
-                      <div className="link-title">{s.name}</div>
-                      {s.description ? <div className="sub">{s.description}</div> : null}
-                    </td>
-                    <td>{s.prefix || "-"}</td>
-                    <td>{fmtRun(s.lastSyncedAt)}</td>
-                    <td className="num">{s.rows.toLocaleString()}</td>
-                    <td>
-                      <StatusTag source={s} />
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn--secondary btn--sm"
-                        style={{ padding: "0 0.5rem" }}
-                        aria-label="Delete source"
-                        onClick={(e) => remove(e, s.id)}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                        <TableCell>
+                          <SourceIcon type={s.sourceType} size={28} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-semibold group-hover:text-primary">{s.name}</div>
+                          {s.description ? (
+                            <div className="text-xs text-text-tertiary">{s.description}</div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>{s.prefix || "-"}</TableCell>
+                        <TableCell>{fmtRun(s.lastSyncedAt)}</TableCell>
+                        <TableCell className="text-right">{s.rows.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <StatusTag source={s} />
+                        </TableCell>
+                        <TableCell>
+                          <IconButton
+                            label="Delete source"
+                            variant="outline"
+                            onClick={(e) => remove(e, s.id)}
+                          >
+                            <Trash2 className="size-4" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableFrame>
+          </WarehouseSection>
         </div>
-      </Phc>
+      </div>
     </div>
   )
+}
+
+// A titled block of the warehouse page, ruled off from the one above it.
+function WarehouseSection({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="mt-6 mb-1 border-t border-border pt-4">
+      <h2 className="mb-1 text-base font-semibold text-text-tertiary">{title}</h2>
+      <p className="mb-3 max-w-prose text-sm leading-normal text-text-secondary">{description}</p>
+      {children}
+    </section>
+  )
+}
+
+function TableFrame({ children }: { children: React.ReactNode }) {
+  return <div className="overflow-hidden rounded-md border border-border bg-card">{children}</div>
 }
 
 // GET /warehouse/new-source[?kind=X]: the connector catalog, or the connection form for a
@@ -335,13 +375,13 @@ export function NewSourcePage() {
         ) : catalog ? (
           <p className="text-sm text-text-tertiary">
             Unknown source “{kind}”.{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline"
+            <Button
+              variant="link"
+              className="h-auto p-0 font-normal"
               onClick={() => navigate("/warehouse/new-source")}
             >
               Back to the catalog
-            </button>
+            </Button>
           </p>
         ) : (
           <p className="text-sm text-text-tertiary">Loading…</p>
@@ -396,6 +436,11 @@ const RELEASE_TAG: Record<string, { label: string; variant: "warning" | "info" }
   ga: null,
 }
 
+// The category filter keeps its list look (no pill track): the active row takes the accent
+// fill, as the rest of the app's nav lists do.
+const CATEGORY_TAB =
+  "h-auto flex-none justify-between gap-2 border-0 px-2.5 py-1.5 font-normal text-foreground hover:bg-muted/60 max-sm:group-data-[orientation=vertical]/tabs:w-auto group-data-[orientation=vertical]/tabs:justify-between data-[state=active]:bg-accent data-[state=active]:font-medium group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none dark:text-foreground dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent"
+
 function SourceCatalogView({
   onSelect,
   onError,
@@ -445,21 +490,21 @@ function SourceCatalogView({
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row">
-      <div className="flex shrink-0 flex-row gap-1 overflow-x-auto sm:w-56 sm:flex-col">
-        {categories.map((cat) => (
-          <button
-            key={cat.key}
-            type="button"
-            onClick={() => setCategory(cat.key)}
-            className={`flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors ${
-              category === cat.key ? "bg-accent font-medium" : "hover:bg-muted/60"
-            }`}
-          >
-            <span className="truncate">{cat.label}</span>
-            <span className="text-xs text-text-tertiary tabular-nums">{cat.count}</span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={category}
+        onValueChange={setCategory}
+        orientation="vertical"
+        className="shrink-0 sm:w-56"
+      >
+        <TabsList className="w-full items-stretch justify-start gap-1 overflow-x-auto bg-transparent p-0 max-sm:group-data-[orientation=vertical]/tabs:flex-row">
+          {categories.map((cat) => (
+            <TabsTrigger key={cat.key} value={cat.key} className={CATEGORY_TAB}>
+              <span className="truncate">{cat.label}</span>
+              <span className="text-xs text-text-tertiary tabular-nums">{cat.count}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div className="flex flex-1 flex-col gap-4">
         <div className="relative">
@@ -475,16 +520,16 @@ function SourceCatalogView({
         {filtered.length === 0 ? (
           <p className="text-sm text-text-tertiary">
             No sources match.{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline"
+            <Button
+              variant="link"
+              className="h-auto p-0 font-normal"
               onClick={() => {
                 setSearch("")
                 setCategory("all")
               }}
             >
               Clear filters
-            </button>{" "}
+            </Button>{" "}
             or request one below.
           </p>
         ) : null}
@@ -549,6 +594,7 @@ function SourceTile({
     )
   }
   return (
+    // eslint-disable-next-line ds/no-raw-element -- a whole card is the click target; Button's fixed heights and chrome don't fit a tile
     <button
       type="button"
       onClick={() => onSelect(source)}
@@ -565,6 +611,7 @@ function SourceTile({
 
 function RequestTile({ onRequest }: { onRequest: () => void }) {
   return (
+    // eslint-disable-next-line ds/no-raw-element -- a whole card is the click target; Button's fixed heights and chrome don't fit a tile
     <button
       type="button"
       onClick={onRequest}
@@ -626,26 +673,6 @@ function RequestSourceDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-        checked ? "bg-primary" : "bg-muted"
-      }`}
-    >
-      <span
-        className={`inline-block size-4 rounded-full bg-white transition-transform ${
-          checked ? "translate-x-4" : "translate-x-0.5"
-        }`}
-      />
-    </button>
   )
 }
 
@@ -776,22 +803,22 @@ function SourceDetailView({
       ) : null}
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-text-tertiary">
-              <th className="px-4 py-2 font-medium">Sync</th>
-              <th className="px-4 py-2 font-medium">Table</th>
-              <th className="px-4 py-2 font-medium">Method</th>
-              <th className="px-4 py-2 font-medium">Rows</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="px-4">Sync</TableHead>
+              <TableHead className="px-4">Table</TableHead>
+              <TableHead className="px-4">Method</TableHead>
+              <TableHead className="px-4">Rows</TableHead>
+              <TableHead className="px-4">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {detail.schemas.map((schema) => (
               <SchemaRow key={schema.id} schema={schema} onPatch={patchSchema} />
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {outcomes ? (
@@ -831,18 +858,19 @@ function SchemaRow({
 }) {
   const canIncrement = schema.incrementalFields.length > 0
   return (
-    <tr className={schema.shouldSync ? "" : "opacity-50"}>
-      <td className="px-4 py-2.5">
-        <Toggle
+    <TableRow className={schema.shouldSync ? "" : "opacity-50"}>
+      <TableCell className="px-4 py-2.5">
+        <Switch
+          aria-label={`Sync ${schema.name}`}
           checked={schema.shouldSync}
-          onChange={(should_sync) => onPatch(schema, { should_sync })}
+          onCheckedChange={(should_sync) => onPatch(schema, { should_sync })}
         />
-      </td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell className="px-4 py-2.5">
         <div className="font-medium">{schema.name}</div>
         <div className="font-mono text-xs text-text-tertiary">{schema.table}</div>
-      </td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell className="px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Select
             value={schema.syncType}
@@ -883,9 +911,11 @@ function SchemaRow({
             </Select>
           ) : null}
         </div>
-      </td>
-      <td className="px-4 py-2.5 tabular-nums text-text-secondary">{schema.rowCount ?? EMPTY}</td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell className="px-4 py-2.5 tabular-nums text-text-secondary">
+        {schema.rowCount ?? EMPTY}
+      </TableCell>
+      <TableCell className="px-4 py-2.5">
         {schema.status === "synced" ? (
           <Badge variant="success">synced</Badge>
         ) : schema.status === "error" ? (
@@ -899,7 +929,7 @@ function SchemaRow({
         ) : (
           <Badge variant="neutral">pending</Badge>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   )
 }
