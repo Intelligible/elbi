@@ -1,6 +1,7 @@
 import { Activity, Clock, Layers, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { FormField } from "@/components/app/FormField"
 import {
   Scene,
   SceneBody,
@@ -12,6 +13,14 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import {
   checkDrift,
@@ -29,10 +38,7 @@ import {
   suggestContract,
 } from "@/lib/features"
 import { getImpact } from "@/lib/lineage"
-import { cn, EMPTY, relativeTime } from "@/lib/utils"
-
-const TH =
-  "px-3 py-1.5 text-left text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-text-tertiary"
+import { EMPTY, relativeTime } from "@/lib/utils"
 
 type Consumers = { models: string[]; trainingSets: string[] }
 
@@ -126,10 +132,10 @@ export function FeatureViewDetailPage() {
         aside={
           <>
             <ScenePanelLabel label="Source derivation">
-              <span className="font-mono text-[0.8125rem]">{d.source}</span>
+              <span className="font-mono text-compact">{d.source}</span>
             </ScenePanelLabel>
             <ScenePanelLabel label="Entities / keys">
-              <span className="font-mono text-[0.8125rem]">[{d.joinKeys.join(", ")}]</span>
+              <span className="font-mono text-compact">[{d.joinKeys.join(", ")}]</span>
             </ScenePanelLabel>
             {d.timestampField ? (
               <ScenePanelLabel label="Point-in-time">
@@ -163,25 +169,29 @@ export function FeatureViewDetailPage() {
           }
         >
           {d.features.length ? (
-            <div className="overflow-x-auto rounded-lg border border-border bg-card">
-              <table className="w-full text-[0.8125rem]">
-                <thead className="bg-surface-secondary">
-                  <tr>
-                    <th className={TH}>Feature</th>
-                    <th className={TH}>Type</th>
-                    <th className={TH}>Description</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="py-1.5">Feature</TableHead>
+                    <TableHead className="py-1.5">Type</TableHead>
+                    <TableHead className="py-1.5">Description</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {d.features.map((f) => (
-                    <tr key={f.name}>
-                      <td className="px-3 py-1.5 font-mono font-medium">{f.name}</td>
-                      <td className="px-3 py-1.5 text-text-secondary">{f.dtype ?? EMPTY}</td>
-                      <td className="px-3 py-1.5 text-text-secondary">{f.description ?? EMPTY}</td>
-                    </tr>
+                    <TableRow key={f.name}>
+                      <TableCell className="py-1.5 font-mono font-medium">{f.name}</TableCell>
+                      <TableCell className="py-1.5 text-text-secondary">
+                        {f.dtype ?? EMPTY}
+                      </TableCell>
+                      <TableCell className="py-1.5 text-text-secondary">
+                        {f.description ?? EMPTY}
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ) : null}
         </SceneSection>
@@ -310,14 +320,14 @@ export function FeatureViewDetailPage() {
                 <span className="text-text-tertiary">Models:</span>
                 {consumers.models.length ? (
                   consumers.models.map((m) => (
-                    <button
+                    <Button
                       key={m}
-                      type="button"
-                      className="transition-opacity hover:opacity-80"
+                      variant="ghost"
+                      className="h-auto p-0 transition-opacity hover:bg-transparent hover:opacity-80 dark:hover:bg-transparent"
                       onClick={() => navigate(`/models/${encodeURIComponent(m)}`)}
                     >
                       <Badge variant="info">{m}</Badge>
-                    </button>
+                    </Button>
                   ))
                 ) : (
                   <span className="text-text-tertiary">none yet</span>
@@ -343,29 +353,31 @@ function StatsTable({ snapshot }: { snapshot: StatisticsSnapshot }) {
         {snapshot.rowCount} rows
         {snapshot.isBaseline ? " · baseline" : ""} · {new Date(snapshot.at).toLocaleString()}
       </div>
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full text-xs tabular-nums">
-          <thead className="bg-surface-secondary">
-            <tr>
-              <th className={TH}>Feature</th>
-              <th className={cn(TH, "text-right")}>Complete</th>
-              <th className={cn(TH, "text-right")}>Distinct</th>
-              <th className={cn(TH, "text-right")}>Range</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <Table className="text-xs">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="py-1.5">Feature</TableHead>
+              <TableHead className="py-1.5 text-right">Complete</TableHead>
+              <TableHead className="py-1.5 text-right">Distinct</TableHead>
+              <TableHead className="py-1.5 text-right">Range</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {snapshot.features.map((f) => (
-              <tr key={f.name}>
-                <td className="px-3 py-1 font-mono font-medium">{f.name}</td>
-                <td className="px-3 py-1 text-right">{Math.round(f.completeness * 100)}%</td>
-                <td className="px-3 py-1 text-right">{f.distinct}</td>
-                <td className="px-3 py-1 text-right text-text-tertiary">
+              <TableRow key={f.name}>
+                <TableCell className="py-1 font-mono font-medium">{f.name}</TableCell>
+                <TableCell className="py-1 text-right">
+                  {Math.round(f.completeness * 100)}%
+                </TableCell>
+                <TableCell className="py-1 text-right">{f.distinct}</TableCell>
+                <TableCell className="py-1 text-right text-text-tertiary">
                   {f.minimum === null ? EMPTY : `${f.minimum} … ${f.maximum}`}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   )
@@ -426,6 +438,7 @@ function LookupSection({ view }: { view: FeatureViewDetail }) {
             <Button
               variant={mode === "online" ? "secondary" : "ghost"}
               size="sm"
+              aria-pressed={mode === "online"}
               onClick={() => setMode("online")}
             >
               Online (latest)
@@ -434,6 +447,7 @@ function LookupSection({ view }: { view: FeatureViewDetail }) {
               <Button
                 variant={mode === "historical" ? "secondary" : "ghost"}
                 size="sm"
+                aria-pressed={mode === "historical"}
                 onClick={() => setMode("historical")}
               >
                 Point-in-time
@@ -442,22 +456,18 @@ function LookupSection({ view }: { view: FeatureViewDetail }) {
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">{joinKey}</span>
+          <FormField label={joinKey}>
             <Input value={key} onChange={(e) => setKey(e.target.value)} className="h-8 w-40" />
-          </label>
+          </FormField>
           {mode === "historical" ? (
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">
-                As of (event_timestamp)
-              </span>
+            <FormField label="As of (event_timestamp)">
               <Input
                 value={timestamp}
                 onChange={(e) => setTimestamp(e.target.value)}
                 placeholder="2024-03-15"
                 className="h-8 w-40"
               />
-            </label>
+            </FormField>
           ) : null}
           <Button size="sm" onClick={() => void run()} disabled={!key.trim()}>
             Fetch
