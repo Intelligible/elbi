@@ -104,7 +104,7 @@ function Field({
   const text = String(value ?? "")
   const control =
     field.type === "select" ? (
-      <Select value={text || undefined} onValueChange={onChange}>
+      <Select value={text} onValueChange={onChange}>
         <FormControl>
           <SelectTrigger className="w-full bg-card">
             <SelectValue />

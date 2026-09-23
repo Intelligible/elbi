@@ -244,4 +244,34 @@ describe("TrainModelPage", () => {
     )
     expect(lastReq()?.engine).toBeUndefined()
   })
+  it("switching the source clears the target back to its placeholder, and the time column too", async () => {
+    vi.mocked(getFeatureSources).mockResolvedValue([
+      ...SOURCES,
+      { name: "customers", kind: "dataset" },
+    ])
+    vi.mocked(getDatasetColumns).mockResolvedValue(COLUMNS)
+    const errors = vi.spyOn(console, "error")
+    const warns = vi.spyOn(console, "warn")
+    const user = userEvent.setup()
+    renderPage()
+
+    await pick(user, "Data source", "orders")
+    await pick(user, "Target column", /amount/)
+    await pick(user, "Task", "Time-series forecast")
+    await pick(user, "Time column", "id")
+    await pick(user, "Data source", "customers")
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Target column" })).toHaveTextContent(
+        "Choose the target…",
+      ),
+    )
+    expect(screen.getByRole("combobox", { name: "Time column" })).not.toHaveTextContent("id")
+    const controlled = (spy: typeof errors) =>
+      spy.mock.calls.filter((c) => c.join(" ").includes("controlled"))
+    expect(controlled(errors)).toEqual([])
+    expect(controlled(warns)).toEqual([])
+    errors.mockRestore()
+    warns.mockRestore()
+  })
 })

@@ -791,7 +791,7 @@ function SourceSelect({
   ]
   const listed = (v: string) => sources.some((s) => encodeSource(s.kind, s.name) === v)
   return (
-    <Select value={value || undefined} onValueChange={onChange}>
+    <Select value={value} onValueChange={onChange}>
       <FormControl>
         <SelectTrigger className="w-full">
           <SelectValue placeholder="Choose a data source…" />
@@ -1470,7 +1470,7 @@ function AutoRetrainSection({ detail }: { detail: RegisteredModelDetail }) {
                 </FormField>
               ) : (
                 <FormField label="Target column">
-                  <Select value={target || undefined} onValueChange={setTarget}>
+                  <Select value={target} onValueChange={setTarget}>
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue

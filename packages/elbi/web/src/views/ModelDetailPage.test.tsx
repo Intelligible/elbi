@@ -276,4 +276,28 @@ describe("ModelDetailPage", () => {
       ),
     )
   })
+  it("switching the retrain source clears the target back to its placeholder", async () => {
+    vi.mocked(getFeatureSources).mockResolvedValue([
+      ...SOURCES,
+      { name: "customers", kind: "dataset" },
+    ])
+    const errors = vi.spyOn(console, "error")
+    const warns = vi.spyOn(console, "warn")
+    const user = userEvent.setup()
+    renderPage()
+    const pane = await section("Auto-retrain")
+    const target = () => within(pane).getByRole("combobox", { name: /^Target column/ })
+
+    await waitFor(() => expect(shown(target())).toBe("amount"))
+    await choose(user, target(), "country")
+    await choose(user, within(pane).getByRole("combobox", { name: /^Data source/ }), "customers")
+
+    await waitFor(() => expect(shown(target())).toBe("Choose the target…"))
+    const controlled = (spy: typeof errors) =>
+      spy.mock.calls.filter((c) => c.join(" ").includes("controlled"))
+    expect(controlled(errors)).toEqual([])
+    expect(controlled(warns)).toEqual([])
+    errors.mockRestore()
+    warns.mockRestore()
+  })
 })

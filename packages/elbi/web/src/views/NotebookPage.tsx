@@ -870,7 +870,7 @@ function TrainModelDialog({
             />
           </FormField>
           <FormField label="Training source">
-            <Select value={source || undefined} onValueChange={setSource}>
+            <Select value={source} onValueChange={setSource}>
               <FormControl>
                 <SelectTrigger size="sm" className="w-full px-2 data-[size=sm]:h-7.5">
                   <SelectValue placeholder="Select a dataset or derivation…" />
@@ -902,7 +902,7 @@ function TrainModelDialog({
           </FormField>
           <FormField label="Target column">
             {columns.length > 0 ? (
-              <Select value={target || undefined} onValueChange={setTarget}>
+              <Select value={target} onValueChange={setTarget}>
                 <FormControl>
                   <SelectTrigger size="sm" className="w-full px-2 data-[size=sm]:h-7.5">
                     <SelectValue placeholder="Select the column to predict…" />

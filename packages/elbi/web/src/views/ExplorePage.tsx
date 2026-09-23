@@ -1059,7 +1059,7 @@ function AxisPicker({
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-xs text-text-tertiary">{label}</span>
-      <Select value={value || undefined} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-7 w-36 text-xs">
           <SelectValue />
         </SelectTrigger>

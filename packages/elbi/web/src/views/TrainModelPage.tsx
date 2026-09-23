@@ -292,7 +292,7 @@ export function TrainModelPage() {
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Data source">
               <Select
-                value={sourceName === "" ? undefined : encodeSource(sourceKind, sourceName)}
+                value={sourceName === "" ? "" : encodeSource(sourceKind, sourceName)}
                 onValueChange={pickSource}
               >
                 <FormControl>
@@ -354,7 +354,7 @@ export function TrainModelPage() {
             ) : (
               <FormField label="Target column">
                 <Select
-                  value={target || undefined}
+                  value={target}
                   disabled={columns.length === 0}
                   onValueChange={(v) => {
                     setTarget(v)
@@ -522,7 +522,7 @@ export function TrainModelPage() {
                   />
                 ) : (
                   <Select
-                    value={timeCol || undefined}
+                    value={timeCol}
                     disabled={columns.length === 0}
                     onValueChange={setTimeCol}
                   >
