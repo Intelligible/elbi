@@ -1407,7 +1407,7 @@ function CellRow({
           className={`mx-3 mb-2 rounded-md border px-3 py-2 text-xs ${
             promoted.certified
               ? "border-verified/30 bg-verified-tint text-verified"
-              : "border-warning/30 bg-warning-tint text-warning"
+              : "border-warning/30 bg-warning-tint text-foreground"
           }`}
         >
           {promoted.certified ? (

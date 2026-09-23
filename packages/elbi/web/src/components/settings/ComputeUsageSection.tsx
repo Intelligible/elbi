@@ -103,8 +103,8 @@ export function ComputeUsageSection() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {report?.alert ? (
-        <p className="flex gap-2 rounded-md border border-warning/30 bg-warning-tint p-2.5 text-xs text-warning">
-          <AlertTriangle className="mt-px size-4 shrink-0" />
+        <p className="flex gap-2 rounded-md border border-warning/30 bg-warning-tint p-2.5 text-xs text-foreground">
+          <AlertTriangle className="mt-px size-4 shrink-0 text-warning" />
           <span>{report.alert}</span>
         </p>
       ) : null}

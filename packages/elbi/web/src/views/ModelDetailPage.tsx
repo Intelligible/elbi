@@ -1085,7 +1085,7 @@ function DriftPanel({ name }: { name: string }) {
         </Button>
       </div>
       {notice && (
-        <p className="rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-xs text-warning">
+        <p className="rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-xs text-foreground">
           {notice}
         </p>
       )}

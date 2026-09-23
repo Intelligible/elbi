@@ -92,8 +92,8 @@ export function ComputeDialog({
         </DialogHeader>
 
         {state?.unavailable ? (
-          <p className="flex gap-2 rounded-md border border-warning/40 bg-warning-tint p-2.5 text-xs text-warning">
-            <AlertTriangle className="mt-px size-4 shrink-0" />
+          <p className="flex gap-2 rounded-md border border-warning/40 bg-warning-tint p-2.5 text-xs text-foreground">
+            <AlertTriangle className="mt-px size-4 shrink-0 text-warning" />
 
             <span>
               This notebook asked for a size that is no longer offered, so it is using the default.{" "}
@@ -103,8 +103,8 @@ export function ComputeDialog({
         ) : null}
 
         {state?.drift ? (
-          <p className="flex gap-2 rounded-md border border-warning/40 bg-warning-tint p-2.5 text-xs text-warning">
-            <AlertTriangle className="mt-px size-4 shrink-0" />
+          <p className="flex gap-2 rounded-md border border-warning/40 bg-warning-tint p-2.5 text-xs text-foreground">
+            <AlertTriangle className="mt-px size-4 shrink-0 text-warning" />
             <span>{state.drift}</span>
           </p>
         ) : null}

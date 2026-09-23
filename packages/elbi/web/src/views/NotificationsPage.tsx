@@ -146,7 +146,7 @@ export function NotificationsPage() {
         </div>
         {/* A refetch failure must not silently show the previous list. */}
         {failed && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning">
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-warning-tint px-3 py-2 text-sm text-foreground">
             <span>Could not refresh; showing the last loaded list.</span>
             <Button variant="outline" size="sm" onClick={() => void refresh()}>
               Retry

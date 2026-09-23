@@ -117,8 +117,10 @@ function DashboardsBody() {
       title: "",
       width: 76,
       align: "right",
+      // Icon-only buttons put their baseline 4px above their bottom edge, which would
+      // shorten the row; the pad keeps it at the height the row's text line gives.
       render: (d) => (
-        <span className="inline-flex gap-1">
+        <span className="inline-flex gap-1 pb-[5.5px] align-top">
           <IconButton
             label={`Duplicate ${d.name}`}
             size="icon-xs"
