@@ -46,6 +46,22 @@ describe("design system", () => {
     expect(hits, hits.join("\n")).toEqual([])
   })
 
+  it("no file imports cn from the raw npm package, vendored code included", () => {
+    // The shadcn CLI emits `import { cn } from "cn"`, which skips the type-scale merge
+    // config in src/lib/utils.ts (see AGENTS.md, "Vendored: do not hand-edit").
+    const fromRawCn = /from\s+["']cn["']/
+    const hits = walk(SRC)
+      .filter((f) => /\.tsx?$/.test(f) && f !== SELF)
+      .flatMap((f) =>
+        readFileSync(f, "utf8")
+          .split("\n")
+          .flatMap((line, i) =>
+            fromRawCn.test(line) ? [`${path.relative(WEB, f)}:${i + 1}`] : [],
+          ),
+      )
+    expect(hits, hits.join("\n")).toEqual([])
+  })
+
   it("every colour utility the docs name is a real, allowed token", () => {
     const theme = readTheme(path.join(SRC, "index.css"))
     const docs = [path.join(WEB, ".interface-design/system.md"), path.join(WEB, "AGENTS.md")]

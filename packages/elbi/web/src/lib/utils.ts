@@ -1,5 +1,13 @@
 import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { extendTailwindMerge } from "tailwind-merge"
+
+// The default font-size group only knows Tailwind's built-in text-* scale, so it treats
+// our named steps (text-compact, text-title, ...) as unrecognised and, worse, sometimes
+// as a colour utility, dropping them when a text colour follows in the same cn() call.
+// Extending theme.text (the scale font-size reads from) teaches it the rest of the steps.
+const twMerge = extendTailwindMerge({
+  extend: { theme: { text: ["3xs", "2xs", "compact", "title", "display"] } },
+})
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

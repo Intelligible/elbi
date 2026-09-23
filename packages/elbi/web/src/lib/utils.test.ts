@@ -7,6 +7,17 @@ describe("cn", () => {
     expect(cn("px-2", "px-4")).toBe("px-4")
     expect(cn("text-sm", false, "font-medium")).toBe("text-sm font-medium")
   })
+
+  it("knows the custom type-scale tokens are font sizes, not colours", () => {
+    for (const size of ["3xs", "2xs", "compact", "title", "display"]) {
+      expect(cn(`text-${size}`, "text-text-tertiary")).toBe(`text-${size} text-text-tertiary`)
+    }
+  })
+
+  it("still resolves a font-size conflict between two scale tokens, later wins", () => {
+    expect(cn("text-xs", "text-compact")).toBe("text-compact")
+    expect(cn("text-compact", "text-sm")).toBe("text-sm")
+  })
 })
 
 describe("relativeTime", () => {
