@@ -296,9 +296,12 @@ describe("the JSON tab", () => {
   })
 })
 
-describe("provenance", () => {
+describe("the Lineage tab", () => {
   it("links a bound tile to its derivation and what that reads", async () => {
+    const user = userEvent.setup()
     open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
 
     expect(await screen.findByRole("link", { name: "revenue_by_product" })).toHaveAttribute(
       "href",
@@ -310,9 +313,19 @@ describe("provenance", () => {
     )
   })
 
-  it("shows nothing for a tile that binds nothing", () => {
+  it("says a tile that binds nothing reads nothing", async () => {
+    const user = userEvent.setup()
     open(textTile)
 
-    expect(screen.queryByText(/Where this tile/)).toBeNull()
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(screen.getByText(/carries its own content/)).toBeInTheDocument()
+  })
+
+  it("stays out of the way until asked for", () => {
+    // A panel over the fields fetched on every open; a tab fetches when opened.
+    open(boundTile)
+
+    expect(screen.queryByText(/Computed by/)).toBeNull()
   })
 })
