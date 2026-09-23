@@ -40,7 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { SourceIcon } from "@/components/warehouse/SourceIcon"
 import { type Dataset, getDatasets } from "@/lib/chat"
@@ -489,24 +489,22 @@ function SourceCatalogView({
   if (!catalog) return <div className="text-sm text-text-tertiary">Loading sources…</div>
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row">
-      <Tabs
-        value={category}
-        onValueChange={setCategory}
-        orientation="vertical"
-        className="shrink-0 sm:w-56"
-      >
-        <TabsList className="w-full items-stretch justify-start gap-1 overflow-x-auto bg-transparent p-0 max-sm:group-data-[orientation=vertical]/tabs:flex-row">
-          {categories.map((cat) => (
-            <TabsTrigger key={cat.key} value={cat.key} className={CATEGORY_TAB}>
-              <span className="truncate">{cat.label}</span>
-              <span className="text-xs text-text-tertiary tabular-nums">{cat.count}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+    <Tabs
+      value={category}
+      onValueChange={setCategory}
+      orientation="vertical"
+      className="flex-col gap-4 sm:flex-row"
+    >
+      <TabsList className="w-full shrink-0 items-stretch justify-start gap-1 overflow-x-auto bg-transparent p-0 sm:w-56 max-sm:group-data-[orientation=vertical]/tabs:flex-row">
+        {categories.map((cat) => (
+          <TabsTrigger key={cat.key} value={cat.key} className={CATEGORY_TAB}>
+            <span className="truncate">{cat.label}</span>
+            <span className="text-xs text-text-tertiary tabular-nums">{cat.count}</span>
+          </TabsTrigger>
+        ))}
+      </TabsList>
 
-      <div className="flex flex-1 flex-col gap-4">
+      <TabsContent value={category} className="flex flex-col gap-4">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-text-tertiary" />
           <Input
@@ -546,14 +544,14 @@ function SourceCatalogView({
           ))}
           <RequestTile onRequest={() => setRequesting(true)} />
         </div>
-      </div>
+      </TabsContent>
 
       <RequestSourceDialog
         open={requesting}
         onClose={() => setRequesting(false)}
         onError={onError}
       />
-    </div>
+    </Tabs>
   )
 }
 

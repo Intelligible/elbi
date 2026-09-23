@@ -136,6 +136,15 @@ describe("NewSourcePage catalog", () => {
     await userEvent.click(screen.getByText("PostgreSQL"))
     expect(where()).toBe("/warehouse/new-source?kind=postgres")
   })
+
+  it("the active category tab controls the tile panel", async () => {
+    renderAt("/warehouse/new-source")
+    await userEvent.click(await screen.findByRole("tab", { name: /Databases/ }))
+    const id = screen.getByRole("tab", { name: /Databases/ }).getAttribute("aria-controls")
+    const panel = document.getElementById(id ?? "")
+    expect(panel).toHaveAttribute("role", "tabpanel")
+    expect(panel).toHaveTextContent("PostgreSQL")
+  })
 })
 
 describe("SourceDetailPage", () => {

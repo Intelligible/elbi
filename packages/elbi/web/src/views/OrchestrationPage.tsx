@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import { useTheme } from "@/hooks/useTheme"
 import type {
@@ -203,130 +203,124 @@ export function OrchestrationPage() {
 
   return (
     <Scene>
-      <SceneHeader
-        icon={<WorkflowIcon className="size-5" />}
-        title="Orchestration"
-        description="Your derivations as software-defined assets, materialized in dependency order. Fresh assets are skipped; a change upstream marks everything downstream stale."
-        actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => start(() => materialize({ selection: "all" }))}
-              disabled={busy || running}
-            >
-              <RefreshCw className={busy || running ? "size-4 animate-spin" : "size-4"} />
-              Materialize all
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => start(() => materialize({ selection: "stale" }))}
-              disabled={busy || running || staleCount === 0}
-            >
-              <Play className="size-4" />
-              Materialize stale{staleCount > 0 ? ` (${staleCount})` : ""}
-            </Button>
-          </>
-        }
-      >
-        <TabStrip tab={tab} onTab={setTab} staleCount={staleCount} running={running} />
-      </SceneHeader>
-
-      <SceneBody width="wide">
-        {tab === "overview" ? (
-          <div className="space-y-6">
-            <KpiHeader assets={assets} runs={history?.runs ?? []} />
-            {graph && graph.nodes.length > 0 ? (
-              <SceneSection
-                title="Pipeline"
-                description="Dependency graph: click an asset to materialize it and its downstream."
+      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="min-h-0 flex-1 gap-0">
+        <SceneHeader
+          icon={<WorkflowIcon className="size-5" />}
+          title="Orchestration"
+          description="Your derivations as software-defined assets, materialized in dependency order. Fresh assets are skipped; a change upstream marks everything downstream stale."
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => start(() => materialize({ selection: "all" }))}
+                disabled={busy || running}
               >
-                <AssetGraphView graph={graph} onMaterialize={materializeAsset} />
-              </SceneSection>
+                <RefreshCw className={busy || running ? "size-4 animate-spin" : "size-4"} />
+                Materialize all
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => start(() => materialize({ selection: "stale" }))}
+                disabled={busy || running || staleCount === 0}
+              >
+                <Play className="size-4" />
+                Materialize stale{staleCount > 0 ? ` (${staleCount})` : ""}
+              </Button>
+            </>
+          }
+        >
+          <TabStrip staleCount={staleCount} running={running} />
+        </SceneHeader>
+
+        <SceneBody width="wide">
+          <TabsContent value={tab}>
+            {tab === "overview" ? (
+              <div className="space-y-6">
+                <KpiHeader assets={assets} runs={history?.runs ?? []} />
+                {graph && graph.nodes.length > 0 ? (
+                  <SceneSection
+                    title="Pipeline"
+                    description="Dependency graph: click an asset to materialize it and its downstream."
+                  >
+                    <AssetGraphView graph={graph} onMaterialize={materializeAsset} />
+                  </SceneSection>
+                ) : null}
+              </div>
             ) : null}
-          </div>
-        ) : null}
 
-        {tab === "runs" ? (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
-            <div className="min-w-0">
-              <RunHistoryMatrix
-                history={history}
-                selectedId={selected?.id ?? null}
-                onSelect={selectRun}
-              />
-            </div>
-            <div className="min-w-0">
-              {selected ? (
-                <RunDetailPanel
-                  detail={selected}
-                  busy={busy}
-                  onClose={() => setSelected(null)}
-                  onRetry={() => start(() => retryRun(selected.id))}
-                  onCancel={() => start(() => cancelRun(selected.id))}
-                />
-              ) : (
-                <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-tertiary">
-                  Select a run to inspect its steps, timings, and logs.
+            {tab === "runs" ? (
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
+                <div className="min-w-0">
+                  <RunHistoryMatrix
+                    history={history}
+                    selectedId={selected?.id ?? null}
+                    onSelect={selectRun}
+                  />
                 </div>
-              )}
-            </div>
-          </div>
-        ) : null}
+                <div className="min-w-0">
+                  {selected ? (
+                    <RunDetailPanel
+                      detail={selected}
+                      busy={busy}
+                      onClose={() => setSelected(null)}
+                      onRetry={() => start(() => retryRun(selected.id))}
+                      onCancel={() => start(() => cancelRun(selected.id))}
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-tertiary">
+                      Select a run to inspect its steps, timings, and logs.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
-        {tab === "assets" ? (
-          <AssetsPanel
-            assets={assets}
-            checks={checks}
-            busy={busy || running}
-            onMaterialize={materializeAsset}
-            onAddCheck={(body) => start(() => upsertCheck(body))}
-            onDeleteCheck={(checkId) => start(() => deleteCheck(checkId))}
-            onBackfill={(asset, param, values) => {
-              setTab("runs")
-              void start(() => backfill({ asset, param, values }))
-            }}
-          />
-        ) : null}
+            {tab === "assets" ? (
+              <AssetsPanel
+                assets={assets}
+                checks={checks}
+                busy={busy || running}
+                onMaterialize={materializeAsset}
+                onAddCheck={(body) => start(() => upsertCheck(body))}
+                onDeleteCheck={(checkId) => start(() => deleteCheck(checkId))}
+                onBackfill={(asset, param, values) => {
+                  setTab("runs")
+                  void start(() => backfill({ asset, param, values }))
+                }}
+              />
+            ) : null}
 
-        {tab === "workflows" ? (
-          <WorkflowsPanel
-            workflows={workflows}
-            assets={assets.map((a) => a.asset)}
-            busy={busy || running}
-            onChange={refresh}
-            onRun={(id) => {
-              setTab("runs")
-              void start(() => runWorkflow(id))
-            }}
-          />
-        ) : null}
+            {tab === "workflows" ? (
+              <WorkflowsPanel
+                workflows={workflows}
+                assets={assets.map((a) => a.asset)}
+                busy={busy || running}
+                onChange={refresh}
+                onRun={(id) => {
+                  setTab("runs")
+                  void start(() => runWorkflow(id))
+                }}
+              />
+            ) : null}
 
-        {tab === "schedules" ? (
-          <SchedulesPanel
-            schedules={schedules}
-            retries={retries}
-            compute={compute}
-            onChange={refresh}
-            onSetRetries={(n) => start(() => setRetryPolicy(n))}
-          />
-        ) : null}
-      </SceneBody>
+            {tab === "schedules" ? (
+              <SchedulesPanel
+                schedules={schedules}
+                retries={retries}
+                compute={compute}
+                onChange={refresh}
+                onSetRetries={(n) => start(() => setRetryPolicy(n))}
+              />
+            ) : null}
+          </TabsContent>
+        </SceneBody>
+      </Tabs>
     </Scene>
   )
 }
 
-function TabStrip({
-  tab,
-  onTab,
-  staleCount,
-  running,
-}: {
-  tab: Tab
-  onTab: (t: Tab) => void
-  staleCount: number
-  running: boolean
-}) {
+function TabStrip({ staleCount, running }: { staleCount: number; running: boolean }) {
   const tabs: { id: Tab; label: string; badge?: React.ReactNode }[] = [
     { id: "overview", label: "Overview" },
     {
@@ -346,16 +340,14 @@ function TabStrip({
     { id: "schedules", label: "Schedules" },
   ]
   return (
-    <Tabs value={tab} onValueChange={(v) => onTab(v as Tab)}>
-      <TabsList className="flex w-full justify-start gap-1 rounded-none bg-transparent p-0 group-data-[orientation=horizontal]/tabs:h-auto">
-        {tabs.map((t) => (
-          <TabsTrigger key={t.id} value={t.id} className={TAB_TRIGGER}>
-            {t.label}
-            {t.badge}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
+    <TabsList className="flex w-full justify-start gap-1 rounded-none bg-transparent p-0 group-data-[orientation=horizontal]/tabs:h-auto">
+      {tabs.map((t) => (
+        <TabsTrigger key={t.id} value={t.id} className={TAB_TRIGGER}>
+          {t.label}
+          {t.badge}
+        </TabsTrigger>
+      ))}
+    </TabsList>
   )
 }
 

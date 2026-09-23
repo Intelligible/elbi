@@ -197,6 +197,15 @@ describe("OrchestrationPage", () => {
     expect(screen.getByText("nightly")).toBeInTheDocument()
   })
 
+  it("the active tab controls the panel below the header", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole("tab", { name: "Schedules" }))
+    const panel = document.getElementById(tab("Schedules").getAttribute("aria-controls") ?? "")
+    expect(panel).toHaveAttribute("role", "tabpanel")
+    await waitFor(() => expect(panel).toHaveTextContent("nightly"))
+  })
+
   it("selects a run from a run-history cell, toggles it off, and closes the detail", async () => {
     const user = userEvent.setup()
     renderPage()

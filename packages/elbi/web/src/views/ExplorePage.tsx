@@ -64,7 +64,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import { VizView } from "@/components/viz/VizView"
 import {
@@ -440,16 +440,17 @@ export function ExplorePage() {
             </div>
           ) : null}
 
-          <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5">
-            {/* Profile sends a request, so it activates on click (and profiles again when
-                clicked while active) rather than through the tab value. */}
-            <Tabs
-              value={active.view}
-              activationMode="manual"
-              onValueChange={(v) => {
-                if (v !== "profile") patch(active.id, { view: v as Tab })
-              }}
-            >
+          {/* Profile sends a request, so it activates on click (and profiles again when
+              clicked while active) rather than through the tab value. */}
+          <Tabs
+            value={active.view}
+            activationMode="manual"
+            onValueChange={(v) => {
+              if (v !== "profile") patch(active.id, { view: v as Tab })
+            }}
+            className="min-h-0 flex-1 gap-0"
+          >
+            <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5">
               <TabsList className="h-auto gap-1 bg-transparent p-0 group-data-[orientation=horizontal]/tabs:h-auto">
                 <TabsTrigger value="results" className={TAB_TRIGGER}>
                   <Table2 className="size-3.5" /> Results
@@ -464,48 +465,48 @@ export function ExplorePage() {
                   <Info className="size-3.5" /> Info
                 </TabsTrigger>
               </TabsList>
-            </Tabs>
-            {active.result && active.result.rows.length > 0 ? (
-              <div className="ml-auto flex items-center gap-1">
-                <ResultActions result={active.result} name={active.name} />
+              {active.result && active.result.rows.length > 0 ? (
+                <div className="ml-auto flex items-center gap-1">
+                  <ResultActions result={active.result} name={active.name} />
+                </div>
+              ) : null}
+            </div>
+
+            <TabsContent value={active.view} className="min-h-0 overflow-auto">
+              {active.view === "results" ? <ResultsGrid result={active.result} /> : null}
+              {active.view === "chart" ? <ChartPanel result={active.result} /> : null}
+              {active.view === "profile" ? <ProfilePanel rows={active.profileRows} /> : null}
+              {active.view === "info" ? (
+                <QueryInfoPanel
+                  result={active.result}
+                  sql={active.sql}
+                  elapsedMs={active.elapsedMs}
+                />
+              ) : null}
+            </TabsContent>
+
+            {active.view === "results" && active.result && active.result.rows.length > 0 ? (
+              <div className="flex shrink-0 items-center gap-2 border-t border-border bg-surface-secondary px-4 py-1.5 text-xs text-text-tertiary tabular-nums">
+                <span>
+                  {active.result.rows.length.toLocaleString()} row
+                  {active.result.rows.length === 1 ? "" : "s"}
+                  {active.result.truncated ? " (truncated)" : ""}
+                </span>
+                {active.elapsedMs !== null ? (
+                  <span>
+                    ·{" "}
+                    {active.elapsedMs < 1000
+                      ? `${Math.round(active.elapsedMs)} ms`
+                      : `${(active.elapsedMs / 1000).toFixed(2)} s`}
+                  </span>
+                ) : null}
+                <span className="ml-auto">
+                  {active.result.columns.length} column
+                  {active.result.columns.length === 1 ? "" : "s"}
+                </span>
               </div>
             ) : null}
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto">
-            {active.view === "results" ? <ResultsGrid result={active.result} /> : null}
-            {active.view === "chart" ? <ChartPanel result={active.result} /> : null}
-            {active.view === "profile" ? <ProfilePanel rows={active.profileRows} /> : null}
-            {active.view === "info" ? (
-              <QueryInfoPanel
-                result={active.result}
-                sql={active.sql}
-                elapsedMs={active.elapsedMs}
-              />
-            ) : null}
-          </div>
-
-          {active.view === "results" && active.result && active.result.rows.length > 0 ? (
-            <div className="flex shrink-0 items-center gap-2 border-t border-border bg-surface-secondary px-4 py-1.5 text-xs text-text-tertiary tabular-nums">
-              <span>
-                {active.result.rows.length.toLocaleString()} row
-                {active.result.rows.length === 1 ? "" : "s"}
-                {active.result.truncated ? " (truncated)" : ""}
-              </span>
-              {active.elapsedMs !== null ? (
-                <span>
-                  ·{" "}
-                  {active.elapsedMs < 1000
-                    ? `${Math.round(active.elapsedMs)} ms`
-                    : `${(active.elapsedMs / 1000).toFixed(2)} s`}
-                </span>
-              ) : null}
-              <span className="ml-auto">
-                {active.result.columns.length} column
-                {active.result.columns.length === 1 ? "" : "s"}
-              </span>
-            </div>
-          ) : null}
+          </Tabs>
         </div>
       </div>
 

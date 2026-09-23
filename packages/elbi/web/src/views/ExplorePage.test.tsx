@@ -162,6 +162,18 @@ describe("ExplorePage", () => {
     expect(screen.getByText("west")).toBeInTheDocument()
   })
 
+  it("the active result tab controls the result panel", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(runButton())
+    expect(await screen.findByText("west")).toBeInTheDocument()
+
+    await user.click(tab("Info"))
+    const panel = document.getElementById(tab("Info").getAttribute("aria-controls") ?? "")
+    expect(panel).toHaveAttribute("role", "tabpanel")
+    expect(panel).toHaveTextContent("Query")
+  })
+
   it("profiles from the keyboard", async () => {
     const user = userEvent.setup()
     renderPage()
