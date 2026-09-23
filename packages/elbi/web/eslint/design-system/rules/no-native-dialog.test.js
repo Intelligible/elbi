@@ -12,6 +12,8 @@ ruleTester.run("no-native-dialog", rule, {
     `import { confirm } from "./x"; confirm()`,
     `fb.confirm({ title: "a", body: "b" })`,
     `window.confirm("x")`,
+    `const self = { confirm() {} }; self.confirm()`,
+    `function f(globalThis) { globalThis.alert("x") }`,
   ],
   invalid: [
     { code: `confirm("x")`, errors: [{ messageId: "confirm" }] },
