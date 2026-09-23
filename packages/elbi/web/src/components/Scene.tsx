@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react"
 import type * as React from "react"
 import { useMemo } from "react"
 import { Link } from "react-router-dom"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn, uuid } from "@/lib/utils"
 
@@ -60,9 +61,16 @@ export function SceneHeader({
   return (
     <header className="shrink-0 border-b border-border bg-background px-5 pt-4 pb-3.5">
       {onBack ? (
-        <button type="button" onClick={onBack} className={backClass}>
+        <Button
+          variant="ghost"
+          onClick={onBack}
+          className={cn(
+            backClass,
+            "h-auto font-normal has-[>svg]:px-1 hover:bg-transparent dark:hover:bg-transparent",
+          )}
+        >
           <ArrowLeft className="size-4" /> {backLabel}
-        </button>
+        </Button>
       ) : backTo ? (
         <Link to={backTo} className={backClass}>
           <ArrowLeft className="size-4" /> {backLabel}
@@ -74,7 +82,7 @@ export function SceneHeader({
             {icon && <span className="shrink-0 text-text-tertiary">{icon}</span>}
             <h1
               className={cn(
-                "min-w-0 truncate text-[1.35rem] font-semibold leading-tight tracking-tight text-foreground",
+                "min-w-0 truncate text-title font-semibold leading-tight tracking-tight text-foreground",
                 mono && "font-mono text-lg tracking-normal",
               )}
             >
@@ -171,7 +179,7 @@ export function ScenePanelLabel({
 }) {
   return (
     <div className="space-y-1">
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-text-tertiary">
+      <div className="text-2xs font-semibold uppercase tracking-[0.05em] text-text-tertiary">
         {label}
       </div>
       <div className="text-sm text-foreground">{children}</div>

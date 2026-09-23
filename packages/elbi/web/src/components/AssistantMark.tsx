@@ -17,7 +17,7 @@ export function AssistantMark({ className }: { className?: string }) {
       {/* A crown line across the gem, giving it a facet rather than a flat lozenge. */}
       <path
         d="M9.3 10.9 H14.7"
-        stroke="var(--color-background, #fff)"
+        stroke="var(--color-background)"
         strokeWidth="1"
         strokeLinecap="round"
       />

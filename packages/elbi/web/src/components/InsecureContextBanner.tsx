@@ -24,7 +24,7 @@ export function InsecureContextBanner() {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+      className="flex items-start gap-2 border-b border-warning/30 bg-warning-tint px-4 py-2 text-xs text-warning"
     >
       <ShieldAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
       <p>
