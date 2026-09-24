@@ -475,14 +475,15 @@ jobs:
   # A change a user would notice should say so in the changelog before it merges, rather than
   # being reconstructed from the commit log at release time by whoever cuts the release.
   #
-  # Skipped rather than failed when the pull request carries `skip-news`, because `ci-ok`
-  # passes a skipped job: that label is how a change no user would notice opts out.
+  # The `skip-news` label is how a change no user would notice opts out.
   news:
-    if: >-
-      github.event_name == 'pull_request' &&
-      !contains(github.event.pull_request.labels.*.name, 'skip-news')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      # The pull request's current labels, which the workflow default does not cover.
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -491,9 +492,20 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - name: Check for a news fragment
+        # `bash` rather than the default so the pipe below fails loudly if the label query
+        # is refused.
+        shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.base_ref }}
-        run: uvx towncrier@25.8.0 check --compare-with "origin/$BASE_REF"
+        run: |
+          if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' \
+              | grep -qx skip-news; then
+            echo "skip-news is set; no fragment required"
+            exit 0
+          fi
+          uvx towncrier@25.8.0 check --compare-with "origin/$BASE_REF"
 
   # One check to require, reporting for all of them. A branch rule naming the jobs above
   # directly would block any pull request that legitimately skipped one, because a skipped
