@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { FeatureSource, ModelVersion, RegisteredModelDetail, RetrainPolicy } from "@/lib/chat"
 
+vi.mock("@/lib/notebooks", () => ({ notebookFromModel: vi.fn() }))
+
 vi.mock("@/lib/chat", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/chat")>()),
   getRegisteredModel: vi.fn(),
@@ -43,6 +45,7 @@ import {
   invokeModel,
   putRetrainPolicy,
 } from "@/lib/chat"
+import { notebookFromModel } from "@/lib/notebooks"
 import { copyText } from "@/lib/utils"
 import { ModelDetailPage } from "./ModelDetailPage"
 
@@ -75,10 +78,10 @@ const SOURCES: FeatureSource[] = [
   { name: "churn_features", kind: "derivation" },
 ]
 
-function renderPage() {
+function renderPage(name = "churn") {
   return render(
     <TooltipProvider>
-      <MemoryRouter initialEntries={["/models/churn"]}>
+      <MemoryRouter initialEntries={[`/models/${name}`]}>
         <Routes>
           <Route path="/models/:name" element={<ModelDetailPage />} />
         </Routes>
@@ -299,5 +302,65 @@ describe("ModelDetailPage", () => {
     expect(controlled(warns)).toEqual([])
     errors.mockRestore()
     warns.mockRestore()
+  })
+
+  describe("open in notebook", () => {
+    const inconclusive = (n: number) =>
+      version(n, { verdict: "inconclusive", verdictDetail: "no signal" })
+    const detail = (extra: Partial<RegisteredModelDetail> = {}): RegisteredModelDetail => ({
+      name: "cost_model",
+      championVersion: null,
+      versions: [inconclusive(1)],
+      ...extra,
+    })
+
+    it("opens the newest version when no version is the champion", async () => {
+      // Without a version the server resolves @champion, which an all-inconclusive model
+      // has none of: the request 404s and the button appears to do nothing at all.
+      const user = userEvent.setup()
+      vi.mocked(getRegisteredModel).mockResolvedValue(
+        detail({ versions: [inconclusive(1), inconclusive(2)] }),
+      )
+      vi.mocked(notebookFromModel).mockResolvedValue({ id: "nb1" })
+      renderPage("cost_model")
+
+      await user.click(await screen.findByRole("button", { name: /Open in notebook/ }))
+
+      expect(notebookFromModel).toHaveBeenCalledWith("cost_model", "2")
+    })
+
+    it("opens the champion when there is one", async () => {
+      const user = userEvent.setup()
+      vi.mocked(getRegisteredModel).mockResolvedValue(
+        detail({ championVersion: 1, versions: [inconclusive(1), inconclusive(2)] }),
+      )
+      vi.mocked(notebookFromModel).mockResolvedValue({ id: "nb1" })
+      renderPage("cost_model")
+
+      await user.click(await screen.findByRole("button", { name: /Open in notebook/ }))
+
+      expect(notebookFromModel).toHaveBeenCalledWith("cost_model", "1")
+    })
+
+    it("says why nothing opened rather than failing silently", async () => {
+      const user = userEvent.setup()
+      vi.mocked(getRegisteredModel).mockResolvedValue(detail())
+      vi.mocked(notebookFromModel).mockRejectedValue(
+        new Error("that model version has no training script"),
+      )
+      renderPage("cost_model")
+
+      await user.click(await screen.findByRole("button", { name: /Open in notebook/ }))
+
+      expect(await screen.findByText(/no training script/)).toBeInTheDocument()
+    })
+
+    it("offers nothing to open when the model has no versions", async () => {
+      vi.mocked(getRegisteredModel).mockResolvedValue(detail({ versions: [] }))
+      renderPage("cost_model")
+
+      await screen.findByText("cost_model")
+      expect(screen.queryByRole("button", { name: /Open in notebook/ })).toBeNull()
+    })
   })
 })
