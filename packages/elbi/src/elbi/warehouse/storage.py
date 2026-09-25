@@ -255,7 +255,7 @@ def _holds_a_struct(dtype: pa.DataType) -> bool:
 
 
 def _is_text(dtype: pa.DataType) -> bool:
-    return (
+    return bool(
         pa.types.is_string(dtype)
         or pa.types.is_large_string(dtype)
         or pa.types.is_string_view(dtype)
