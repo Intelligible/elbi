@@ -8,6 +8,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { getCatalog, getSourceConfig, type SourceField, updateSource } from "@/lib/warehouse"
 
@@ -85,9 +92,13 @@ export function EditSourceDialog({
   // offered. A source with none yet shows them all, since there is nothing to narrow to.
   // `secret` is the server's resolved flag, not `type === "password"`: a PEM key or a
   // JSON key file is a credential that renders as a textarea.
+  // A single-option select is hidden, as on the create form: there is nothing to choose.
   const anyHeld = inUse.length > 0
   const shown = fields.filter(
-    (f) => visible(f) && (!f.secret || !anyHeld || inUse.includes(f.name)),
+    (f) =>
+      !(f.type === "select" && f.options.length <= 1) &&
+      visible(f) &&
+      (!f.secret || !anyHeld || inUse.includes(f.name)),
   )
 
   const save = async () => {
@@ -142,8 +153,31 @@ export function EditSourceDialog({
               />
             </div>
             {shown.map((field) => {
-              const value = String(config[field.name] ?? "")
-              const set = (v: string) => setConfig((c) => ({ ...c, [field.name]: v }))
+              const held = config[field.name] ?? field.default
+              const value = String(held ?? "")
+              // Values keep their type: a switch holds a boolean, not the string
+              // "false", which the connector would read as true.
+              const set = (v: unknown) => setConfig((c) => ({ ...c, [field.name]: v }))
+              const id = `edit-${field.name}`
+              if (field.type === "switch") {
+                return (
+                  <div key={field.name} className="flex flex-col gap-1.5">
+                    <label htmlFor={id} className="flex items-center gap-2 font-medium text-sm">
+                      <input
+                        id={id}
+                        type="checkbox"
+                        className="accent-primary"
+                        checked={Boolean(held)}
+                        onChange={(e) => set(e.target.checked)}
+                      />
+                      {field.label}
+                    </label>
+                    {field.caption ? (
+                      <p className="text-text-tertiary text-xs">{field.caption}</p>
+                    ) : null}
+                  </div>
+                )
+              }
               // A stored credential arrives blank whatever control it renders as, so the
               // hint belongs on the textarea too — otherwise a blank PEM key reads as a
               // key the source has lost.
@@ -152,17 +186,30 @@ export function EditSourceDialog({
                 : field.placeholder
               return (
                 <div key={field.name} className="flex flex-col gap-1.5">
-                  <label htmlFor={`edit-${field.name}`} className="font-medium text-sm">
+                  <label htmlFor={id} className="font-medium text-sm">
                     {field.label}
                   </label>
-                  {field.type === "textarea" ? (
+                  {field.type === "select" ? (
+                    <Select value={value} onValueChange={set}>
+                      <SelectTrigger id={id}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {field.options.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : field.type === "textarea" ? (
                     // A manifest or a PEM key is a document, not a line: monospace, and
                     // tall enough to read its structure. A height of its own, not a share
                     // of the dialog: this list scrolls, so a flex-grown field has no free
                     // space to claim, collapses to nothing and spills over the fields
                     // below it.
                     <Textarea
-                      id={`edit-${field.name}`}
+                      id={id}
                       rows={12}
                       spellCheck={false}
                       placeholder={placeholder}
@@ -172,8 +219,14 @@ export function EditSourceDialog({
                     />
                   ) : (
                     <Input
-                      id={`edit-${field.name}`}
-                      type={field.type === "password" ? "password" : "text"}
+                      id={id}
+                      type={
+                        field.type === "password"
+                          ? "password"
+                          : field.type === "number"
+                            ? "number"
+                            : "text"
+                      }
                       placeholder={placeholder}
                       value={value}
                       onChange={(e) => set(e.target.value)}
