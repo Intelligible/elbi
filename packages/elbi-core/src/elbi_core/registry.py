@@ -123,6 +123,7 @@ class Registry:
 #: The registry populated by ``@derivation`` when no registry is specified.
 default_registry = Registry()
 
+
 class NotebookRegistry(Registry):
     """A registry where re-declaring a derivation replaces it rather than colliding.
 

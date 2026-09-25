@@ -649,7 +649,11 @@ def test_defining_a_derivation_shows_what_it_returns() -> None:
         )
 
         assert status == "ok"
-        html = [o["data"].get("text/html", "") for o in outputs if o["type"] == "execute_result"]
+        html = [
+            o["data"].get("text/html", "")
+            for o in outputs
+            if o["type"] == "execute_result"
+        ]
         assert any("<td>1</td>" in rendering for rendering in html)
     finally:
         kernel.close()
@@ -670,12 +674,17 @@ def test_a_derivation_reading_an_upstream_runs_the_upstream_first() -> None:
             kernel,
             "@derivation(inputs={'rows': base})\n"
             "def doubled(ctx):\n"
-            "    return Artifact.table([{'n': r['n'] * 2} for r in ctx.input('rows').value])",
+            "    rows = ctx.input('rows').value\n"
+            "    return Artifact.table([{'n': r['n'] * 2} for r in rows])",
             2,
         )
 
         assert status == "ok"
-        html = [o["data"].get("text/html", "") for o in outputs if o["type"] == "execute_result"]
+        html = [
+            o["data"].get("text/html", "")
+            for o in outputs
+            if o["type"] == "execute_result"
+        ]
         assert any("<td>4</td>" in rendering for rendering in html)
     finally:
         kernel.close()

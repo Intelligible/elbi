@@ -1254,7 +1254,9 @@ def test_a_derivation_notebook_hides_the_environment_it_needs(tmp_path: Path) ->
     service = NotebookService(store=store, load_datasets=lambda: {})
     try:
         cells = service.view(service.create_from_derivation("totals"))["cells"]
-        setup = [c for c in cells if c["metadata"].get("elbi", {}).get("role") == SETUP_ROLE]
+        setup = [
+            c for c in cells if c["metadata"].get("elbi", {}).get("role") == SETUP_ROLE
+        ]
 
         assert len(setup) == 1
         assert "SCALE = 2" in setup[0]["source"]
@@ -1354,7 +1356,9 @@ def test_running_a_cell_binds_upstreams_that_never_ran(
         f"/api/notebooks/{notebook_id}/cells", json={"source": "mid + 1"}
     ).json()["id"]
 
-    events = _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]}))
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]})
+    )
 
     started = [e["cell"] for e in events if e["event"] == "cell_start"]
     assert started == [first, middle, last]
@@ -1369,7 +1373,7 @@ def test_running_a_cell_binds_upstreams_that_never_ran(
 def test_an_upstream_that_already_ran_is_left_alone(
     client: tuple[TestClient, dict[str, str]],
 ) -> None:
-    """Bound once is bound. Re-running it is the reactive engine's business, not this."""
+    """Bound once is bound. Re-running it is the reactive engine's job, not this."""
     http, _ = client
     notebook_id = http.post("/api/notebooks", json={"name": "Chain"}).json()["id"]
     first = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
@@ -1382,7 +1386,9 @@ def test_an_upstream_that_already_ran_is_left_alone(
     ).json()["id"]
 
     _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]}))
-    events = _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]}))
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]})
+    )
 
     assert [e["cell"] for e in events if e["event"] == "cell_start"] == [last]
     results = [
