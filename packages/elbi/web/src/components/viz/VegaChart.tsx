@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { VegaEmbed } from "react-vega"
 import type { VisualizationSpec } from "vega-embed"
 import { useTheme } from "@/hooks/useTheme"
@@ -68,11 +68,30 @@ export function VegaChart({
   bare?: boolean
 }) {
   const { resolved } = useTheme()
+  const frame = useRef<HTMLDivElement>(null)
+  // Vega's own "container" height is measured once, at embed. A dashboard tile is
+  // resizable, and the chart kept the height it was born with while the tile grew
+  // around it, leaving the new space as padding. Measuring the frame ourselves and
+  // passing pixels re-renders the chart whenever the tile changes size.
+  const [measured, setMeasured] = useState(0)
+  useEffect(() => {
+    const element = frame.current
+    if (height !== "container" || !element || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(([entry], _observer) => {
+      setMeasured(Math.round(entry.contentRect.height))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [height])
+
   const full = useMemo<VisualizationSpec>(() => {
     const authored = stripDataSources(spec) as Record<string, unknown>
+    // Below about this, the axes and legend have nowhere to go and Vega warns about a
+    // negative plotting area; let the tile clip instead of rendering a broken chart.
+    const resolvedHeight = height === "container" ? Math.max(measured, 60) : height
     return {
       width: "container",
-      height,
+      height: resolvedHeight,
       autosize: { type: "fit", contains: "padding" },
       ...authored,
       config: {
@@ -81,9 +100,12 @@ export function VegaChart({
       },
       data: { values: coerce(rows) },
     } as unknown as VisualizationSpec
-  }, [spec, rows, height, resolved])
+  }, [spec, rows, height, measured, resolved])
   return (
-    <div className={bare ? "h-full w-full" : "w-full rounded-xl border border-border p-3"}>
+    <div
+      ref={frame}
+      className={bare ? "h-full w-full" : "w-full rounded-xl border border-border p-3"}
+    >
       <VegaEmbed
         spec={full}
         options={{ actions: false, mode: "vega-lite" }}

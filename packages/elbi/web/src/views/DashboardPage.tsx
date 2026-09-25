@@ -8,6 +8,8 @@ import "react-resizable/css/styles.css"
 
 import { DashboardWidget } from "@/components/dashboard/DashboardWidget"
 import { FilterBar } from "@/components/dashboard/FilterBar"
+import { JsonEditor } from "@/components/dashboard/JsonEditor"
+import { TileEditor, type TilePatch } from "@/components/dashboard/TileEditor"
 import { Scene, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,15 +20,34 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+import { useDarkTheme } from "@/hooks/useTheme"
 import { dashboardExportUrl } from "@/lib/chat"
 import type { Dashboard, DashboardSpec, Variable, Widget, WidgetData } from "@/lib/dashboards"
-import { getDashboard, publishDashboard, resolvePage, saveDashboard } from "@/lib/dashboards"
+import {
+  bindableDerivations,
+  dashboardSchema,
+  getDashboard,
+  publishDashboard,
+  resolvePage,
+  saveDashboard,
+} from "@/lib/dashboards"
+import { createHistory, record, redo, undo, undoGesture } from "@/lib/history"
 
 const Grid = WidthProvider(GridLayout)
-const ROW_HEIGHT = 44
+// A tile's height is `(ROW_HEIGHT + margin)h - margin`, so a row is also the step a
+// vertical resize moves in — 60px at the old 44px row, which made dragging an edge feel
+// chunky and pushed the tiles below it down in jumps. At 14 the step is 30px.
+//
+// The unit is the spec's `h`, so halving the step doubles the number of rows a given
+// height is written as: a tile that was `h: 3` is `h: 6`. Dashboards written against
+// the old unit render at half their intended height until their `h` values are doubled.
+const ROW_HEIGHT = 14
 //: The spec's default page width; a page omitting `columns` is 24 wide, not 12.
 const DEFAULT_COLUMNS = 24
+//: Resize from any edge or corner, not just the bottom-right: widening a tile against
+//: the one on its left means dragging the left edge, which a single `se` handle cannot
+//: express. North and west handles move the tile's origin as well as its size.
+const RESIZE_HANDLES = ["n", "e", "s", "w", "ne", "nw", "se", "sw"] as const
 
 function initialState(spec: DashboardSpec): Record<string, unknown> {
   const state: Record<string, unknown> = {}
@@ -45,6 +66,7 @@ function pageVariables(spec: DashboardSpec, page: string): Variable[] {
 export function DashboardPage() {
   const { id = "" } = useParams()
   const navigate = useNavigate()
+  const dark = useDarkTheme()
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
   const [pageName, setPageName] = useState<string>("")
   const [variables, setVariables] = useState<Record<string, unknown>>({})
@@ -54,6 +76,13 @@ export function DashboardPage() {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [catalog, setCatalog] = useState<string[]>([])
+  const [schema, setSchema] = useState<Record<string, unknown> | null>(null)
+  const [tileUnderEdit, setTileUnderEdit] = useState<Widget | null>(null)
+  const [tileToDelete, setTileToDelete] = useState<Widget | null>(null)
+  // Snapshots of the spec before each edit, for ⌘Z. Session-only: a reload starts
+  // clean, and the dashboard's own version history is the durable record.
+  const history = useRef(createHistory<DashboardSpec>())
 
   const load = useCallback(async () => {
     const view = await getDashboard(id)
@@ -83,6 +112,17 @@ export function DashboardPage() {
     void resolve()
   }, [resolve])
 
+  // The names a tile may bind, for the editor's derivation field, and the schema both
+  // JSON editors check against.
+  useEffect(() => {
+    void bindableDerivations()
+      .then(setCatalog)
+      .catch(() => setCatalog([]))
+    void dashboardSchema()
+      .then(setSchema)
+      .catch(() => setSchema(null))
+  }, [])
+
   const page = useMemo(() => spec?.pages.find((p) => p.name === pageName), [spec, pageName])
   // 24, matching the spec's default and what `Page.to_manifest` omits when unchanged.
   // Defaulting to 12 here silently halved the grid of every page that took the default.
@@ -101,6 +141,8 @@ export function DashboardPage() {
         w: w.gridPos.w,
         h: w.gridPos.h,
         minW: 2,
+        // 3 rows is 74px: a title and a line under it. The header alone is ~30px, so
+        // much below this is a title bar with a sliver of body.
         minH: 3,
       })),
     [visibleWidgets],
@@ -126,6 +168,10 @@ export function DashboardPage() {
               },
         ),
       }
+      // react-grid-layout reports a drag that moved nothing (a click on the header), and
+      // an undo entry for that would be a keystroke that appears to do nothing.
+      if (JSON.stringify(nextSpec) === JSON.stringify(dashboard.spec)) return
+      record(history.current, dashboard.spec)
       setDashboard({ ...dashboard, spec: nextSpec })
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
@@ -133,6 +179,98 @@ export function DashboardPage() {
       }, 600)
     },
     [dashboard, page, id],
+  )
+
+  // One place every spec edit goes through: rebuild the spec, show it immediately, and
+  // write it. Unlike a drag there is nothing to debounce — a dialog's Save and a delete
+  // are single deliberate acts, so they persist at once.
+  const writeSpec = useCallback(
+    async (nextSpec: DashboardSpec, previous?: DashboardSpec) => {
+      if (previous) record(history.current, previous)
+      setDashboard((current) => (current ? { ...current, spec: nextSpec } : current))
+      await saveDashboard(id, nextSpec)
+    },
+    [id],
+  )
+
+  // ⌘Z / Ctrl-Z steps back through this session's edits; ⇧⌘Z steps forward. A drag, a
+  // dialog's Save and a delete are each one entry, so one keystroke undoes one act.
+  const stepHistory = useCallback(
+    (direction: "undo" | "redo") => {
+      if (!dashboard) return
+      const step = direction === "undo" ? undo : redo
+      const restored = step(history.current, dashboard.spec)
+      if (!restored) return
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      setDashboard({ ...dashboard, spec: restored })
+      void saveDashboard(id, restored).then(() => resolve())
+    },
+    [dashboard, id, resolve],
+  )
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const gesture = undoGesture(event)
+      if (!gesture) return
+      event.preventDefault()
+      stepHistory(gesture)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [stepHistory])
+
+  const mapWidgets = useCallback(
+    (change: (widgets: Widget[]) => Widget[]): DashboardSpec | null => {
+      if (!dashboard || !page) return null
+      return {
+        ...dashboard.spec,
+        pages: dashboard.spec.pages.map((p) =>
+          p.name === page.name ? { ...p, widgets: change(p.widgets) } : p,
+        ),
+      }
+    },
+    [dashboard, page],
+  )
+
+  const saveTile = useCallback(
+    async (widgetId: string, patch: TilePatch) => {
+      const nextSpec = mapWidgets((widgets) =>
+        widgets.map((w) => {
+          if (w.id !== widgetId) return w
+          // The JSON tab hands back the whole widget, so it replaces rather than merges:
+          // a key deleted in the text has to actually go.
+          if (patch.widget) return patch.widget as unknown as Widget
+          const next: Widget = { ...w }
+          // An emptied title is no title, rather than an empty line above the body.
+          if (patch.title !== undefined) {
+            if (patch.title.trim()) next.title = patch.title.trim()
+            else delete next.title
+          }
+          if (patch.content !== undefined) next.content = patch.content
+          if (patch.derivation !== undefined && w.bind) {
+            next.bind = { ...w.bind, derivation: patch.derivation }
+          }
+          if (patch.viz !== undefined) next.viz = patch.viz
+          if (patch.gridPos !== undefined) next.gridPos = patch.gridPos
+          return next
+        }),
+      )
+      if (!nextSpec) return
+      setTileUnderEdit(null)
+      await writeSpec(nextSpec, dashboard?.spec)
+      void resolve()
+    },
+    [mapWidgets, writeSpec, resolve, dashboard?.spec],
+  )
+
+  const deleteTile = useCallback(
+    async (widgetId: string) => {
+      const nextSpec = mapWidgets((widgets) => widgets.filter((w) => w.id !== widgetId))
+      if (!nextSpec) return
+      setTileToDelete(null)
+      await writeSpec(nextSpec, dashboard?.spec)
+    },
+    [mapWidgets, writeSpec, dashboard?.spec],
   )
 
   const publish = async () => {
@@ -255,6 +393,7 @@ export function DashboardPage() {
             margin={[16, 16]}
             containerPadding={[0, 0]}
             draggableHandle=".dash-drag-handle"
+            resizeHandles={[...RESIZE_HANDLES]}
             draggableCancel=".dash-no-drag"
             onDragStop={persistLayout}
             onResizeStop={persistLayout}
@@ -267,6 +406,8 @@ export function DashboardPage() {
                   data={widgets[widget.id]}
                   variables={variables}
                   onCrossFilter={(emit) => setVariables((current) => ({ ...current, ...emit }))}
+                  onEdit={() => setTileUnderEdit(widget)}
+                  onDelete={() => setTileToDelete(widget)}
                   onDrillThrough={() => {
                     const target = widget.interactions?.drillThrough?.target ?? ""
                     const [kind, ref] = target.split(":")
@@ -283,6 +424,40 @@ export function DashboardPage() {
         )}
       </div>
 
+      <TileEditor
+        widget={tileUnderEdit}
+        catalog={catalog}
+        columns={columns}
+        dark={dark}
+        schema={schema}
+        onCancel={() => setTileUnderEdit(null)}
+        onSave={(widgetId, patch) => void saveTile(widgetId, patch)}
+      />
+
+      <Dialog open={tileToDelete !== null} onOpenChange={(open) => !open && setTileToDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this tile?</DialogTitle>
+            <p className="text-sm text-text-tertiary">
+              “{tileToDelete?.title ?? tileToDelete?.id}” is removed from this page. The derivation
+              behind it is untouched, and an earlier version of the dashboard is still in its
+              history.
+            </p>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTileToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => tileToDelete && void deleteTile(tileToDelete.id)}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -293,12 +468,7 @@ export function DashboardPage() {
               <code>{'{"metric": "name", "groupBy": ["…"], "grain": "month"}'}</code>).
             </p>
           </DialogHeader>
-          <Textarea
-            className="h-[60vh] font-mono text-xs"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            spellCheck={false}
-          />
+          <JsonEditor value={draft} label="Dashboard spec" dark={dark} onChange={setDraft} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(false)}>
               Cancel
