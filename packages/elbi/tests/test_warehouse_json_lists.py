@@ -161,3 +161,101 @@ def test_a_null_inside_an_encoded_column_survives_as_json_null(
     line = json.loads(_written("invoices").to_pylist()[0]["lines"])["data"][0]
     assert "description" in line
     assert line["description"] is None
+
+
+def test_values_json_cannot_encode_natively_are_stringified(
+    warehouse: None, json_lists: None
+) -> None:
+    # Datetimes, decimals and bytes inside a struct list would otherwise make
+    # json.dumps raise and fail the sync before anything is written.
+    import datetime as dt
+    from decimal import Decimal
+
+    page = [
+        {
+            "id": "in_1",
+            "lines": [
+                {
+                    "at": dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt.UTC),
+                    "on": dt.date(2026, 1, 2),
+                    "amount": Decimal("12.50"),
+                    "blob": b"\x00\x01",
+                }
+            ],
+        }
+    ]
+
+    storage.write_arrow("invoices", pa.Table.from_pylist(page), mode="overwrite")
+
+    line = json.loads(_written("invoices").to_pylist()[0]["lines"])[0]
+    assert line["at"] == "2026-01-02T03:04:05+00:00"
+    assert line["on"] == "2026-01-02"
+    assert line["amount"] == "12.50"
+    assert line["blob"] == "AAE="
+
+
+_EMPTY_LINES = [{"id": "in_0", "lines": {"data": [], "has_more": False}}]
+
+
+def test_an_empty_batch_first_is_encoded_like_the_batches_after_it(
+    warehouse: None, json_lists: None
+) -> None:
+    # A batch where every list is empty infers `list<null>`. Left typed, the table's
+    # `lines` would be a struct and the next populated batch's text could not append.
+    storage.write_arrow(
+        "invoices", pa.Table.from_pylist(_EMPTY_LINES), mode="overwrite"
+    )
+    storage.write_arrow("invoices", pa.Table.from_pylist(_PAGE_1), mode="append")
+
+    rows = {r["id"]: json.loads(r["lines"]) for r in _written("invoices").to_pylist()}
+    assert rows["in_0"] == {"data": [], "has_more": False}
+    assert rows["in_1"]["data"][0]["id"] == "il_1"
+
+
+def test_an_empty_batch_after_encoded_ones_is_encoded_to_match(
+    warehouse: None, json_lists: None
+) -> None:
+    storage.write_arrow("invoices", pa.Table.from_pylist(_PAGE_1), mode="overwrite")
+    storage.write_arrow("invoices", pa.Table.from_pylist(_EMPTY_LINES), mode="append")
+
+    assert _written("invoices").num_rows == 2
+
+
+def test_turning_the_flag_on_leaves_an_existing_typed_column_typed(
+    warehouse: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = [{"id": "in_1", "lines": {"data": [{"id": "il_1", "amount": 1}]}}]
+    storage.write_arrow("invoices", pa.Table.from_pylist(page), mode="overwrite")
+
+    monkeypatch.setenv("WAREHOUSE_JSON_NESTED_LISTS", "1")
+    later = [{"id": "in_2", "lines": {"data": [{"id": "il_2", "amount": 2}]}}]
+    storage.write_arrow("invoices", pa.Table.from_pylist(later), mode="append")
+
+    written = _written("invoices")
+    assert written.num_rows == 2
+    assert pa.types.is_struct(written.schema.field("lines").type)
+
+
+def test_turning_the_flag_off_keeps_an_encoded_column_encoded(
+    warehouse: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WAREHOUSE_JSON_NESTED_LISTS", "1")
+    storage.write_arrow("invoices", pa.Table.from_pylist(_PAGE_1), mode="overwrite")
+
+    monkeypatch.delenv("WAREHOUSE_JSON_NESTED_LISTS")
+    storage.write_arrow("invoices", pa.Table.from_pylist(_PAGE_2), mode="append")
+
+    rows = {r["id"]: json.loads(r["lines"]) for r in _written("invoices").to_pylist()}
+    assert rows["in_2"]["data"][0]["taxes"][0]["amount"] == 10
+
+
+def test_a_full_refresh_applies_the_flag_to_an_existing_table(
+    warehouse: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = [{"id": "in_1", "lines": {"data": [{"id": "il_1", "amount": 1}]}}]
+    storage.write_arrow("invoices", pa.Table.from_pylist(page), mode="overwrite")
+
+    monkeypatch.setenv("WAREHOUSE_JSON_NESTED_LISTS", "1")
+    storage.write_arrow("invoices", pa.Table.from_pylist(page), mode="overwrite")
+
+    assert _written("invoices").schema.field("lines").type == pa.string()

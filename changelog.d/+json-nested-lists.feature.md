@@ -5,4 +5,7 @@ from a subscription or an invoice item — and Delta cannot evolve a list whose 
 struct diverges while also gaining a list-typed field, so the sync fails with
 "Unsupported CAST from Struct(...) to Struct(...)". Stored as text the sync cannot break
 on shape and nothing is discarded, at the cost of column-level access into that field.
-Off by default; scalars, plain structs and lists of scalars are never encoded.
+Off by default; scalars, plain structs and lists of scalars are never encoded. The flag only
+decides new columns: a column the table already has keeps its stored form, so toggling
+it never breaks an incremental sync and takes effect on an existing table at its next
+full refresh.

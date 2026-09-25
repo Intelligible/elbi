@@ -166,6 +166,13 @@ predicate pushdown into that field. Scalars, plain structs and lists of scalars 
 untouched -- only columns that actually hold a list of structs are encoded, and each
 one is named in the log when it is.
 
+The flag decides only columns a table does not have yet. A column already in the table
+keeps the form it was stored in -- typed stays typed, text stays text -- so turning the
+flag on or off never breaks an incremental sync, but it also changes nothing about an
+existing table until you run a **full refresh** of that source, which rewrites it under
+the current setting. A list that is empty in every row of a batch is encoded along with
+the rest, so an early page with no line items does not fix the column as a struct.
+
 ### Incremental sync
 
 A connector offers an incremental cursor only where one would actually help. A

@@ -213,6 +213,8 @@ def _delta_writable_type(dtype: pa.DataType) -> pa.DataType | None:
 
 #: Encode every list-of-struct column as a JSON string instead of typed columns.
 #: Off by default: it trades column-level access for a sync that cannot break on shape.
+#: Only new columns follow the flag; a column the table already has keeps its stored
+#: form, so flipping it on an existing table changes nothing until a full refresh.
 _JSON_LISTS_ENV = "WAREHOUSE_JSON_NESTED_LISTS"
 
 
@@ -239,16 +241,73 @@ def _contains_a_struct_list(dtype: pa.DataType) -> bool:
 
 
 def _holds_a_struct(dtype: pa.DataType) -> bool:
-    """Whether ``dtype`` is, or contains, a struct."""
-    if pa.types.is_struct(dtype):
+    """Whether ``dtype`` is, or contains, a struct -- or may, being all-null.
+
+    A list that was empty in every row infers as ``list<null>``. It counts, so a first
+    batch of empty lists is encoded exactly as the populated batches after it will be;
+    left typed, the column would be a struct in the table and text in the next batch.
+    """
+    if pa.types.is_struct(dtype) or pa.types.is_null(dtype):
         return True
     if pa.types.is_list(dtype) or pa.types.is_large_list(dtype):
         return _holds_a_struct(dtype.value_type)
     return False
 
 
-def _json_encode_struct_lists(data: pa.Table) -> pa.Table:
-    """Replace each column holding a list of structs with its JSON text.
+def _is_text(dtype: pa.DataType) -> bool:
+    return (
+        pa.types.is_string(dtype)
+        or pa.types.is_large_string(dtype)
+        or pa.types.is_string_view(dtype)
+    )
+
+
+def _json_default(value: Any) -> Any:
+    """JSON for the Arrow values :func:`json.dumps` has no encoding of its own for."""
+    import base64
+    import datetime as dt
+    from decimal import Decimal
+
+    if isinstance(value, (dt.datetime, dt.date, dt.time)):
+        return value.isoformat()
+    if isinstance(value, dt.timedelta):
+        return value.total_seconds()
+    if isinstance(value, Decimal):
+        # A string, not a float: the column was a decimal to keep its precision.
+        return str(value)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return base64.b64encode(bytes(value)).decode("ascii")
+    raise TypeError(f"{type(value).__name__} is not JSON serializable")
+
+
+def _columns_to_encode(data: pa.Table, existing: pa.Schema | None) -> list[str]:
+    """The columns of ``data`` to store as JSON text on this write.
+
+    A column the table already has keeps the form it was stored in, whatever the flag
+    says now: text stays text (any nested value is encoded to match it) and a typed
+    column stays typed. Mixing the two in one column is a write that cannot succeed,
+    and it is what flipping the flag on an established table, or one batch that
+    happened to infer differently, would otherwise produce. Only a column new to the
+    table -- or every column, on an overwrite -- is decided by the flag.
+    """
+    enabled = _json_nested_lists_enabled()
+    names = []
+    for field in data.schema:
+        stored = (
+            existing.field(field.name)
+            if existing is not None and field.name in existing.names
+            else None
+        )
+        if stored is not None:
+            if _is_text(stored.type) and pa.types.is_nested(field.type):
+                names.append(field.name)
+        elif enabled and _contains_a_struct_list(field.type):
+            names.append(field.name)
+    return names
+
+
+def _json_encode_struct_lists(data: pa.Table, names: list[str]) -> pa.Table:
+    """Replace each of the ``names`` columns with its JSON text.
 
     A list of structs is where per-page schema inference stops being survivable. Delta
     merges a struct column that gains a field, and merges a list that gains one, but a
@@ -271,44 +330,33 @@ def _json_encode_struct_lists(data: pa.Table) -> pa.Table:
     """
     import json
 
-    names: list[str] = []
-    columns: list[pa.Array | pa.ChunkedArray] = []
-    encoded: list[str] = []
-    for index, field in enumerate(data.schema):
-        column = data.column(index)
-        if not _contains_a_struct_list(field.type):
-            names.append(field.name)
-            columns.append(column)
-            continue
-
-        encoded.append(field.name)
-        names.append(field.name)
-        as_text = [
-            None if value is None else json.dumps(value) for value in column.to_pylist()
-        ]
-        columns.append(pa.array(as_text, type=pa.string()))
-
-    if not encoded:
+    if not names:
         return data
 
+    for name in names:
+        as_text = [
+            None if value is None else json.dumps(value, default=_json_default)
+            for value in data.column(name).to_pylist()
+        ]
+        data = data.set_column(
+            data.schema.get_field_index(name), name, pa.array(as_text, type=pa.string())
+        )
+
     logger.info(
-        "stored %d list-of-struct field(s) as JSON text (%s=1): %s",
-        len(encoded),
-        _JSON_LISTS_ENV,
-        ", ".join(encoded),
+        "stored %d nested field(s) as JSON text: %s", len(names), ", ".join(names)
     )
-    return pa.Table.from_arrays(columns, names=names)
+    return data
 
 
-def _coerce_for_delta(data: pa.Table) -> pa.Table:
+def _coerce_for_delta(data: pa.Table, existing: pa.Schema | None = None) -> pa.Table:
     """Drop the parts of an inferred Arrow table that Delta cannot store.
 
-    See :func:`_delta_writable_type` for what goes and why.
+    See :func:`_delta_writable_type` for what goes and why. ``existing`` is the schema
+    of the table being appended to, if any; see :func:`_columns_to_encode`.
     """
-    if _json_nested_lists_enabled():
-        # Before dropping, not after: a null inside an encoded column is representable
-        # in JSON, and dropping it first would silently lose the key from the text.
-        data = _json_encode_struct_lists(data)
+    # Before dropping, not after: a null inside an encoded column is representable
+    # in JSON, and dropping it first would silently lose the key from the text.
+    data = _json_encode_struct_lists(data, _columns_to_encode(data, existing))
 
     names: list[str] = []
     fields: list[pa.Field] = []
@@ -323,7 +371,7 @@ def _coerce_for_delta(data: pa.Table) -> pa.Table:
 
     target = pa.schema(fields)
     if target == data.schema:
-        return _json_encode_struct_lists(data) if _json_nested_lists_enabled() else data
+        return data
 
     if dropped:
         # A column vanishing with no trace is its own bug report later. Say so here,
@@ -335,6 +383,16 @@ def _coerce_for_delta(data: pa.Table) -> pa.Table:
             ", ".join(dropped),
         )
     return data.select(names).cast(target)
+
+
+def _existing_schema(uri: str) -> pa.Schema | None:
+    """The schema of the Delta table at ``uri``, or ``None`` if there is none yet."""
+    from deltalake import DeltaTable
+
+    opts = storage_options() or None
+    if not DeltaTable.is_deltatable(uri, storage_options=opts):
+        return None
+    return pa.schema(DeltaTable(uri, storage_options=opts).schema().to_arrow())
 
 
 def write_arrow(table: str, data: pa.Table, *, mode: str = "append") -> str:
@@ -351,9 +409,16 @@ def write_arrow(table: str, data: pa.Table, *, mode: str = "append") -> str:
     if _is_local():
         Path(uri).parent.mkdir(parents=True, exist_ok=True)
     overwrite = mode == "overwrite"
+    # Only a nested column's stored form matters to the write, so a flat batch skips
+    # reading the table's schema.
+    existing = (
+        None
+        if overwrite or not any(pa.types.is_nested(field.type) for field in data.schema)
+        else _existing_schema(uri)
+    )
     write_deltalake(
         uri,
-        _coerce_for_delta(data),
+        _coerce_for_delta(data, existing),
         mode="overwrite" if overwrite else "append",
         schema_mode="overwrite" if overwrite else "merge",
         storage_options=storage_options() or None,
