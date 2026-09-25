@@ -1,6 +1,7 @@
 import { Copy, LayoutDashboard, Plus, Search, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { IconButton } from "@/components/app/IconButton"
 import { Scene, SceneBody, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -116,24 +117,26 @@ function DashboardsBody() {
       title: "",
       width: 76,
       align: "right",
+      // Icon-only buttons put their baseline 4px above their bottom edge, which would
+      // shorten the row; the pad keeps it at the height the row's text line gives.
       render: (d) => (
-        <span className="inline-flex gap-1">
-          <button
-            type="button"
+        <span className="inline-flex gap-1 pb-[5.5px] align-top">
+          <IconButton
+            label={`Duplicate ${d.name}`}
+            size="icon-xs"
             onClick={() => void duplicate(d.id)}
-            className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={`Duplicate ${d.name}`}
+            className="text-text-tertiary hover:bg-muted hover:text-foreground dark:hover:bg-muted"
           >
             <Copy className="size-4" />
-          </button>
-          <button
-            type="button"
+          </IconButton>
+          <IconButton
+            label={`Delete ${d.name}`}
+            size="icon-xs"
             onClick={() => void remove(d.id)}
-            className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted hover:text-danger"
-            aria-label="Delete dashboard"
+            className="text-text-tertiary hover:bg-muted hover:text-danger dark:hover:bg-muted"
           >
             <Trash2 className="size-4" />
-          </button>
+          </IconButton>
         </span>
       ),
     },

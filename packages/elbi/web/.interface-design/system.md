@@ -16,7 +16,8 @@ is what keeps light/dark, states, and every surface reading as one family.
 
 **Text: three tiers**, not a foreground/muted binary:
 `--foreground` (primary) · `--text-secondary` · `--text-tertiary`.
-Tailwind: `text-foreground` / `text-secondary` / `text-tertiary`.
+Tailwind: `text-foreground` / `text-text-secondary` / `text-text-tertiary`.
+Banned: `text-muted-foreground` (same value; app code uses `text-text-tertiary`) and `text-secondary` (`--secondary` is a background).
 
 **Brand accent**: the mark's cocoa; states are lightness shifts that warm toward its
 gold layer, never new colors: `--primary` → `--accent-hover` → `--accent-active`.
@@ -48,6 +49,42 @@ Base `--radius: 0.375rem`. Scale via `rounded-sm|md|lg|xl` → `--radius-sm` 0.2
 
 `--font-sans` = Geist, `--font-mono` = Geist Mono (Tailwind `font-sans` / `font-mono`).
 
+## Type scale
+
+| Token | Value |
+|---|---|
+| `text-3xs` | 0.625rem (10px) |
+| `text-2xs` | 0.6875rem (11px) |
+| `text-compact` | 0.8125rem (13px) |
+| `text-title` | 1.35rem |
+| `text-display` | 1.7rem |
+
+Plus Tailwind's own `text-xs` … `text-3xl`. Never an arbitrary `text-[…]`.
+
+## Components
+
+Primitives come from `components/ui/*` (shadcn over Radix). For the composed pieces,
+reach for `components/app/FormField`, `IconButton`, `EmptyState` before hand-rolling one.
+Raw `<button>` `<select>` `<input>` `<textarea>` `<table>` are not used in app code.
+
+- **Select** is controlled with a string: `value={v}`, `""` shows the placeholder. A
+  meaningful empty choice is an item with a named sentinel, mapped to `""` only at the
+  `value` / `onValueChange` boundary. Label it via `FormField` + `FormControl` around the
+  `SelectTrigger`.
+- **Icons** in `xs` / `icon-xs` buttons carry `size-*`; without it the button sizes them to 12px.
+- **Hit boxes** of adjacent icon buttons never overlap; keep negative-margin footprints to
+  one axis.
+- **State semantics**: `aria-pressed` on segmented-control options, `aria-current` on the
+  active navigation item; every `TabsTrigger` has its `TabsContent`.
+- **Parity**: moving markup onto a component accepts that component's defaults, and restores
+  any layout the page loses.
+
+## Enforcement
+
+`npm run lint` runs Biome, then ESLint (`eslint/design-system`). `src/test/design-system.test.ts`
+runs the same rules again in `npm test`, so a violation fails the suite, not only the editor.
+Escapes are `// eslint-disable-next-line ds/<rule> -- <reason>` only.
+
 ## Depth & elevation: borders-first, shadows rare
 
 Separation comes from surface + border first; shadows are reserved for genuinely
@@ -69,7 +106,7 @@ a component (charts read the resolved tokens at runtime instead).
 
 ## Rules
 
-- Consume semantic tokens (`bg-card`, `text-secondary`, `border-border`, …). Never a
+- Consume semantic tokens (`bg-card`, `text-text-secondary`, `border-border`, …). Never a
   raw `--n-*`, hex, or `oklch(...)` literal in a component (charts excepted, via
   `chart-theme.ts`).
 - A status = ink + its `-tint` fill. A verdict = `<VerdictBadge>`.

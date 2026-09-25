@@ -8,7 +8,7 @@ export function SectionHeader({ title, hint }: { title: string; hint: string }) 
   return (
     <div className="mb-5">
       <h2 className="text-base font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{hint}</p>
+      <p className="mt-1 text-sm text-text-tertiary">{hint}</p>
     </div>
   )
 }

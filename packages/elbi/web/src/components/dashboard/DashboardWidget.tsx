@@ -6,6 +6,15 @@
 import { AlertCircle, GripVertical } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { Button } from "@/components/ui/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { VizView } from "@/components/viz/VizView"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Widget, WidgetData } from "@/lib/dashboards"
@@ -18,9 +27,7 @@ function asRows(value: unknown): Row[] {
 }
 
 function CenterNote({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid h-full place-items-center text-xs text-muted-foreground">{children}</div>
-  )
+  return <div className="grid h-full place-items-center text-xs text-text-tertiary">{children}</div>
 }
 
 function formatValue(value: unknown, format?: string): string {
@@ -84,8 +91,8 @@ function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
       : "set viz.field to a column of the bound derivation"
     return (
       <div className="flex h-full flex-col justify-center">
-        <div className="text-3xl font-semibold text-muted-foreground/40">{EMPTY}</div>
-        <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+        <div className="text-3xl font-semibold text-text-tertiary/40">{EMPTY}</div>
+        <div className="mt-1 text-xs text-text-tertiary">{hint}</div>
       </div>
     )
   }
@@ -98,7 +105,7 @@ function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
   )
 }
 
-function TableBody({
+function RowsTable({
   widget,
   data,
   onRowClick,
@@ -109,42 +116,38 @@ function TableBody({
 }) {
   const rowKey = useRowKeys()
   const rows = asRows(data?.value)
-  if (rows.length === 0) return <div className="text-sm text-muted-foreground">No rows.</div>
+  if (rows.length === 0) return <div className="text-sm text-text-tertiary">No rows.</div>
   const viz = widget.viz ?? {}
   const columns = Array.isArray(viz.columns) ? (viz.columns as string[]) : Object.keys(rows[0])
   const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50
   return (
     <div className="overflow-auto">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-background">
-          <tr className="border-b border-border text-left text-muted-foreground">
+      <Table className="text-sm">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
             {columns.map((c) => (
-              <th key={c} className="px-2 py-1 font-medium">
+              <TableHead key={c} className="px-2 py-1">
                 {c}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="[&_tr]:border-border/50 [&_tr:last-child]:border-b">
           {rows.slice(0, pageSize).map((row) => (
-            <tr
+            <TableRow
               key={rowKey(row)}
-              className={
-                onRowClick
-                  ? "cursor-pointer border-b border-border/50 hover:bg-accent"
-                  : "border-b border-border/50"
-              }
+              className={onRowClick ? "cursor-pointer hover:bg-accent" : undefined}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >
               {columns.map((c) => (
-                <td key={c} className="px-2 py-1 tabular-nums">
+                <TableCell key={c} className="px-2 py-1">
                   {String(row[c] ?? "")}
-                </td>
+                </TableCell>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -206,7 +209,7 @@ export function DashboardWidget({
         return <MetricBody widget={widget} data={data} />
       case "table":
         return rows.length ? (
-          <TableBody widget={widget} data={data} onRowClick={onRowClick} />
+          <RowsTable widget={widget} data={data} onRowClick={onRowClick} />
         ) : (
           <CenterNote>No rows.</CenterNote>
         )
@@ -223,7 +226,7 @@ export function DashboardWidget({
   }
 
   return (
-    <div className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
       {/* Header doubles as the drag handle (react-grid-layout draggableHandle). */}
       <div className="dash-drag-handle flex cursor-grab items-center justify-between gap-2 px-3 pt-2.5 pb-1 active:cursor-grabbing">
         <div className="truncate text-sm font-medium" title={widget.title}>
@@ -231,15 +234,15 @@ export function DashboardWidget({
         </div>
         <div className="flex items-center gap-1.5">
           {drillThrough && onDrillThrough ? (
-            <button
-              type="button"
-              className="dash-no-drag text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            <Button
+              variant="link"
+              className="dash-no-drag h-auto p-0 text-xs font-normal text-text-tertiary underline-offset-2 hover:text-foreground"
               onClick={onDrillThrough}
             >
               Details →
-            </button>
+            </Button>
           ) : null}
-          <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30 opacity-0 transition group-hover:opacity-100" />
+          <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-tertiary/30 opacity-0 transition group-hover:opacity-100" />
         </div>
       </div>
       <div className="min-h-0 flex-1 px-3 pb-3">{body()}</div>

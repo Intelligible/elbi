@@ -1,0 +1,19 @@
+:root {
+  --text-secondary: gray;
+}
+@theme inline {
+  --color-foreground: var(--foreground);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-secondary: var(--secondary);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--primary);
+  --color-n-600: var(--n-600);
+  --color-data-3: var(--data-3);
+}
+@theme {
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}

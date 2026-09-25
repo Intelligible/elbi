@@ -13,10 +13,13 @@ import {
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { Streamdown } from "streamdown"
+import { FormControl, FormField } from "@/components/app/FormField"
+import { IconButton } from "@/components/app/IconButton"
 import { Scene, SceneBody, SceneHeader, SceneSection, SceneSkeleton } from "@/components/Scene"
 import { TrainingStatus, useTrainingJobs } from "@/components/TrainingJobs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -26,7 +29,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FeedbackProvider, useFeedback } from "@/components/ui/feedback"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import { useRowKeys } from "@/hooks/useRowKeys"
@@ -287,29 +309,29 @@ function VersionsSection({
         <p className="text-sm text-text-secondary">No versions registered yet.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-secondary text-left text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-text-tertiary">
-                <th className="px-4 py-2">Version</th>
-                <th className="px-4 py-2">Created</th>
-                <th className="px-4 py-2">Aliases</th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-4">Version</TableHead>
+                <TableHead className="px-4">Created</TableHead>
+                <TableHead className="px-4">Aliases</TableHead>
                 {metricKeys.map((k) => (
-                  <th key={k} className="px-4 py-2">
+                  <TableHead key={k} className="px-4">
                     {k.slice("holdout_".length)}
-                  </th>
+                  </TableHead>
                 ))}
-                <th className="px-4 py-2">Estimator</th>
-                <th className="px-4 py-2">Task</th>
-                <th className="px-4 py-2">Run</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+                <TableHead className="px-4">Estimator</TableHead>
+                <TableHead className="px-4">Task</TableHead>
+                <TableHead className="px-4">Run</TableHead>
+                <TableHead className="px-4" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {detail.versions.map((v) => {
                 const isChampion = v.version === detail.championVersion
                 return (
-                  <tr key={v.version}>
-                    <td className="px-4 py-2.5 font-mono">
+                  <TableRow key={v.version}>
+                    <TableCell className="px-4 py-2.5 font-mono">
                       <a
                         href={`/mlflow/#/models/${encodeURIComponent(detail.name)}/versions/${v.version}`}
                         target="_blank"
@@ -319,11 +341,11 @@ function VersionsSection({
                       >
                         v{v.version}
                       </a>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap px-4 py-2.5 text-text-tertiary">
                       {new Date(v.createdAtMs).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-2.5">
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5">
                       {v.aliases.length === 0 ? (
                         // No alias is a question ("why is this not deployed?"), and the
                         // oracle's verdict is the answer, with its reason on hover.
@@ -347,34 +369,34 @@ function VersionsSection({
                           ))}
                         </span>
                       )}
-                    </td>
+                    </TableCell>
                     {metricKeys.map((k) => (
-                      <td key={k} className="px-4 py-2.5 font-mono text-xs">
+                      <TableCell key={k} className="px-4 py-2.5 font-mono text-xs">
                         {k in v.metrics ? v.metrics[k].toFixed(4) : EMPTY}
-                      </td>
+                      </TableCell>
                     ))}
-                    <td className="px-4 py-2.5 font-mono text-xs">
+                    <TableCell className="px-4 py-2.5 font-mono text-xs">
                       {v.params.bestEstimator ?? EMPTY}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-xs text-text-tertiary">
                       {v.params.task ?? EMPTY}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap px-4 py-2.5 font-mono text-xs">
                       {v.experimentId && v.runId ? (
                         <a
                           href={`/mlflow/#/experiments/${encodeURIComponent(v.experimentId)}/runs/${encodeURIComponent(v.runId)}`}
                           target="_blank"
                           rel="noreferrer"
                           title="Open the source run in MLflow"
-                          className="inline-flex items-center gap-1 text-muted-foreground transition hover:text-foreground"
+                          className="inline-flex items-center gap-1 text-text-tertiary transition hover:text-foreground"
                         >
                           {v.runId.slice(0, 8)} <ExternalLink className="h-3 w-3" />
                         </a>
                       ) : (
-                        <span className="text-muted-foreground">{EMPTY}</span>
+                        <span className="text-text-tertiary">{EMPTY}</span>
                       )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap px-4 py-2.5 text-right">
                       {!isChampion && (
                         <Button variant="outline" size="xs" onClick={() => setPromoting(v)}>
                           Promote to champion
@@ -389,12 +411,12 @@ function VersionsSection({
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
       <ConfirmPromoteDialog
@@ -547,6 +569,7 @@ function QueryPane({ detail }: { detail: RegisteredModelDetail }) {
             <Button
               variant={mode === "engineered" ? "outline" : "ghost"}
               size="xs"
+              aria-pressed={mode === "engineered"}
               onClick={() => switchMode("engineered")}
             >
               Engineered features
@@ -554,6 +577,7 @@ function QueryPane({ detail }: { detail: RegisteredModelDetail }) {
             <Button
               variant={mode === "raw" ? "outline" : "ghost"}
               size="xs"
+              aria-pressed={mode === "raw"}
               onClick={() => switchMode("raw")}
             >
               Raw records
@@ -562,7 +586,7 @@ function QueryPane({ detail }: { detail: RegisteredModelDetail }) {
         )}
 
         {mode === "raw" ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-text-tertiary">
             Raw rows score against the served version: the certified derivation{" "}
             <span className="font-mono text-foreground">{featureDerivation}</span> engineers the
             features first, so send source-shaped records: the same columns the derivation reads.
@@ -570,47 +594,54 @@ function QueryPane({ detail }: { detail: RegisteredModelDetail }) {
         ) : (
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium">Version</span>
-            <select
-              className="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs"
-              value={version}
-              onChange={(e) => setVersion(Number(e.target.value))}
-            >
-              {detail.versions.map((v) => (
-                <option key={v.version} value={v.version}>
-                  v{v.version}
-                  {v.version === detail.championVersion ? " (champion)" : ""}
-                </option>
-              ))}
-            </select>
+            <Select value={String(version)} onValueChange={(v) => setVersion(Number(v))}>
+              <SelectTrigger
+                size="sm"
+                aria-label="Version"
+                className="px-2 font-mono text-xs data-[size=sm]:h-7"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {detail.versions.map((v) => (
+                  <SelectItem
+                    key={v.version}
+                    value={String(v.version)}
+                    className="font-mono text-xs"
+                  >
+                    v{v.version}
+                    {v.version === detail.championVersion ? " (champion)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 
         {mode === "raw" ? null : schema === null ? (
-          <p className="text-xs text-muted-foreground">
-            No signature is available for this version.
-          </p>
+          <p className="text-xs text-text-tertiary">No signature is available for this version.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border bg-card">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className={headRowClass}>
-                  <th className={thClass}>Input</th>
-                  <th className={thClass}>Type</th>
-                  <th className={thClass}>Required</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="py-1.5">Input</TableHead>
+                  <TableHead className="py-1.5">Type</TableHead>
+                  <TableHead className="py-1.5">Required</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {schema.inputs.map((i) => (
-                  <tr key={i.name}>
-                    <td className="px-3 py-1.5 font-mono">{i.name}</td>
-                    <td className="px-3 py-1.5 font-mono text-muted-foreground">{i.type}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
+                  <TableRow key={i.name}>
+                    <TableCell className="py-1.5 font-mono">{i.name}</TableCell>
+                    <TableCell className="py-1.5 font-mono text-text-tertiary">{i.type}</TableCell>
+                    <TableCell className="py-1.5 text-text-tertiary">
                       {i.required ? "yes" : "no"}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
 
@@ -639,7 +670,7 @@ function QueryPane({ detail }: { detail: RegisteredModelDetail }) {
 
         {rawResult && (
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-text-tertiary">
               Derivation{" "}
               <span className="font-mono text-foreground">{rawResult.featuresApplied}</span>{" "}
               engineered {rawResult.nRawRows} raw row
@@ -648,28 +679,28 @@ function QueryPane({ detail }: { detail: RegisteredModelDetail }) {
             </p>
             {rawResult.engineered.length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className={headRowClass}>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
                       {engineeredColumns.map((k) => (
-                        <th key={k} className={thClass}>
+                        <TableHead key={k} className="py-1.5">
                           {k}
-                        </th>
+                        </TableHead>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {rawResult.engineered.map((row) => (
-                      <tr key={rowKey(row)}>
+                      <TableRow key={rowKey(row)}>
                         {engineeredColumns.map((k) => (
-                          <td key={k} className="whitespace-nowrap px-3 py-1.5 font-mono">
+                          <TableCell key={k} className="whitespace-nowrap py-1.5 font-mono">
                             {cellText(row[k])}
-                          </td>
+                          </TableCell>
                         ))}
-                      </tr>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
             <pre className="overflow-x-auto rounded-lg border border-border bg-muted px-3 py-2.5 font-mono text-xs">
@@ -692,17 +723,18 @@ function QueryPane({ detail }: { detail: RegisteredModelDetail }) {
 
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted px-3 py-2.5">
           <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-xs">{curl}</pre>
-          <button
-            type="button"
+          <IconButton
+            label="Copy"
+            size="icon-xs"
             onClick={() => {
               void copyText(curl)
               setCopied(true)
             }}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="Copy"
+            // The negative margin keeps the 16px icon where it sits without the button box.
+            className="-m-1 text-text-tertiary"
           >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          </button>
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+          </IconButton>
         </div>
       </div>
     </SceneSection>
@@ -717,13 +749,6 @@ function exampleValue(type: string): unknown {
   if (t.includes("bool")) return false
   return ""
 }
-
-const fieldClass =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-
-const thClass = "px-3 py-1.5"
-const headRowClass =
-  "border-b border-border bg-surface-secondary text-left text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-text-tertiary"
 
 // The version serving resolves to: the champion, or the newest one without a champion.
 function servedVersion(detail: RegisteredModelDetail): ModelVersion | undefined {
@@ -788,27 +813,35 @@ function SourceSelect({
   ]
   const listed = (v: string) => sources.some((s) => encodeSource(s.kind, s.name) === v)
   return (
-    <select className={fieldClass} value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="" disabled>
-        Choose a data source…
-      </option>
-      {extra !== undefined && extra !== "" && !listed(extra) && (
-        <option value={extra}>{decodeSource(extra).name}</option>
-      )}
-      {groups.map(([label, items]) =>
-        items.length === 0 ? null : (
-          <optgroup key={label} label={label}>
-            {items.map((s) => (
-              <option key={s.name} value={encodeSource(s.kind, s.name)}>
-                {s.name}
-              </option>
-            ))}
-          </optgroup>
-        ),
-      )}
-    </select>
+    <Select value={value} onValueChange={onChange}>
+      <FormControl>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Choose a data source…" />
+        </SelectTrigger>
+      </FormControl>
+      <SelectContent>
+        {extra !== undefined && extra !== "" && !listed(extra) && (
+          <SelectItem value={extra}>{decodeSource(extra).name}</SelectItem>
+        )}
+        {groups.map(([label, items]) =>
+          items.length === 0 ? null : (
+            <SelectGroup key={label}>
+              <SelectLabel>{label}</SelectLabel>
+              {items.map((s) => (
+                <SelectItem key={s.name} value={encodeSource(s.kind, s.name)}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ),
+        )}
+      </SelectContent>
+    </Select>
   )
 }
+
+// The batch-score version select's "served" choice; the request omits `version` for it.
+const SERVED = "__served__"
 
 function formatNumber(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(4)
@@ -905,28 +938,32 @@ function BatchScoreSection({ detail }: { detail: RegisteredModelDetail }) {
           predictions land as a CSV artifact on an MLflow run.
         </p>
         <div className="grid grid-cols-2 gap-3">
-          <label className="space-y-1">
-            <span className="text-xs font-medium">Data source</span>
+          <FormField label="Data source">
             <SourceSelect sources={sources} value={source} onChange={setSource} />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium">Version</span>
-            <select
-              className={fieldClass}
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
+          </FormField>
+          <FormField label="Version">
+            <Select
+              value={version === "" ? SERVED : version}
+              onValueChange={(v) => setVersion(v === SERVED ? "" : v)}
             >
-              <option value="">
-                served
-                {detail.championVersion !== null ? ` (v${detail.championVersion})` : ""}
-              </option>
-              {detail.versions.map((v) => (
-                <option key={v.version} value={String(v.version)}>
-                  v{v.version}
-                </option>
-              ))}
-            </select>
-          </label>
+              <FormControl>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value={SERVED}>
+                  served
+                  {detail.championVersion !== null ? ` (v${detail.championVersion})` : ""}
+                </SelectItem>
+                {detail.versions.map((v) => (
+                  <SelectItem key={v.version} value={String(v.version)}>
+                    v{v.version}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
         </div>
         <Button size="sm" disabled={running || source === ""} onClick={() => void run()}>
           {running && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -942,59 +979,59 @@ function BatchScoreSection({ detail }: { detail: RegisteredModelDetail }) {
               </span>
               <a
                 href={batchScoreArtifactUrl(result.runId)}
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+                className="inline-flex items-center gap-1 text-xs text-text-tertiary transition hover:text-foreground"
               >
                 <Download className="h-3.5 w-3.5" /> Download predictions.csv
               </a>
             </div>
             {Object.keys(result.stats).length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className={headRowClass}>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
                       {Object.keys(result.stats).map((k) => (
-                        <th key={k} className={thClass}>
+                        <TableHead key={k} className="py-1.5">
                           {k}
-                        </th>
+                        </TableHead>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
                       {Object.entries(result.stats).map(([k, v]) => (
-                        <td key={k} className="px-3 py-1.5 font-mono">
+                        <TableCell key={k} className="py-1.5 font-mono">
                           {formatNumber(v)}
-                        </td>
+                        </TableCell>
                       ))}
-                    </tr>
-                  </tbody>
-                </table>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
             )}
             {result.sample.length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className={headRowClass}>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
                       {sampleColumns.map((k) => (
-                        <th key={k} className={thClass}>
+                        <TableHead key={k} className="py-1.5">
                           {k}
-                        </th>
+                        </TableHead>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {result.sample.map((row) => (
-                      <tr key={rowKey(row)}>
+                      <TableRow key={rowKey(row)}>
                         {sampleColumns.map((k) => (
-                          <td key={k} className="whitespace-nowrap px-3 py-1.5 font-mono">
+                          <TableCell key={k} className="whitespace-nowrap py-1.5 font-mono">
                             {cellText(row[k])}
-                          </td>
+                          </TableCell>
                         ))}
-                      </tr>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>
@@ -1070,7 +1107,7 @@ function DriftPanel({ name }: { name: string }) {
         </Button>
       </div>
       {notice && (
-        <p className="rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-xs text-warning">
+        <p className="rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-xs text-foreground">
           {notice}
         </p>
       )}
@@ -1078,7 +1115,7 @@ function DriftPanel({ name }: { name: string }) {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <DriftBadge drifted={latest.datasetDrift} />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-text-tertiary">
               {latest.nDrifted} of {latest.nColumns} columns drifted (
               {Math.round(latest.shareDrifted * 100)}%) over {latest.nCurrentRows} recent rows,
               against v{latest.version}.
@@ -1087,94 +1124,97 @@ function DriftPanel({ name }: { name: string }) {
               href={driftReportUrl(latest.runId)}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+              className="inline-flex items-center gap-1 text-xs text-text-tertiary transition hover:text-foreground"
             >
               Full report <ExternalLink className="h-3 w-3" />
             </a>
           </div>
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className={headRowClass}>
-                  <th className={thClass}>Column</th>
-                  <th className={thClass}>Method</th>
-                  <th className={thClass}>Score</th>
-                  <th className={thClass}>Threshold</th>
-                  <th className={thClass}>Drifted</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="py-1.5">Column</TableHead>
+                  <TableHead className="py-1.5">Method</TableHead>
+                  <TableHead className="py-1.5">Score</TableHead>
+                  <TableHead className="py-1.5">Threshold</TableHead>
+                  <TableHead className="py-1.5">Drifted</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {latest.columns.map((c) => (
-                  <tr key={c.column} className={c.drifted ? "bg-danger-tint/50" : ""}>
-                    <td className="px-3 py-1.5 font-mono">{c.column}</td>
-                    <td className="px-3 py-1.5 text-text-tertiary">{c.method}</td>
-                    <td className="px-3 py-1.5 font-mono">{c.score.toFixed(4)}</td>
-                    <td className="px-3 py-1.5 font-mono text-text-tertiary">
+                  <TableRow
+                    key={c.column}
+                    className={c.drifted ? "bg-danger-tint/50 hover:bg-danger-tint/50" : ""}
+                  >
+                    <TableCell className="py-1.5 font-mono">{c.column}</TableCell>
+                    <TableCell className="py-1.5 text-text-tertiary">{c.method}</TableCell>
+                    <TableCell className="py-1.5 font-mono">{c.score.toFixed(4)}</TableCell>
+                    <TableCell className="py-1.5 font-mono text-text-tertiary">
                       {c.threshold.toFixed(4)}
-                    </td>
-                    <td
-                      className={`px-3 py-1.5 ${
-                        c.drifted ? "font-medium text-danger" : "text-text-tertiary"
-                      }`}
+                    </TableCell>
+                    <TableCell
+                      className={
+                        c.drifted ? "py-1.5 font-medium text-danger" : "py-1.5 text-text-tertiary"
+                      }
                     >
                       {c.drifted ? "yes" : "no"}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
       {history.length > 0 ? (
         <div className="space-y-1">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-2xs font-medium uppercase tracking-wide text-text-tertiary">
             History
           </div>
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className={headRowClass}>
-                  <th className={thClass}>When</th>
-                  <th className={thClass}>Version</th>
-                  <th className={thClass}>Rows</th>
-                  <th className={thClass}>Drifted columns</th>
-                  <th className={thClass}>Verdict</th>
-                  <th className={thClass}>Report</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="py-1.5">When</TableHead>
+                  <TableHead className="py-1.5">Version</TableHead>
+                  <TableHead className="py-1.5">Rows</TableHead>
+                  <TableHead className="py-1.5">Drifted columns</TableHead>
+                  <TableHead className="py-1.5">Verdict</TableHead>
+                  <TableHead className="py-1.5">Report</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {history.map((h) => (
-                  <tr key={h.runId}>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-muted-foreground">
+                  <TableRow key={h.runId}>
+                    <TableCell className="whitespace-nowrap py-1.5 text-text-tertiary">
                       {new Date(h.at).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-1.5 font-mono">v{h.version}</td>
-                    <td className="px-3 py-1.5 font-mono">{h.nCurrentRows}</td>
-                    <td className="px-3 py-1.5 font-mono">
+                    </TableCell>
+                    <TableCell className="py-1.5 font-mono">v{h.version}</TableCell>
+                    <TableCell className="py-1.5 font-mono">{h.nCurrentRows}</TableCell>
+                    <TableCell className="py-1.5 font-mono">
                       {h.nDrifted} ({Math.round(h.shareDrifted * 100)}%)
-                    </td>
-                    <td className="px-3 py-1.5">
+                    </TableCell>
+                    <TableCell className="py-1.5">
                       <DriftBadge drifted={h.datasetDrift} />
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-1.5">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap py-1.5">
                       <a
                         href={driftReportUrl(h.runId)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-muted-foreground transition hover:text-foreground"
+                        className="inline-flex items-center gap-1 text-text-tertiary transition hover:text-foreground"
                       >
                         Report <ExternalLink className="h-3 w-3" />
                       </a>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       ) : (
-        !latest && !notice && <p className="text-xs text-muted-foreground">No drift checks yet.</p>
+        !latest && !notice && <p className="text-xs text-text-tertiary">No drift checks yet.</p>
       )}
     </div>
   )
@@ -1218,44 +1258,42 @@ function InferenceLogPanel({ name }: { name: string }) {
         )
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className={headRowClass}>
-                <th className={thClass}>When</th>
-                <th className={thClass}>Version</th>
-                <th className={thClass}>Rows</th>
-                <th className={thClass}>Latency</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="py-1.5">When</TableHead>
+                <TableHead className="py-1.5">Version</TableHead>
+                <TableHead className="py-1.5">Rows</TableHead>
+                <TableHead className="py-1.5">Latency</TableHead>
+                <TableHead className="py-1.5">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {entries.map((e) => (
-                <tr key={e.id}>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-muted-foreground">
+                <TableRow key={e.id}>
+                  <TableCell className="whitespace-nowrap py-1.5 text-text-tertiary">
                     {new Date(e.at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-1.5 font-mono">v{e.version}</td>
-                  <td className="px-3 py-1.5 font-mono">{e.nRows}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono">
+                  </TableCell>
+                  <TableCell className="py-1.5 font-mono">v{e.version}</TableCell>
+                  <TableCell className="py-1.5 font-mono">{e.nRows}</TableCell>
+                  <TableCell className="whitespace-nowrap py-1.5 font-mono">
                     {Math.round(e.latencyMs)} ms
-                  </td>
-                  <td
-                    className={`px-3 py-1.5 ${
-                      e.status === "error" ? "text-danger" : "text-success"
-                    }`}
+                  </TableCell>
+                  <TableCell
+                    className={e.status === "error" ? "py-1.5 text-danger" : "py-1.5 text-success"}
                     title={e.error ?? undefined}
                   >
                     {e.status}
                     {e.error && (
-                      <span className="block max-w-64 truncate text-[11px] text-danger/80">
+                      <span className="block max-w-64 truncate text-2xs text-danger/80">
                         {e.error}
                       </span>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
       {!exhausted && entries.length > 0 && (
@@ -1287,7 +1325,7 @@ function splitBudget(seconds: number): { amount: string; unit: BudgetUnit } {
 // The automatic-retraining policy: when to retrain (on data change, or on an interval)
 // and with what spec. The form prefills from the served version's training params.
 function AutoRetrainSection({ detail }: { detail: RegisteredModelDetail }) {
-  const targetId = useId()
+  const enabledId = useId()
   const fb = useFeedback()
   const [policy, setPolicy] = useState<RetrainPolicy | null | "loading">("loading")
   const [sources, setSources] = useState<FeatureSource[]>([])
@@ -1433,8 +1471,7 @@ function AutoRetrainSection({ detail }: { detail: RegisteredModelDetail }) {
               </p>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <label className="space-y-1">
-                <span className="text-xs font-medium">Data source</span>
+              <FormField label="Data source">
                 <SourceSelect
                   sources={sources}
                   value={source}
@@ -1444,87 +1481,91 @@ function AutoRetrainSection({ detail }: { detail: RegisteredModelDetail }) {
                     setTarget("")
                   }}
                 />
-              </label>
-              <label className="space-y-1" htmlFor={targetId}>
-                <span className="text-xs font-medium">Target column</span>
-                {sourceKind === "derivation" ? (
-                  <input
-                    id={targetId}
-                    className={fieldClass}
+              </FormField>
+              {sourceKind === "derivation" ? (
+                <FormField label="Target column">
+                  <Input
                     value={target}
                     onChange={(e) => setTarget(e.target.value)}
                     placeholder="output column to predict"
                   />
-                ) : (
-                  <select
-                    id={targetId}
-                    className={fieldClass}
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                  >
-                    <option value="" disabled>
-                      {source !== "" ? "Choose the target…" : "Pick a data source first"}
-                    </option>
-                    {target !== "" && !columns.some((c) => c.name === target) && (
-                      <option value={target}>{target}</option>
-                    )}
-                    {columns.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </label>
+                </FormField>
+              ) : (
+                <FormField label="Target column">
+                  <Select value={target} onValueChange={setTarget}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue
+                          placeholder={
+                            source !== "" ? "Choose the target…" : "Pick a data source first"
+                          }
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {target !== "" && !columns.some((c) => c.name === target) && (
+                        <SelectItem value={target}>{target}</SelectItem>
+                      )}
+                      {columns.map((c) => (
+                        <SelectItem key={c.name} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <label className="space-y-1">
-                <span className="text-xs font-medium">Trigger</span>
-                <select
-                  className={fieldClass}
+              <FormField label="Trigger">
+                <Select
                   value={mode}
-                  onChange={(e) => setMode(e.target.value as "on_data_change" | "interval")}
+                  onValueChange={(v) => setMode(v as "on_data_change" | "interval")}
                 >
-                  <option value="on_data_change">On data change</option>
-                  <option value="interval">On an interval</option>
-                </select>
-              </label>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="on_data_change">On data change</SelectItem>
+                    <SelectItem value="interval">On an interval</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
               {mode === "interval" && (
-                <label className="space-y-1">
-                  <span className="text-xs font-medium">Every (hours)</span>
-                  <input
-                    className={fieldClass}
+                <FormField label="Every (hours)">
+                  <Input
                     type="number"
                     min={1}
                     value={intervalHours}
                     onChange={(e) => setIntervalHours(e.target.value)}
                   />
-                </label>
+                </FormField>
               )}
             </div>
             <div className="space-y-1">
               <span className="text-xs font-medium">Search budget</span>
               <div className="grid grid-cols-2 gap-3">
-                <input
-                  className={fieldClass}
+                <Input
                   type="number"
                   min={1}
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
                   aria-label="Budget amount"
                 />
-                <select
-                  className={fieldClass}
-                  value={budgetUnit}
-                  onChange={(e) => setBudgetUnit(e.target.value as BudgetUnit)}
-                  aria-label="Budget unit"
-                >
-                  {(Object.keys(BUDGET_UNITS) as BudgetUnit[]).map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
+                <Select value={budgetUnit} onValueChange={(v) => setBudgetUnit(v as BudgetUnit)}>
+                  <SelectTrigger className="w-full" aria-label="Budget unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(BUDGET_UNITS) as BudgetUnit[]).map((u) => (
+                      <SelectItem key={u} value={u}>
+                        {u}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {budget !== "" && !budgetValid && (
                 <p className="text-xs text-destructive">
@@ -1532,14 +1573,16 @@ function AutoRetrainSection({ detail }: { detail: RegisteredModelDetail }) {
                 </p>
               )}
             </div>
-            <label className="flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id={enabledId}
                 checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
+                onCheckedChange={(c) => setEnabled(c === true)}
               />
-              Enabled
-            </label>
+              <Label htmlFor={enabledId} className="text-xs font-normal cursor-pointer">
+                Enabled
+              </Label>
+            </div>
             <div className="flex items-center justify-end gap-2">
               {policy.configured && (
                 <Button

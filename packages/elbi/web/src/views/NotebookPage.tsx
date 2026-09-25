@@ -28,6 +28,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useAssistantContext } from "@/components/AssistantContext"
 import type { PageContext } from "@/components/AssistantPanel"
+import { FormControl, FormField } from "@/components/app/FormField"
+import { IconButton } from "@/components/app/IconButton"
 import { CellEditor } from "@/components/notebook/CellEditor"
 import { CellOutputs } from "@/components/notebook/CellOutput"
 import { CellQueries } from "@/components/notebook/CellQueries"
@@ -37,6 +39,7 @@ import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { WidgetManagerContext } from "@/components/notebook/WidgetView"
 import { Scene, SceneBody, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -52,7 +55,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { SplitButton } from "@/components/ui/split-button"
+import { Textarea } from "@/components/ui/textarea"
 import {
   type DatasetColumn,
   type FeatureSource,
@@ -88,7 +102,11 @@ import {
   updateCell,
   updateNotebook,
 } from "@/lib/notebooks"
+import { cn } from "@/lib/utils"
 import type { NotebookWidgetManager } from "@/lib/widgets"
+
+// The base-environment Select's value for "None", since Radix items cannot hold "".
+const NO_BASE_ENV = "__none__"
 
 // Detect the app's dark theme (a `.dark` ancestor) so CodeMirror matches it, and keep it
 // in sync if the theme toggles.
@@ -532,8 +550,8 @@ function VariablesPanel({
     <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card/40">
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <span className="flex items-center gap-1.5 text-sm font-medium">
-          <Variable className="size-4 text-muted-foreground" /> Variables
-          <span className="text-xs text-muted-foreground">{variables.length}</span>
+          <Variable className="size-4 text-text-tertiary" /> Variables
+          <span className="text-xs text-text-tertiary">{variables.length}</span>
         </span>
         <div className="flex items-center gap-0.5">
           <Button variant="ghost" size="icon-xs" title="Refresh" onClick={onRefresh}>
@@ -546,7 +564,7 @@ function VariablesPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {variables.length === 0 ? (
-          <p className="px-3 py-4 text-xs text-muted-foreground">
+          <p className="px-3 py-4 text-xs text-text-tertiary">
             No variables yet. Run a cell and what it defines shows up here.
           </p>
         ) : (
@@ -554,15 +572,15 @@ function VariablesPanel({
             {variables.map((v) => (
               <li key={v.name} className="px-3 py-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-mono text-[0.8125rem] font-medium text-foreground">
+                  <span className="truncate font-mono text-compact font-medium text-foreground">
                     {v.name}
                   </span>
-                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-3xs text-text-tertiary">
                     {v.type}
                   </span>
                 </div>
                 {v.summary ? (
-                  <div className="mt-0.5 truncate font-mono text-[11px] text-text-secondary">
+                  <div className="mt-0.5 truncate font-mono text-2xs text-text-secondary">
                     {v.summary}
                   </div>
                 ) : null}
@@ -626,11 +644,12 @@ function Toolbar({
         icon={<NotebookPen className="size-5" />}
         mono
         title={
-          <input
+          <Input
+            aria-label="Notebook name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => name !== view.name && onRename(name)}
-            className="w-full min-w-0 bg-transparent font-semibold tracking-tight outline-none"
+            className="h-auto rounded-none border-0 bg-transparent p-0 text-lg font-semibold tracking-tight focus-visible:ring-0"
           />
         }
         actions={
@@ -641,7 +660,7 @@ function Toolbar({
                   ? "bg-info-tint text-info"
                   : view.kernel_status === "running"
                     ? "bg-success-tint text-success"
-                    : "bg-muted text-muted-foreground"
+                    : "bg-muted text-text-tertiary"
               }`}
             >
               <span
@@ -666,7 +685,7 @@ function Toolbar({
               }
             >
               <Zap
-                className={`mr-1.5 size-4 ${reactive ? "text-primary" : "text-muted-foreground"}`}
+                className={`mr-1.5 size-4 ${reactive ? "text-primary" : "text-text-tertiary"}`}
               />
               {reactive ? "Reactive" : "Manual"}
             </Button>
@@ -678,7 +697,7 @@ function Toolbar({
             >
               <Variable className="mr-1.5 size-4" /> Variables
               {variableCount ? (
-                <span className="ml-1.5 text-xs text-muted-foreground">{variableCount}</span>
+                <span className="ml-1.5 text-xs text-text-tertiary">{variableCount}</span>
               ) : null}
             </Button>
             {busy ? (
@@ -689,6 +708,7 @@ function Toolbar({
               <SplitButton
                 size="sm"
                 onClick={onRunAll}
+                menuLabel="More run options"
                 menu={
                   <>
                     <DropdownMenuItem onClick={onRunFresh}>
@@ -712,7 +732,7 @@ function Toolbar({
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={() => setEnvOpen(true)}>
                   <Boxes className="size-4" /> Environment
-                  <span className="ml-auto text-xs text-muted-foreground">
+                  <span className="ml-auto text-xs text-text-tertiary">
                     {view.deps.length + (view.environment.base_env ? 1 : 0) || 0} deps
                   </span>
                 </DropdownMenuItem>
@@ -782,7 +802,6 @@ function TrainModelDialog({
   onOpenChange: (open: boolean) => void
   onStarted: () => void
 }) {
-  const targetId = useId()
   const [sources, setSources] = useState<FeatureSource[]>([])
   const [source, setSource] = useState("")
   const [columns, setColumns] = useState<DatasetColumn[]>([])
@@ -828,6 +847,8 @@ function TrainModelDialog({
   }
 
   const ready = name.trim() && sourceName && target.trim()
+  const datasets = sources.filter((s) => s.kind === "dataset")
+  const derivations = sources.filter((s) => s.kind === "derivation")
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -835,112 +856,112 @@ function TrainModelDialog({
           <DialogTitle>Train a model</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 text-sm">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-text-tertiary">
             Trains through the platform's AutoML on the server, so the model passes the prediction
             gate and lands in the Models page: governed, with its evidence and lineage. Train on a
             dataset, or on a feature derivation you promoted here.
           </p>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium">Model name</span>
-            <input
+          <FormField label="Model name">
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="churn"
-              className="w-full rounded-md border border-border bg-transparent px-2 py-1"
+              className="h-7.5"
             />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium">Training source</span>
-            <select
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="w-full rounded-md border border-border bg-transparent px-2 py-1"
-            >
-              <option value="">Select a dataset or derivation…</option>
-              {sources.filter((s) => s.kind === "dataset").length > 0 && (
-                <optgroup label="Datasets">
-                  {sources
-                    .filter((s) => s.kind === "dataset")
-                    .map((s) => (
-                      <option key={`dataset:${s.name}`} value={`dataset:${s.name}`}>
+          </FormField>
+          <FormField label="Training source">
+            <Select value={source} onValueChange={setSource}>
+              <FormControl>
+                <SelectTrigger size="sm" className="w-full px-2 data-[size=sm]:h-7.5">
+                  <SelectValue placeholder="Select a dataset or derivation…" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {datasets.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Datasets</SelectLabel>
+                    {datasets.map((s) => (
+                      <SelectItem key={`dataset:${s.name}`} value={`dataset:${s.name}`}>
                         {s.name}
-                      </option>
+                      </SelectItem>
                     ))}
-                </optgroup>
-              )}
-              {sources.filter((s) => s.kind === "derivation").length > 0 && (
-                <optgroup label="Feature derivations">
-                  {sources
-                    .filter((s) => s.kind === "derivation")
-                    .map((s) => (
-                      <option key={`derivation:${s.name}`} value={`derivation:${s.name}`}>
+                  </SelectGroup>
+                )}
+                {derivations.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Feature derivations</SelectLabel>
+                    {derivations.map((s) => (
+                      <SelectItem key={`derivation:${s.name}`} value={`derivation:${s.name}`}>
                         {s.name}
-                      </option>
+                      </SelectItem>
                     ))}
-                </optgroup>
-              )}
-            </select>
-          </label>
-          <label className="block space-y-1" htmlFor={targetId}>
-            <span className="text-xs font-medium">Target column</span>
+                  </SelectGroup>
+                )}
+              </SelectContent>
+            </Select>
+          </FormField>
+          <FormField label="Target column">
             {columns.length > 0 ? (
-              <select
-                id={targetId}
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1"
-              >
-                <option value="">Select the column to predict…</option>
-                {columns.map((c) => (
-                  <option key={c.name} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={target} onValueChange={setTarget}>
+                <FormControl>
+                  <SelectTrigger size="sm" className="w-full px-2 data-[size=sm]:h-7.5">
+                    <SelectValue placeholder="Select the column to predict…" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {columns.map((c) => (
+                    <SelectItem key={c.name} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : (
-              <input
-                id={targetId}
+              <Input
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 placeholder="the column to predict"
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1"
+                className="h-7.5"
               />
             )}
-          </label>
+          </FormField>
           <div className="flex gap-2">
-            <label className="flex-1 space-y-1">
-              <span className="text-xs font-medium">Task</span>
-              <select
-                value={task}
-                onChange={(e) => setTask(e.target.value as TrainRequest["task"])}
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1"
-              >
-                <option value="auto">Auto</option>
-                <option value="classification">Classification</option>
-                <option value="regression">Regression</option>
-              </select>
-            </label>
-            <label className="flex-1 space-y-1">
-              <span className="text-xs font-medium">Engine</span>
-              <select
-                value={engine}
-                onChange={(e) => setEngine(e.target.value as "flaml" | "autogluon")}
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1"
-              >
-                <option value="flaml">FLAML (fast)</option>
-                <option value="autogluon">AutoGluon (accuracy)</option>
-              </select>
-            </label>
-            <label className="w-24 space-y-1">
-              <span className="text-xs font-medium">Budget (min)</span>
-              <input
+            <FormField label="Task" className="flex-1">
+              <Select value={task} onValueChange={(v) => setTask(v as TrainRequest["task"])}>
+                <FormControl>
+                  <SelectTrigger size="sm" className="w-full px-2 data-[size=sm]:h-7.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="classification">Classification</SelectItem>
+                  <SelectItem value="regression">Regression</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Engine" className="flex-1">
+              <Select value={engine} onValueChange={(v) => setEngine(v as "flaml" | "autogluon")}>
+                <FormControl>
+                  <SelectTrigger size="sm" className="w-full px-2 data-[size=sm]:h-7.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="flaml">FLAML (fast)</SelectItem>
+                  <SelectItem value="autogluon">AutoGluon (accuracy)</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Budget (min)" className="w-24">
+              <Input
                 type="number"
                 min={1}
                 value={minutes}
                 onChange={(e) => setMinutes(Number(e.target.value))}
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1"
+                className="h-7.5"
               />
-            </label>
+            </FormField>
           </div>
           {error ? <p className="text-xs text-danger">{error}</p> : null}
         </div>
@@ -967,6 +988,7 @@ function EnvironmentDialog({
   onSave: (deps: string[], baseEnv: string | null) => Promise<EnvironmentResult>
   onRelock: () => Promise<EnvironmentResult>
 }) {
+  const baseEnvId = useId()
   const [depsText, setDepsText] = useState(view.deps.join("\n"))
   const [baseEnv, setBaseEnv] = useState(view.environment.base_env ?? "")
   const [busy, setBusy] = useState(false)
@@ -1005,39 +1027,49 @@ function EnvironmentDialog({
           <DialogTitle>Environment &amp; packages</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 text-sm">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-text-tertiary">
             Declare the packages this notebook's kernel needs: one per line, e.g.
             <code className="mx-1">scikit-learn==1.5.2</code>. Saving resolves and pins them, then
             restarts the kernel. You can also install from a cell with
             <code className="mx-1">%pip install &lt;pkg&gt;</code>.
           </p>
           {view.environment.base_environments.length > 0 ? (
-            <label className="flex items-center gap-2">
-              Base environment
-              <select
-                value={baseEnv}
-                onChange={(e) => setBaseEnv(e.target.value)}
-                className="flex-1 rounded-md border border-border bg-transparent px-2 py-1"
+            <div className="flex items-center gap-2">
+              <Label htmlFor={baseEnvId}>Base environment</Label>
+              <Select
+                value={baseEnv || NO_BASE_ENV}
+                onValueChange={(v) => setBaseEnv(v === NO_BASE_ENV ? "" : v)}
               >
-                <option value="">None</option>
-                {view.environment.base_environments.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger
+                  id={baseEnvId}
+                  size="sm"
+                  className="flex-1 px-2 data-[size=sm]:h-7.5"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_BASE_ENV}>None</SelectItem>
+                  {view.environment.base_environments.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           ) : null}
-          <textarea
+          <Textarea
+            aria-label="Packages"
             value={depsText}
             onChange={(e) => setDepsText(e.target.value)}
             rows={6}
             spellCheck={false}
             placeholder="pandas&#10;scikit-learn==1.5.2"
-            className="w-full rounded-md border border-border bg-transparent p-2 font-mono text-[13px]"
+            // A fixed six-row box rather than Textarea's grow-to-fit.
+            className="field-sizing-fixed p-2 font-mono text-compact"
           />
           <div className="flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-text-tertiary">
               {view.environment.locked ? (
                 <>
                   <Lock className="size-3.5 text-success" />
@@ -1047,15 +1079,15 @@ function EnvironmentDialog({
                 "Not locked yet"
               )}
             </span>
-            <button
-              type="button"
+            <Button
+              variant="link"
               onClick={() => run(onRelock)}
               disabled={busy}
-              className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              className="h-auto gap-1 p-0 text-xs font-normal text-text-tertiary hover:text-foreground has-[>svg]:px-0"
             >
-              <RefreshCw className={`size-3.5 ${busy ? "animate-spin" : ""}`} />
+              <RefreshCw className={cn("size-3.5", busy && "animate-spin")} />
               Re-lock
-            </button>
+            </Button>
           </div>
           {error ? <p className="text-xs text-danger">{error}</p> : null}
         </div>
@@ -1091,6 +1123,11 @@ function ScheduleDialog({
   const [mode, setMode] = useState<Schedule["mode"]>(current?.mode ?? "interval")
   const [hours, setHours] = useState(current?.interval_hours ?? 24)
   const [dataset, setDataset] = useState(current?.dataset ?? "")
+  const enabledId = useId()
+  const modes: { value: Schedule["mode"]; label: string }[] = [
+    { value: "interval", label: "On an interval" },
+    { value: "on_data_change", label: "When a dataset changes" },
+  ]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1099,54 +1136,52 @@ function ScheduleDialog({
           <DialogTitle>Schedule reruns</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 text-sm">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id={enabledId}
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
+              onCheckedChange={(c) => setEnabled(c === true)}
             />
-            Run this notebook automatically
-          </label>
+            <Label htmlFor={enabledId} className="font-normal">
+              Run this notebook automatically
+            </Label>
+          </div>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("interval")}
-              className={`flex-1 rounded-md border px-3 py-2 text-left text-xs ${
-                mode === "interval" ? "border-foreground/40 bg-muted" : "border-border"
-              }`}
-            >
-              On an interval
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("on_data_change")}
-              className={`flex-1 rounded-md border px-3 py-2 text-left text-xs ${
-                mode === "on_data_change" ? "border-foreground/40 bg-muted" : "border-border"
-              }`}
-            >
-              When a dataset changes
-            </button>
+            {modes.map((m) => (
+              <Button
+                key={m.value}
+                variant="outline"
+                aria-pressed={mode === m.value}
+                onClick={() => setMode(m.value)}
+                className={cn(
+                  "h-auto flex-1 justify-start px-3 py-2 text-xs font-normal",
+                  mode === m.value && "border-foreground/40 bg-muted hover:bg-muted",
+                )}
+              >
+                {m.label}
+              </Button>
+            ))}
           </div>
           {mode === "interval" ? (
             <label className="flex items-center gap-2">
               Every
-              <input
+              <Input
                 type="number"
                 min={1}
                 value={hours}
                 onChange={(e) => setHours(Number(e.target.value))}
-                className="w-20 rounded-md border border-border bg-transparent px-2 py-1"
+                className="h-7.5 w-20"
               />
               hours
             </label>
           ) : (
             <label className="flex items-center gap-2">
               Dataset
-              <input
+              <Input
                 value={dataset}
                 onChange={(e) => setDataset(e.target.value)}
                 placeholder="dataset name"
-                className="flex-1 rounded-md border border-border bg-transparent px-2 py-1"
+                className="h-7.5 flex-1"
               />
             </label>
           )}
@@ -1237,10 +1272,10 @@ function CellRow({
     <div
       className={`group relative mb-3 overflow-hidden rounded-xl border transition ${
         running
-          ? "border-info/60 bg-info-tint/30 shadow-sm ring-1 ring-info/30"
+          ? "border-info/60 bg-info-tint/30 ring-1 ring-info/30"
           : isCode
             ? focused
-              ? "border-border bg-card shadow-sm"
+              ? "border-border bg-card"
               : "border-border/70 bg-card hover:border-border"
             : focused
               ? "border-border/60 bg-transparent"
@@ -1251,23 +1286,23 @@ function CellRow({
         {/* Run gutter: click to run this cell; shows the execution count or a spinner. */}
         <div className="flex w-12 shrink-0 flex-col items-center pt-2.5">
           {isCode ? (
-            <button
-              type="button"
+            <IconButton
+              label="Run cell (Shift+Enter)"
+              size="icon-xs"
               onClick={onRun}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              title="Run cell (Shift+Enter)"
+              className="size-7 text-text-tertiary"
             >
               {running ? (
                 <Loader2 className="size-4 animate-spin text-info" />
               ) : (
                 <Play className="size-4 opacity-70 group-hover:opacity-100" />
               )}
-            </button>
+            </IconButton>
           ) : null}
           {isCode ? (
             <span
-              className={`mt-1 font-mono text-[10px] ${
-                running ? "text-info" : "text-muted-foreground/60"
+              className={`mt-1 font-mono text-3xs ${
+                running ? "text-info" : "text-text-tertiary/60"
               }`}
             >
               [{label}]
@@ -1279,7 +1314,7 @@ function CellRow({
           {isParams || dataMode ? (
             <div className="flex gap-1.5 px-3 pb-1">
               {isParams ? (
-                <span className="rounded-full bg-info-tint px-2 py-0.5 text-[10px] font-medium text-info">
+                <span className="rounded-full bg-info-tint px-2 py-0.5 text-3xs font-medium text-info">
                   parameters
                 </span>
               ) : null}
@@ -1301,6 +1336,7 @@ function CellRow({
               inspect={isCode ? (code, pos) => inspectCell(notebookId, code, pos) : undefined}
             />
           ) : (
+            // eslint-disable-next-line ds/no-raw-element -- the rendered markdown is the click target; Button's nowrap, fixed height and svg sizing would restyle the cell's content
             <button
               type="button"
               aria-label="Edit markdown"
@@ -1310,15 +1346,15 @@ function CellRow({
               {cell.source ? (
                 <NotebookMarkdown>{cell.source}</NotebookMarkdown>
               ) : (
-                <span className="text-muted-foreground">Empty markdown cell: click to edit</span>
+                <span className="text-text-tertiary">Empty markdown cell: click to edit</span>
               )}
             </button>
           )}
           {deps?.syntax_error && isCode ? (
-            <div className="px-3 pb-1 text-[11px] text-danger">{deps.syntax_error}</div>
+            <div className="px-3 pb-1 text-2xs text-danger">{deps.syntax_error}</div>
           ) : null}
           {isCode && (deps?.refs.length || deps?.defs.length) ? (
-            <div className="flex flex-wrap gap-x-3 px-3 pb-1 text-[10px] text-muted-foreground/60">
+            <div className="flex flex-wrap gap-x-3 px-3 pb-1 text-3xs text-text-tertiary/60">
               {deps?.defs.length ? <span>defines {deps.defs.join(", ")}</span> : null}
               {deps?.refs.length ? <span>uses {deps.refs.join(", ")}</span> : null}
               {stale ? <span className="text-warning">stale</span> : null}
@@ -1329,37 +1365,37 @@ function CellRow({
         {/* Per-cell actions, revealed on hover. */}
         <div className="flex shrink-0 items-start gap-0.5 p-1 opacity-0 transition group-hover:opacity-100">
           {promotable ? (
-            <IconButton title="Promote to a certified derivation" onClick={onPromote}>
+            <CellAction label="Promote to a certified derivation" onClick={onPromote}>
               {promoting ? (
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
                 <ShieldCheck className="size-3.5" />
               )}
-            </IconButton>
+            </CellAction>
           ) : null}
           {isCode ? (
-            <IconButton
-              title={isParams ? "Unmark parameters cell" : "Mark as parameters cell"}
+            <CellAction
+              label={isParams ? "Unmark parameters cell" : "Mark as parameters cell"}
               onClick={onToggleParams}
             >
               <SlidersHorizontal className={`size-3.5 ${isParams ? "text-primary" : ""}`} />
-            </IconButton>
+            </CellAction>
           ) : null}
-          <IconButton title="Move up" onClick={() => onMove(-1)}>
+          <CellAction label="Move up" onClick={() => onMove(-1)}>
             <ChevronUp className="size-3.5" />
-          </IconButton>
-          <IconButton title="Move down" onClick={() => onMove(1)}>
+          </CellAction>
+          <CellAction label="Move down" onClick={() => onMove(1)}>
             <ChevronDown className="size-3.5" />
-          </IconButton>
-          <IconButton
-            title={isCode ? "Make markdown" : "Make code"}
+          </CellAction>
+          <CellAction
+            label={isCode ? "Make markdown" : "Make code"}
             onClick={() => onSetType(isCode ? "markdown" : "code")}
           >
-            <span className="text-[10px] font-medium">{isCode ? "M↓" : "{ }"}</span>
-          </IconButton>
-          <IconButton title="Delete cell" onClick={onDelete}>
+            <span className="text-3xs font-medium">{isCode ? "M↓" : "{ }"}</span>
+          </CellAction>
+          <CellAction label="Delete cell" onClick={onDelete}>
             <Trash2 className="size-3.5" />
-          </IconButton>
+          </CellAction>
         </div>
       </div>
 
@@ -1371,7 +1407,7 @@ function CellRow({
           className={`mx-3 mb-2 rounded-md border px-3 py-2 text-xs ${
             promoted.certified
               ? "border-verified/30 bg-verified-tint text-verified"
-              : "border-warning/30 bg-warning-tint text-warning"
+              : "border-warning/30 bg-warning-tint text-foreground"
           }`}
         >
           {promoted.certified ? (
@@ -1394,43 +1430,41 @@ function CellRow({
 
       {/* Insert affordance between cells. */}
       <div className="flex justify-center gap-1 pb-1 opacity-0 transition group-hover:opacity-100">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="xs"
           onClick={() => onAddBelow("code")}
-          className="rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+          className="h-auto px-2 py-0.5 text-3xs font-normal text-text-tertiary"
         >
           + code
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
           onClick={() => onAddBelow("markdown")}
-          className="rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+          className="h-auto px-2 py-0.5 text-3xs font-normal text-text-tertiary"
         >
           + text
-        </button>
+        </Button>
       </div>
     </div>
   )
 }
 
-function IconButton({
-  title,
+// A cell's hover action: a 24px icon button in the muted cell chrome.
+function CellAction({
+  label,
   onClick,
   children,
 }: {
-  title: string
+  label: string
   onClick: () => void
   children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground"
-    >
+    <IconButton label={label} size="icon-xs" onClick={onClick} className="text-text-tertiary">
       {children}
-    </button>
+    </IconButton>
   )
 }
 

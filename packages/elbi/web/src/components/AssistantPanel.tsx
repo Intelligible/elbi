@@ -4,7 +4,8 @@ import { ArrowUp, Loader2, Wrench, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
 import { AssistantMark } from "@/components/AssistantMark"
-import { Button } from "@/components/ui/button"
+import { IconButton } from "@/components/app/IconButton"
+import { Textarea } from "@/components/ui/textarea"
 import { uuid } from "@/lib/utils"
 
 // The context the assistant is given about the page the user is on: a human label for
@@ -112,13 +113,13 @@ export function AssistantPanel({
         <span className="flex items-center gap-1.5 text-sm font-semibold">
           <AssistantMark className="size-4 text-primary" /> Assistant
         </span>
-        <Button variant="ghost" size="icon-sm" onClick={onClose} title="Close (⌘I)">
+        <IconButton label="Close assistant (⌘I)" onClick={onClose}>
           <X className="size-4" />
-        </Button>
+        </IconButton>
       </header>
 
       {pageContext ? (
-        <div className="flex items-center gap-1.5 border-b border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5 border-b border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-text-tertiary">
           <span className="size-1.5 rounded-full bg-primary" />
           Context: {pageContext.label}
         </div>
@@ -126,8 +127,8 @@ export function AssistantPanel({
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
         {messages.length === 0 ? (
-          <div className="pt-6 text-center text-sm text-muted-foreground">
-            <AssistantMark className="mx-auto mb-2 size-6 text-muted-foreground/70" />
+          <div className="pt-6 text-center text-sm text-text-tertiary">
+            <AssistantMark className="mx-auto mb-2 size-6 text-text-tertiary/70" />
             Ask about what you're working on.
             {pageContext ? (
               <div className="mt-1 text-xs">
@@ -144,7 +145,8 @@ export function AssistantPanel({
 
       <div className="border-t border-border p-2.5">
         <div className="flex items-end gap-2 rounded-xl border border-border bg-card px-3 py-2 focus-within:border-primary/60">
-          <textarea
+          {/* One fixed row that scrolls, borderless inside the rounded composer. */}
+          <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -155,16 +157,16 @@ export function AssistantPanel({
             }}
             rows={1}
             placeholder="Ask the assistant…"
-            className="max-h-40 min-h-[1.5rem] flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="field-sizing-fixed max-h-40 min-h-6 flex-1 resize-none rounded-none border-0 bg-transparent p-0 hover:border-0 focus-visible:ring-0"
           />
-          <Button
-            size="icon-sm"
+          <IconButton
+            variant="default"
+            label={busy ? "Stop" : "Send"}
             className="rounded-full"
-            aria-label={busy ? "Stop" : "Send"}
             onClick={() => (busy ? stop() : send())}
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
-          </Button>
+          </IconButton>
         </div>
       </div>
     </aside>
@@ -200,13 +202,13 @@ function PanelTurn({ role, parts, busy }: { role: string; parts: Part[]; busy: b
       {tools.map(({ id, name }) => (
         <div
           key={id}
-          className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+          className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs text-text-tertiary"
         >
           <Wrench className="size-3" /> {toolLabel(name)}
         </div>
       ))}
       {busy && !text && tools.length === 0 ? (
-        <span className="animate-pulse text-muted-foreground">Thinking…</span>
+        <span className="animate-pulse text-text-tertiary">Thinking…</span>
       ) : null}
       {text ? <Streamdown className="leading-6 text-foreground/90">{text}</Streamdown> : null}
     </div>

@@ -38,7 +38,7 @@ export function ModelsPage() {
       render: (m) => (
         <span className="flex items-center gap-2">
           <Boxes className="size-4 shrink-0 text-text-tertiary" />
-          <span className="truncate font-mono text-[0.8125rem] font-medium text-foreground">
+          <span className="truncate font-mono text-compact font-medium text-foreground">
             {m.name}
           </span>
           {jobs.some((j) => isActiveTraining(j) && j.label === `train model ${m.name}`) && (

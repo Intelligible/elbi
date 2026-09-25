@@ -1,7 +1,16 @@
 import { Check, Pencil, Plus, Star, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
+import { FormField } from "@/components/app/FormField"
 import { Button } from "@/components/ui/button"
 import { useFeedback } from "@/components/ui/feedback"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   deleteLlmProfile,
   getLlmProfiles,
@@ -11,8 +20,9 @@ import {
   setTitleProfile,
 } from "@/lib/chat"
 
-const inputClass =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+// Radix Select forbids an item with value="", but "no title model" is a real,
+// always-present choice here, not a placeholder -- so it gets a sentinel value instead.
+const DEFAULT_TITLE = "__default__"
 
 // The model-profile manager as a settings-page panel. Registering several profiles (each a
 // model + API key + base URL) lets the app run on any provider (OpenAI, Claude, a local model)
@@ -54,7 +64,7 @@ export function LlmProfilesManager() {
     <div className="space-y-3">
       <div className="space-y-1.5">
         {profiles.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-tertiary">
             No profiles yet. Add one to run on OpenAI, Claude, a local model, and more.
           </div>
         ) : (
@@ -86,27 +96,31 @@ export function LlmProfilesManager() {
         )}
       </div>
       {profiles.length > 0 && (
-        <label className="flex items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 border-t border-border pt-3 text-xs text-text-tertiary">
           <span>
             Title model
             <span className="ml-1">(a cheap model to name chats)</span>
           </span>
-          <select
-            value={titleName}
-            onChange={async (e) => {
-              await setTitleProfile(e.target.value)
+          <Select
+            value={titleName || DEFAULT_TITLE}
+            onValueChange={async (v) => {
+              await setTitleProfile(v === DEFAULT_TITLE ? "" : v)
               await refresh()
             }}
-            className="rounded-lg border border-border bg-background px-2 py-1 text-xs disabled:opacity-60"
           >
-            <option value="">Default</option>
-            {profiles.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger size="sm" aria-label="Title model" className="text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT_TITLE}>Default</SelectItem>
+              {profiles.map((p) => (
+                <SelectItem key={p.name} value={p.name}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
         <Plus className="h-4 w-4" /> Add profile
@@ -134,12 +148,12 @@ function ProfileRow({
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium">{profile.name}</span>
           {isDefault && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-foreground/10 px-1.5 text-[10px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-full bg-foreground/10 px-1.5 text-3xs text-text-tertiary">
               <Check className="h-3 w-3" /> default
             </span>
           )}
         </div>
-        <span className="truncate text-xs text-muted-foreground">
+        <span className="truncate text-xs text-text-tertiary">
           {profile.model || "(no model set)"}
           {profile.apiKeySet ? " · key set" : ""}
         </span>
@@ -213,57 +227,53 @@ function ProfileEditor({
 
   return (
     <div className="space-y-3">
-      <label className="block space-y-1">
-        <span className="text-xs font-medium">Name</span>
-        <input
+      <FormField label="Name" error={duplicate ? "A profile with this name exists." : undefined}>
+        <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={!isNew}
           placeholder="e.g. OpenAI, Claude, Local"
-          className={`${inputClass} disabled:opacity-60`}
         />
-        {duplicate && (
-          <span className="text-xs text-destructive">A profile with this name exists.</span>
-        )}
-      </label>
-      <label className="block space-y-1">
-        <span className="text-xs font-medium">Model</span>
-        <input
+      </FormField>
+      <FormField
+        label="Model"
+        hint={
+          impliesAnthropic ? (
+            <>
+              No "/" in this name: it will be sent to Anthropic as "anthropic/{model.trim()}
+              ". For another provider, prefix it, e.g. "ollama_chat/{model.trim()}" for a local
+              Ollama model.
+            </>
+          ) : undefined
+        }
+      >
+        <Input
           value={model}
           onChange={(e) => setModel(e.target.value)}
           placeholder="openai/gpt-5, anthropic/claude-sonnet-5, ollama/llama3"
-          className={inputClass}
         />
-        {impliesAnthropic && (
-          <span className="text-xs text-muted-foreground">
-            No "/" in this name: it will be sent to Anthropic as "anthropic/{model.trim()}
-            ". For another provider, prefix it, e.g. "ollama_chat/{model.trim()}" for a local Ollama
-            model.
-          </span>
-        )}
-      </label>
-      <label className="block space-y-1">
-        <span className="text-xs font-medium">API key</span>
-        <input
+      </FormField>
+      <FormField label="API key">
+        <Input
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           placeholder={profile?.apiKeySet ? "•••••••• (a key is set)" : "provider API key"}
-          className={inputClass}
         />
-      </label>
-      <label className="block space-y-1">
-        <span className="text-xs font-medium">
-          Base URL
-          <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
-        </span>
-        <input
+      </FormField>
+      <FormField
+        label={
+          <>
+            Base URL <span className="font-normal text-text-tertiary">(optional)</span>
+          </>
+        }
+      >
+        <Input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
           placeholder="https://… (custom or self-hosted endpoint)"
-          className={inputClass}
         />
-      </label>
+      </FormField>
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex justify-end gap-2 pt-1">
         <Button variant="outline" onClick={onCancel}>

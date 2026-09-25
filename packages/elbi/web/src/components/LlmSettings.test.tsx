@@ -77,3 +77,49 @@ it("reads a saved profile off the wire and does not wipe its base URL on save", 
   await waitFor(() => expect(puts).toHaveLength(1))
   expect(puts[0].base_url).toBe(BASE_URL)
 })
+
+it("changing the title model saves the selection", async () => {
+  const user = userEvent.setup()
+  render(
+    <FeedbackProvider>
+      <LlmProfilesManager />
+    </FeedbackProvider>,
+  )
+
+  const trigger = await screen.findByRole("combobox", { name: "Title model" })
+  // jsdom fires a window blur on pointerdown once an earlier test in this file has run,
+  // which closes a just-opened Radix Select; focusing first keeps it open (see repo notes
+  // on this jsdom artefact).
+  trigger.focus()
+  await user.click(trigger)
+  await user.click(screen.getByRole("option", { name: "Local" }))
+
+  await waitFor(() => expect(puts).toHaveLength(1))
+  expect(puts[0]).toEqual({ name: "Local" })
+})
+
+it("selecting Default sends the empty-string name, not the sentinel value", async () => {
+  const user = userEvent.setup()
+  // Starts with a real title model set, so picking "Default" is a genuine change back to
+  // "no override" -- the sentinel used for that Radix item must not leak into the request.
+  vi.stubGlobal("fetch", (_url: string, init?: RequestInit) => {
+    if (init?.method === "PUT") {
+      puts.push(JSON.parse(String(init.body)))
+      return Promise.resolve(json({}))
+    }
+    return Promise.resolve(json({ ...LISTING, titleProfile: "Local" }))
+  })
+  render(
+    <FeedbackProvider>
+      <LlmProfilesManager />
+    </FeedbackProvider>,
+  )
+
+  const trigger = await screen.findByRole("combobox", { name: "Title model" })
+  trigger.focus()
+  await user.click(trigger)
+  await user.click(screen.getByRole("option", { name: "Default" }))
+
+  await waitFor(() => expect(puts).toHaveLength(1))
+  expect(puts[0]).toEqual({ name: "" })
+})

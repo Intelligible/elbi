@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { Scene, SceneHeader } from "@/components/Scene"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import { useTheme } from "@/hooks/useTheme"
@@ -103,21 +104,23 @@ export function CatalogPage() {
               const Icon = TYPE_ICON[record.type]
               return (
                 <li key={record.id}>
-                  <button
-                    type="button"
-                    className={
-                      "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/60" +
-                      (selected === record.id ? " bg-accent" : "")
-                    }
+                  <Button
+                    variant="ghost"
+                    aria-current={selected === record.id ? "true" : undefined}
+                    className={`flex h-auto w-full justify-start gap-2 rounded-none px-4 py-2.5 text-left font-normal hover:text-foreground has-[>svg]:px-4 ${
+                      selected === record.id
+                        ? "bg-accent hover:bg-accent dark:hover:bg-accent"
+                        : "hover:bg-muted/60 dark:hover:bg-muted/60"
+                    }`}
                     onClick={() => setSelected(record.id)}
                   >
                     <Icon className="size-4 shrink-0 text-text-tertiary" />
                     <span className="flex-1 truncate">{record.name}</span>
                     {record.verdict ? <VerdictBadge verdict={record.verdict} /> : null}
-                    <span className="text-[10px] uppercase tracking-wide text-text-tertiary">
+                    <span className="text-3xs uppercase tracking-wide text-text-tertiary">
                       {record.type}
                     </span>
-                  </button>
+                  </Button>
                 </li>
               )
             })}

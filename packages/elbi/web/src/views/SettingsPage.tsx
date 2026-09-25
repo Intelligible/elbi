@@ -20,14 +20,34 @@ import {
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 
+import { FormControl, FormField } from "@/components/app/FormField"
+import { IconButton } from "@/components/app/IconButton"
 import { LlmProfilesManager } from "@/components/LlmSettings"
 import { Scene, SceneHeader } from "@/components/Scene"
 import { ComputeUsageSection } from "@/components/settings/ComputeUsageSection"
 import { SectionHeader } from "@/components/settings/SectionHeader"
 import { TrashSection } from "@/components/settings/TrashSection"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { FeedbackProvider, useFeedback } from "@/components/ui/feedback"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { VerdictBadge } from "@/components/VerdictBadge"
 import {
   type AppVersion,
@@ -133,22 +153,23 @@ function SettingsBody() {
               if (items.length === 0) return null
               return (
                 <div key={group} className="mb-1 last:mb-0">
-                  <div className="px-2 pb-1 pt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-text-tertiary">
+                  <div className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-[0.05em] text-text-tertiary">
                     {group}
                   </div>
                   {items.map((s) => (
-                    <button
-                      type="button"
+                    <Button
                       key={s.id}
+                      variant="ghost"
+                      aria-current={section === s.id ? "page" : undefined}
                       onClick={() => navigate(`/settings/${s.id}`)}
-                      className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                      className={`h-auto w-full justify-start px-2 py-1.5 text-left text-sm font-normal transition-colors ${
                         section === s.id
-                          ? "bg-accent font-medium text-foreground"
-                          : "text-text-secondary hover:bg-muted/60 hover:text-foreground"
+                          ? "bg-accent font-medium text-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent dark:hover:text-foreground"
+                          : "text-text-secondary hover:bg-muted/60 hover:text-foreground dark:hover:bg-muted/60 dark:hover:text-foreground"
                       }`}
                     >
                       {s.label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )
@@ -176,7 +197,7 @@ function SettingsBody() {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+    <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-tertiary">
       {children}
     </div>
   )
@@ -208,7 +229,7 @@ function ModelsSection() {
 
 const KINDS = ["postgres", "mysql", "sqlite", "mssql"]
 
-function ConnectionsSection() {
+export function ConnectionsSection() {
   const [sources, setSources] = useState<DataSource[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<DataSourceInput | null>(null)
@@ -254,10 +275,10 @@ function ConnectionsSection() {
               key={s.id}
               className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5"
             >
-              <Database className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Database className="h-4 w-4 shrink-0 text-text-tertiary" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{s.name}</div>
-                <div className="truncate text-xs text-muted-foreground">
+                <div className="truncate text-xs text-text-tertiary">
                   {s.kind}
                   {s.host ? ` · ${s.host}` : ""}
                   {s.database ? `/${s.database}` : ""}
@@ -312,17 +333,19 @@ function TestButton({ input }: { input: DataSourceInput | { id: string } }) {
     setError(r.error ?? "")
   }
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="xs"
       onClick={test}
       title={state === "error" ? error : "Test connection"}
-      className={`rounded-md border border-border px-2 py-1 text-xs transition ${
+      className={
         state === "ok"
-          ? "border-success/40 text-success"
+          ? "border-success/40 text-success hover:bg-card hover:text-success"
           : state === "error"
-            ? "border-danger/40 text-danger"
-            : "text-muted-foreground hover:text-foreground"
-      }`}
+            ? "border-danger/40 text-danger hover:bg-card hover:text-danger"
+            : "text-text-tertiary hover:text-foreground"
+      }
     >
       {state === "testing"
         ? "Testing…"
@@ -331,12 +354,9 @@ function TestButton({ input }: { input: DataSourceInput | { id: string } }) {
           : state === "error"
             ? "Failed"
             : "Test"}
-    </button>
+    </Button>
   )
 }
-
-const fieldClass =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
 
 function ConnectionForm({
   value,
@@ -356,88 +376,70 @@ function ConnectionForm({
   return (
     <div className="mt-4 space-y-3 rounded-xl border border-border p-4">
       <div className="grid grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <span className="text-xs font-medium">Name</span>
-          <input
-            className={fieldClass}
-            value={value.name ?? ""}
-            onChange={(e) => set({ name: e.target.value })}
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs font-medium">Kind</span>
-          <select
-            className={fieldClass}
-            value={value.kind}
-            onChange={(e) => set({ kind: e.target.value })}
-          >
-            {KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FormField label="Name">
+          <Input value={value.name ?? ""} onChange={(e) => set({ name: e.target.value })} />
+        </FormField>
+        <FormField label="Kind">
+          <Select value={value.kind} onValueChange={(v) => set({ kind: v })}>
+            <FormControl>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {KINDS.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {k}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
       </div>
       {isSqlite ? (
-        <label className="block space-y-1">
-          <span className="text-xs font-medium">Database file path</span>
-          <input
-            className={fieldClass}
+        <FormField label="Database file path">
+          <Input
             value={value.database ?? ""}
             onChange={(e) => set({ database: e.target.value })}
             placeholder="/data/app.db"
           />
-        </label>
+        </FormField>
       ) : (
         <>
           <div className="grid grid-cols-3 gap-3">
-            <label className="col-span-2 space-y-1">
-              <span className="text-xs font-medium">Host</span>
-              <input
-                className={fieldClass}
-                value={value.host ?? ""}
-                onChange={(e) => set({ host: e.target.value })}
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium">Port</span>
-              <input
-                className={fieldClass}
+            <FormField label="Host" className="col-span-2">
+              <Input value={value.host ?? ""} onChange={(e) => set({ host: e.target.value })} />
+            </FormField>
+            <FormField label="Port">
+              <Input
                 type="number"
                 value={value.port ?? ""}
                 onChange={(e) => set({ port: e.target.value ? Number(e.target.value) : null })}
               />
-            </label>
+            </FormField>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-xs font-medium">Database</span>
-              <input
-                className={fieldClass}
+            <FormField label="Database">
+              <Input
                 value={value.database ?? ""}
                 onChange={(e) => set({ database: e.target.value })}
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium">Username</span>
-              <input
-                className={fieldClass}
+            </FormField>
+            <FormField label="Username">
+              <Input
                 value={value.username ?? ""}
                 onChange={(e) => set({ username: e.target.value })}
               />
-            </label>
+            </FormField>
           </div>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium">Password</span>
-            <input
-              className={fieldClass}
+          <FormField label="Password">
+            <Input
               type="password"
               value={value.secret ?? ""}
               onChange={(e) => set({ secret: e.target.value })}
               placeholder="stored encrypted (APP_SECRET_KEY)"
             />
-          </label>
+          </FormField>
         </>
       )}
       <div className="flex items-center justify-between pt-1">
@@ -471,7 +473,7 @@ function ConnectionForm({
 
 const WINDOWS = ["1d", "7d", "30d", "1mo"]
 
-function BudgetSection() {
+export function BudgetSection() {
   const [budget, setB] = useState<Budget | null>(null)
   const [draft, setDraft] = useState({ max: "", window: "30d" })
   const fb = useFeedback()
@@ -497,7 +499,7 @@ function BudgetSection() {
       {budget && budget.maxBudget > 0 && (
         <div className="mb-5 rounded-xl border border-border p-4">
           <div className="mb-1.5 flex justify-between text-sm">
-            <span className="text-muted-foreground">This window ({budget.window})</span>
+            <span className="text-text-tertiary">This window ({budget.window})</span>
             <span className="font-medium">
               ${budget.spend.toFixed(2)} of ${budget.maxBudget.toFixed(2)} ({Math.round(pct)}%)
             </span>
@@ -508,31 +510,34 @@ function BudgetSection() {
         </div>
       )}
       <div className="flex items-end gap-3">
-        <label className="space-y-1">
-          <span className="text-xs font-medium">Cap (USD)</span>
-          <input
-            className={fieldClass}
+        {/* Fixed widths restore the old native <input>/<select>'s intrinsic (UA-default)
+            widths: both Input and SelectTrigger render narrower here, since neither has a
+            definite-width ancestor for the flex layout to size them against. */}
+        <FormField label="Cap (USD)" className="w-[253px]">
+          <Input
             type="number"
             step="0.01"
             value={draft.max}
             onChange={(e) => setDraft({ ...draft, max: e.target.value })}
             placeholder="0 = no cap"
           />
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs font-medium">Window</span>
-          <select
-            className={fieldClass}
-            value={draft.window}
-            onChange={(e) => setDraft({ ...draft, window: e.target.value })}
-          >
-            {WINDOWS.map((w) => (
-              <option key={w} value={w}>
-                {w}
-              </option>
-            ))}
-          </select>
-        </label>
+        </FormField>
+        <FormField label="Window" className="w-[118px]">
+          <Select value={draft.window} onValueChange={(v) => setDraft({ ...draft, window: v })}>
+            <FormControl>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {WINDOWS.map((w) => (
+                <SelectItem key={w} value={w}>
+                  {w}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
         <Button
           size="sm"
           onClick={async () => {
@@ -574,11 +579,11 @@ function AboutSection() {
         hint="The version running here, and how to upgrade it. Nothing on this page checks whether a newer release exists: this app makes no outbound request you did not ask for. Run `elbi update` when you want that answer."
       />
       <dl className="grid max-w-lg grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt className="text-muted-foreground">Version</dt>
+        <dt className="text-text-tertiary">Version</dt>
         <dd className="font-mono tabular-nums">{info?.version || "…"}</dd>
-        <dt className="text-muted-foreground">Package</dt>
+        <dt className="text-text-tertiary">Package</dt>
         <dd className="font-mono">{info?.package || "…"}</dd>
-        <dt className="text-muted-foreground">Installed via</dt>
+        <dt className="text-text-tertiary">Installed via</dt>
         <dd>{INSTALL_LABELS[info?.install.kind ?? ""] ?? info?.install.kind ?? "…"}</dd>
       </dl>
 
@@ -595,7 +600,7 @@ function AboutSection() {
             </Button>
           </div>
           {info.install.note ? (
-            <p className="text-sm text-muted-foreground">{info.install.note}</p>
+            <p className="text-sm text-text-tertiary">{info.install.note}</p>
           ) : null}
         </div>
       ) : null}
@@ -637,16 +642,14 @@ function TrackingSection() {
         hint="Mirror every certified run to an MLflow tracking server. Runs are recorded in this app's own history and comparison regardless; this exports the same certified estimates to MLflow."
       />
       <div className="flex items-end gap-3">
-        <label className="flex-1 space-y-1">
-          <span className="text-xs font-medium">MLflow tracking URI</span>
-          <input
-            className={fieldClass}
+        <FormField label="MLflow tracking URI" className="flex-1">
+          <Input
             value={uri}
             onChange={(e) => setUri(e.target.value)}
             placeholder="https://mlflow.example.com (empty disables export)"
             disabled={envOverride}
           />
-        </label>
+        </FormField>
         <Button
           size="sm"
           disabled={envOverride}
@@ -662,7 +665,7 @@ function TrackingSection() {
           Save
         </Button>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-xs text-text-tertiary">
         The <code className="font-mono">MLFLOW_TRACKING_URI</code> environment variable overrides
         this setting.
         {envOverride && " It is set, so this field is read-only."}
@@ -693,19 +696,15 @@ function WebhooksSection() {
         hint="POST model-registry events (finished training runs, drift results, promotions) to a URL. Requests are signed with the secret when one is set."
       />
       <div className="space-y-3">
-        <label className="block space-y-1">
-          <span className="text-xs font-medium">Webhook URL</span>
-          <input
-            className={fieldClass}
+        <FormField label="Webhook URL">
+          <Input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://hooks.example.com/models (empty disables webhooks)"
           />
-        </label>
-        <label className="block space-y-1">
-          <span className="text-xs font-medium">Signing secret</span>
-          <input
-            className={fieldClass}
+        </FormField>
+        <FormField label="Signing secret">
+          <Input
             type="password"
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
@@ -715,7 +714,7 @@ function WebhooksSection() {
                 : "optional, used to sign deliveries"
             }
           />
-        </label>
+        </FormField>
         <Button
           size="sm"
           onClick={async () => {
@@ -736,7 +735,7 @@ function WebhooksSection() {
   )
 }
 
-function NotificationsSection() {
+export function NotificationsSection() {
   const [prefs, setPrefs] = useState<NotificationPref[] | null>(null)
   const [emailAvailable, setEmailAvailable] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -783,7 +782,7 @@ function NotificationsSection() {
       />
       <div className="space-y-3">
         <div className="divide-y divide-border rounded-xl border border-border">
-          <div className="flex items-center gap-4 px-4 py-2 text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-4 px-4 py-2 text-xs font-medium text-text-tertiary">
             <span className="flex-1">Event</span>
             <span className="w-14 text-center">In-app</span>
             <span
@@ -799,16 +798,15 @@ function NotificationsSection() {
               <div key={p.eventType} className="flex items-center gap-4 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{meta?.label ?? p.eventType}</p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-xs text-text-tertiary">
                     {meta?.description ?? p.eventType}
                   </p>
                 </div>
                 <span className="flex w-14 justify-center">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={p.inApp}
                     aria-label={`In-app notifications for ${meta?.label ?? p.eventType}`}
-                    onChange={(e) => update(p.eventType, { inApp: e.target.checked })}
+                    onCheckedChange={(c) => update(p.eventType, { inApp: c === true })}
                   />
                 </span>
                 <span
@@ -821,12 +819,11 @@ function NotificationsSection() {
                         : undefined
                   }
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={p.email && p.inApp}
                     disabled={!emailAvailable || !p.inApp}
                     aria-label={`Email notifications for ${meta?.label ?? p.eventType}`}
-                    onChange={(e) => update(p.eventType, { email: e.target.checked })}
+                    onCheckedChange={(c) => update(p.eventType, { email: c === true })}
                   />
                 </span>
               </div>
@@ -887,23 +884,24 @@ export function NotebookEnvironmentsSection() {
         {drafts.map((draft) => (
           <div key={draft.id} className="space-y-2 rounded-lg border border-border p-3">
             <div className="flex items-center gap-2">
-              <input
-                className={fieldClass}
+              <Input
                 value={draft.name}
                 placeholder="Environment name (e.g. Data science)"
                 onChange={(e) => update(draft.id, { name: e.target.value })}
               />
-              <button
-                type="button"
+              <IconButton
+                label="Remove"
+                size="icon-xs"
+                className="size-7 text-text-tertiary hover:bg-muted hover:text-danger dark:hover:bg-muted"
                 onClick={() => setDrafts(drafts.filter((d) => d.id !== draft.id))}
-                className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-danger"
-                title="Remove"
               >
-                <Trash2 className="h-4 w-4" />
-              </button>
+                <Trash2 className="size-4" />
+              </IconButton>
             </div>
-            <textarea
-              className={`${fieldClass} font-mono text-[13px]`}
+            {/* ui/textarea has field-sizing-content (auto-grows to fit its value); restore
+                the old fixed-height behaviour that `rows` used to give it. */}
+            <Textarea
+              className="field-sizing-fixed font-mono text-compact"
               rows={4}
               spellCheck={false}
               value={draft.depsText}
@@ -988,14 +986,12 @@ function SecretsSection() {
       />
       <div className="mb-4 space-y-2 rounded-xl border border-border p-4">
         <div className="grid grid-cols-2 gap-3">
-          <input
-            className={fieldClass}
+          <Input
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             placeholder="Name"
           />
-          <input
-            className={fieldClass}
+          <Input
             type="password"
             value={draft.value}
             onChange={(e) => setDraft({ ...draft, value: e.target.value })}
@@ -1003,8 +999,7 @@ function SecretsSection() {
           />
         </div>
         <div className="flex gap-3">
-          <input
-            className={fieldClass}
+          <Input
             value={draft.description}
             onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             placeholder="Description (optional)"
@@ -1029,14 +1024,14 @@ function SecretsSection() {
               key={s.name}
               className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5"
             >
-              <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Lock className="h-4 w-4 shrink-0 text-text-tertiary" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{s.name}</div>
                 {s.description && (
-                  <div className="truncate text-xs text-muted-foreground">{s.description}</div>
+                  <div className="truncate text-xs text-text-tertiary">{s.description}</div>
                 )}
               </div>
-              <span className="text-xs text-muted-foreground">••••••</span>
+              <span className="text-xs text-text-tertiary">••••••</span>
               <Button
                 variant="ghost"
                 size="icon-xs"
@@ -1068,32 +1063,30 @@ function AuditSection() {
         <Empty>No activity recorded yet.</Empty>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">When</th>
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 font-medium">Target</th>
-                <th className="px-3 py-2 font-medium">Outcome</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Outcome</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {events.map((e) => (
-                <tr key={e.id} className="border-b border-border/50 last:border-0">
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                <TableRow key={e.id}>
+                  <TableCell className="whitespace-nowrap text-text-tertiary">
                     {e.at.replace("T", " ").slice(0, 16)}
-                  </td>
-                  <td className="px-3 py-2 font-medium">{e.action}</td>
-                  <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="font-medium">{e.action}</TableCell>
+                  <TableCell className="max-w-40 truncate text-text-tertiary">
                     {e.targetId || EMPTY}
-                  </td>
-                  <td className="px-3 py-2">
-                    {e.verdict ? <VerdictBadge verdict={e.verdict} /> : EMPTY}
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{e.verdict ? <VerdictBadge verdict={e.verdict} /> : EMPTY}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </>

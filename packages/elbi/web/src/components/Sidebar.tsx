@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react"
 import { NavLink, useLocation } from "react-router-dom"
+import { IconButton } from "@/components/app/IconButton"
 import { Logo } from "@/components/Logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,10 +45,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll"
 import { type Theme, useTheme } from "@/hooks/useTheme"
 import { type ConversationSummary, exportConversation } from "@/lib/chat"
 import { getNotifications, onNotificationsChanged } from "@/lib/notifications"
+import { cn } from "@/lib/utils"
 
 export function Sidebar({
   conversations,
@@ -101,13 +104,14 @@ export function Sidebar({
   const [mode, setMode] = useState<"browse" | "chat">(isChatRoute ? "chat" : "browse")
   useEffect(() => setMode(isChatRoute ? "chat" : "browse"), [isChatRoute])
 
+  // The selected segment is a raised card that keeps its fill on hover.
   const segment = (active: boolean) =>
-    `flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm ` +
-    `font-medium transition ${
+    cn(
+      "flex-1 gap-1.5 px-2 transition has-[>svg]:px-2",
       active
-        ? "bg-card text-foreground shadow-sm"
-        : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
-    }`
+        ? "bg-card text-foreground shadow-panel hover:bg-card hover:text-foreground dark:hover:bg-card"
+        : "text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground dark:hover:bg-transparent",
+    )
 
   return (
     <aside className="hidden w-[216px] shrink-0 flex-col overflow-hidden bg-transparent text-sidebar-foreground md:flex">
@@ -119,16 +123,18 @@ export function Sidebar({
           the platform navigation; Chat shows the conversation history. */}
       <div className="px-3">
         <div className="flex gap-1 rounded-lg bg-sidebar-accent/60 p-1">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setMode("browse")}
             className={segment(mode === "browse")}
             aria-pressed={mode === "browse"}
           >
-            <LayoutGrid className="h-4 w-4" /> Browse
-          </button>
-          <button
-            type="button"
+            <LayoutGrid className="size-4" /> Browse
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setMode("chat")
               // Entering Chat from a browse page opens the composer; if already in a
@@ -138,8 +144,8 @@ export function Sidebar({
             className={segment(mode === "chat")}
             aria-pressed={mode === "chat"}
           >
-            <MessagesSquare className={`h-4 w-4 ${mode === "chat" ? "text-primary" : ""}`} /> Chat
-          </button>
+            <MessagesSquare className={cn("size-4", mode === "chat" && "text-primary")} /> Chat
+          </Button>
         </div>
       </div>
 
@@ -184,27 +190,26 @@ export function Sidebar({
         // highlighted when open, so a past analysis can be reopened and resumed.
         <div className="mt-3 flex min-h-0 flex-1 flex-col px-3">
           <div className="flex items-center justify-between px-2.5 pb-1">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/45">
+            <p className="text-2xs font-medium uppercase tracking-wide text-sidebar-foreground/45">
               Chats
             </p>
-            <button
-              type="button"
+            <IconButton
+              label="New analysis"
+              size="icon-xs"
               onClick={onNew}
-              title="New analysis"
-              aria-label="New analysis"
-              className="flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/60 transition hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground dark:hover:bg-sidebar-accent"
             >
-              <Plus className="h-4 w-4" />
-            </button>
+              <Plus className="size-4" />
+            </IconButton>
           </div>
           <div className="relative mb-1 px-0.5">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sidebar-foreground/40" />
-            <input
+            <Input
               value={term}
               onChange={(e) => setTerm(e.target.value)}
               placeholder="Search analyses"
               aria-label="Search analyses"
-              className="w-full rounded-lg border border-sidebar-border bg-card py-1.5 pl-7 pr-2 text-sm outline-none placeholder:text-sidebar-foreground/40 focus:ring-1 focus:ring-ring"
+              className="h-auto rounded-lg border-sidebar-border bg-card py-1.5 pr-2 pl-7 placeholder:text-sidebar-foreground/40"
             />
           </div>
           <div ref={scrollRef} className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
@@ -223,7 +228,7 @@ export function Sidebar({
               ))
             )}
             {isFetchingNextPage && (
-              <p className="px-2.5 py-1.5 text-[11px] text-sidebar-foreground/40">Loading more…</p>
+              <p className="px-2.5 py-1.5 text-2xs text-sidebar-foreground/40">Loading more…</p>
             )}
           </div>
         </div>
@@ -292,15 +297,13 @@ function ThemeToggle() {
   const Icon = _THEME_ICON[theme]
   const next = _THEME_NEXT[theme]
   return (
-    <button
-      type="button"
+    <IconButton
+      label={`Theme: ${_THEME_LABEL[theme].toLowerCase()}, switch to ${_THEME_LABEL[next].toLowerCase()}`}
       onClick={() => setTheme(next)}
-      title={`${_THEME_LABEL[theme]}: switch to ${_THEME_LABEL[next].toLowerCase()}`}
-      aria-label={`Theme: ${_THEME_LABEL[theme].toLowerCase()}`}
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 transition hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground dark:hover:bg-sidebar-accent"
     >
-      <Icon className="h-4 w-4" />
-    </button>
+      <Icon className="size-4" />
+    </IconButton>
   )
 }
 
@@ -329,9 +332,7 @@ function ConversationLink({
         }
       >
         <span className="truncate text-sm">{conversation.title || "Untitled analysis"}</span>
-        <span className="text-[11px] text-muted-foreground">
-          {relativeTime(conversation.updated_at)}
-        </span>
+        <span className="text-2xs text-text-tertiary">{relativeTime(conversation.updated_at)}</span>
       </NavLink>
       {/* A hover-revealed options menu, kept visible while open so the click that opens
           the confirm dialog does not make the trigger vanish under the cursor. */}
@@ -410,7 +411,7 @@ function RenameConversationDialog({
         <DialogHeader>
           <DialogTitle>Rename analysis</DialogTitle>
         </DialogHeader>
-        <input
+        <Input
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -421,7 +422,7 @@ function RenameConversationDialog({
             }
           }}
           aria-label="Analysis title"
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="h-auto rounded-lg px-3 py-2"
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -493,7 +494,7 @@ function relativeTime(iso: string): string {
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-0.5">
-      <p className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/45">
+      <p className="px-2.5 pb-1 text-2xs font-medium uppercase tracking-wide text-sidebar-foreground/45">
         {label}
       </p>
       {children}
@@ -529,7 +530,7 @@ function Item({
       <Icon className="h-4 w-4 shrink-0" />
       <span className="flex-1">{label}</span>
       {count !== undefined && count > 0 && (
-        <span className="rounded-full bg-foreground/10 px-1.5 text-[11px] text-muted-foreground">
+        <span className="rounded-full bg-foreground/10 px-1.5 text-2xs text-text-tertiary">
           {count}
         </span>
       )}

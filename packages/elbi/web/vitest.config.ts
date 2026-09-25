@@ -10,7 +10,7 @@ export default mergeConfig(
     test: {
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
-      include: ["src/**/*.test.{ts,tsx}"],
+      include: ["src/**/*.test.{ts,tsx}", "eslint/**/*.test.js"],
       css: false,
       coverage: {
         provider: "v8",

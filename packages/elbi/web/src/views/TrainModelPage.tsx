@@ -7,9 +7,22 @@
 import { Boxes } from "lucide-react"
 import { useEffect, useId, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { FormControl, FormField } from "@/components/app/FormField"
 import { Scene, SceneBody, SceneHeader, SceneSection } from "@/components/Scene"
 import { rememberInlineJob } from "@/components/TrainingJobs"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   type DatasetColumn,
   type FeatureSource,
@@ -19,6 +32,10 @@ import {
   type TrainRequest,
   trainModel,
 } from "@/lib/chat"
+
+// Radix forbids an empty item value; "auto" stands in for the unset metric ("" = let
+// the backend choose) so the item list can include it as a real option.
+const AUTO_METRIC = "auto"
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const TASKS: { value: NonNullable<TrainRequest["task"]>; label: string }[] = [
@@ -46,9 +63,6 @@ const MIN_BUDGET_SECONDS = 5
 
 type SourceKind = FeatureSource["kind"]
 
-const fieldClass =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-
 // The grouped select encodes both fields of a source in the option value; names never
 // contain ":" but split on the first one regardless.
 function encodeSource(kind: SourceKind, name: string): string {
@@ -73,7 +87,8 @@ function parseFeatureList(text: string): string[] {
 }
 
 export function TrainModelPage() {
-  const timeColId = useId()
+  const ensembleId = useId()
+  const featureIdPrefix = useId()
   const navigate = useNavigate()
   const [search] = useSearchParams()
   const presetName = search.get("name") ?? ""
@@ -254,122 +269,128 @@ export function TrainModelPage() {
       />
       <SceneBody width="default" className="space-y-8">
         <SceneSection title="Model">
-          <label className="block space-y-1">
-            <span className="text-xs font-medium">Model name</span>
-            <input
-              className={fieldClass}
+          <FormField
+            label="Model name"
+            error={
+              name.trim() !== "" && !nameValid ? (
+                <>
+                  1–64 characters, starting with a letter or digit; letters, digits and{" "}
+                  <code className="font-mono">. _ -</code> only.
+                </>
+              ) : undefined
+            }
+          >
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="churn_predictor"
             />
-            {name.trim() !== "" && !nameValid && (
-              <span className="block text-xs text-danger">
-                1–64 characters, starting with a letter or digit; letters, digits and{" "}
-                <code className="font-mono">. _ -</code> only.
-              </span>
-            )}
-          </label>
+          </FormField>
         </SceneSection>
 
         <SceneSection title="Data">
           <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-xs font-medium">Data source</span>
-              <select
-                className={fieldClass}
+            <FormField label="Data source">
+              <Select
                 value={sourceName === "" ? "" : encodeSource(sourceKind, sourceName)}
-                onChange={(e) => pickSource(e.target.value)}
+                onValueChange={pickSource}
               >
-                <option value="" disabled>
-                  Choose a data source…
-                </option>
-                {datasets.length > 0 && (
-                  <optgroup label="Datasets">
-                    {datasets.map((s) => (
-                      <option
-                        key={encodeSource(s.kind, s.name)}
-                        value={encodeSource(s.kind, s.name)}
-                      >
-                        {s.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {derivations.length > 0 && (
-                  <optgroup label="Feature derivations">
-                    {derivations.map((s) => (
-                      <option
-                        key={encodeSource(s.kind, s.name)}
-                        value={encodeSource(s.kind, s.name)}
-                      >
-                        {s.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {trainingSets.length > 0 && (
-                  <optgroup label="Training sets">
-                    {trainingSets.map((s) => (
-                      <option
-                        key={encodeSource(s.kind, s.name)}
-                        value={encodeSource(s.kind, s.name)}
-                      >
-                        {s.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </label>
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose a data source…" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {datasets.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Datasets</SelectLabel>
+                      {datasets.map((s) => (
+                        <SelectItem
+                          key={encodeSource(s.kind, s.name)}
+                          value={encodeSource(s.kind, s.name)}
+                        >
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {derivations.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Feature derivations</SelectLabel>
+                      {derivations.map((s) => (
+                        <SelectItem
+                          key={encodeSource(s.kind, s.name)}
+                          value={encodeSource(s.kind, s.name)}
+                        >
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {trainingSets.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Training sets</SelectLabel>
+                      {trainingSets.map((s) => (
+                        <SelectItem
+                          key={encodeSource(s.kind, s.name)}
+                          value={encodeSource(s.kind, s.name)}
+                        >
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+            </FormField>
             {freeText ? (
-              <label className="space-y-1">
-                <span className="text-xs font-medium">Target column</span>
-                <input
-                  className={fieldClass}
+              <FormField label="Target column">
+                <Input
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   placeholder="output column to predict"
                 />
-              </label>
+              </FormField>
             ) : (
-              <label className="space-y-1">
-                <span className="text-xs font-medium">Target column</span>
-                <select
-                  className={fieldClass}
+              <FormField label="Target column">
+                <Select
                   value={target}
                   disabled={columns.length === 0}
-                  onChange={(e) => {
-                    setTarget(e.target.value)
+                  onValueChange={(v) => {
+                    setTarget(v)
                     setFeatures(null)
                   }}
                 >
-                  <option value="" disabled>
-                    {sourceName ? "Choose the target…" : "Pick a data source first"}
-                  </option>
-                  {columns.map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.name}
-                      {c.numeric ? " (numeric)" : " (categorical)"}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue
+                        placeholder={sourceName ? "Choose the target…" : "Pick a data source first"}
+                      />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {columns.map((c) => (
+                      <SelectItem key={c.name} value={c.name}>
+                        {c.name}
+                        {c.numeric ? " (numeric)" : " (categorical)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
             )}
           </div>
           {freeText ? (
-            <label className="block space-y-1">
-              <span className="text-xs font-medium">Features (optional)</span>
-              <input
-                className={fieldClass}
+            <FormField
+              label="Features (optional)"
+              hint="Target and features name columns of the source's output. Leave features empty to use every output column except the target; otherwise list them comma-separated."
+            >
+              <Input
                 value={featuresText}
                 onChange={(e) => setFeaturesText(e.target.value)}
                 placeholder="recency, frequency, monetary"
               />
-              <span className="block text-xs text-text-tertiary">
-                Target and features name columns of the source&apos;s output. Leave features empty
-                to use every output column except the target; otherwise list them comma-separated.
-              </span>
-            </label>
+            </FormField>
           ) : (
             <div className="space-y-1">
               <span className="text-xs font-medium">Features</span>
@@ -386,15 +407,20 @@ export function TrainModelPage() {
                   </p>
                   <div className="grid max-h-56 grid-cols-2 gap-x-3 gap-y-1 overflow-y-auto rounded-lg border border-border p-2">
                     {candidates.map((c) => (
-                      <label key={c.name} className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
+                      <div key={c.name} className="flex min-w-0 items-center gap-2 text-xs">
+                        <Checkbox
+                          id={`${featureIdPrefix}-${c.name}`}
                           checked={features === null || features.has(c.name)}
-                          onChange={() => toggleFeature(c.name)}
+                          onCheckedChange={() => toggleFeature(c.name)}
                         />
-                        <span className="truncate font-mono">{c.name}</span>
-                        {!c.numeric && <span className="text-text-tertiary">(cat)</span>}
-                      </label>
+                        <Label
+                          htmlFor={`${featureIdPrefix}-${c.name}`}
+                          className="min-w-0 gap-2 text-xs font-normal cursor-pointer"
+                        >
+                          <span className="min-w-0 truncate font-mono">{c.name}</span>
+                          {!c.numeric && <span className="shrink-0 text-text-tertiary">(cat)</span>}
+                        </Label>
+                      </div>
                     ))}
                   </div>
                 </>
@@ -405,110 +431,131 @@ export function TrainModelPage() {
 
         <SceneSection title="Training">
           <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-xs font-medium">Task</span>
-              <select
-                className={fieldClass}
+            <FormField label="Task">
+              <Select
                 value={task}
-                onChange={(e) => {
-                  const next = e.target.value as NonNullable<TrainRequest["task"]>
+                onValueChange={(v) => {
+                  const next = v as NonNullable<TrainRequest["task"]>
                   setTask(next)
                   // AutoGluon does not support ts_forecast; fall back to FLAML.
                   if (next === "ts_forecast") setEngine("flaml")
                 }}
               >
-                {TASKS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium">Metric</span>
-              <select
-                className={fieldClass}
-                value={metric}
-                onChange={(e) => setMetric(e.target.value)}
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {TASKS.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Metric">
+              <Select
+                value={metric || AUTO_METRIC}
+                onValueChange={(v) => setMetric(v === AUTO_METRIC ? "" : v)}
               >
-                <option value="">auto</option>
-                {METRICS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value={AUTO_METRIC}>auto</SelectItem>
+                  {METRICS.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
           </div>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium">Engine</span>
-            <select
-              className={fieldClass}
+          <FormField
+            label="Engine"
+            hint={
+              task === "ts_forecast"
+                ? "Time-series forecasting uses FLAML."
+                : ENGINE_HINTS[engine ?? "flaml"]
+            }
+          >
+            <Select
               value={engine}
-              onChange={(e) => setEngine(e.target.value as NonNullable<TrainRequest["engine"]>)}
+              onValueChange={(v) => setEngine(v as NonNullable<TrainRequest["engine"]>)}
             >
-              {/* Only FLAML forecasts; every other engine is disabled for ts_forecast. */}
-              <option value="flaml">FLAML: fast, budget-aware (default)</option>
-              <option value="autogluon" disabled={task === "ts_forecast"}>
-                AutoGluon: maximum accuracy, longer budgets
-              </option>
-              <option value="optuna" disabled={task === "ts_forecast"}>
-                Optuna: Bayesian tuning of gradient boosting
-              </option>
-              <option value="ensemble" disabled={task === "ts_forecast"}>
-                Ensemble: diverse models blended (often most accurate)
-              </option>
-              <option value="tabicl" disabled={task === "ts_forecast"}>
-                TabICL: open pretrained foundation model (small–mid data)
-              </option>
-            </select>
-            {task === "ts_forecast" ? (
-              <span className="block text-xs text-text-tertiary">
-                Time-series forecasting uses FLAML.
-              </span>
-            ) : (
-              <span className="block text-xs text-text-tertiary">
-                {ENGINE_HINTS[engine ?? "flaml"]}
-              </span>
-            )}
-          </label>
+              <FormControl>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {/* Only FLAML forecasts; every other engine is disabled for ts_forecast. */}
+                <SelectItem value="flaml">FLAML: fast, budget-aware (default)</SelectItem>
+                <SelectItem value="autogluon" disabled={task === "ts_forecast"}>
+                  AutoGluon: maximum accuracy, longer budgets
+                </SelectItem>
+                <SelectItem value="optuna" disabled={task === "ts_forecast"}>
+                  Optuna: Bayesian tuning of gradient boosting
+                </SelectItem>
+                <SelectItem value="ensemble" disabled={task === "ts_forecast"}>
+                  Ensemble: diverse models blended (often most accurate)
+                </SelectItem>
+                <SelectItem value="tabicl" disabled={task === "ts_forecast"}>
+                  TabICL: open pretrained foundation model (small–mid data)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </FormField>
           {task === "ts_forecast" && (
             <div className="grid grid-cols-2 gap-3">
-              <label className="space-y-1" htmlFor={timeColId}>
-                <span className="text-xs font-medium">Time column</span>
+              <FormField label="Time column">
                 {sourceKind === "derivation" ? (
-                  <input
-                    id={timeColId}
-                    className={fieldClass}
+                  <Input
                     value={timeCol}
                     onChange={(e) => setTimeCol(e.target.value)}
                     placeholder="timestamp output column"
                   />
                 ) : (
-                  <select
-                    id={timeColId}
-                    className={fieldClass}
+                  <Select
                     value={timeCol}
                     disabled={columns.length === 0}
-                    onChange={(e) => setTimeCol(e.target.value)}
+                    onValueChange={setTimeCol}
                   >
-                    <option value="" disabled>
-                      {sourceName ? "Choose the time column…" : "Pick a data source first"}
-                    </option>
-                    {columns
-                      .filter((c) => c.name !== target)
-                      .map((c) => (
-                        <option key={c.name} value={c.name}>
-                          {c.name}
-                        </option>
-                      ))}
-                  </select>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue
+                          placeholder={
+                            sourceName ? "Choose the time column…" : "Pick a data source first"
+                          }
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {columns
+                        .filter((c) => c.name !== target)
+                        .map((c) => (
+                          <SelectItem key={c.name} value={c.name}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 )}
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium">Horizon</span>
-                <input
-                  className={fieldClass}
+              </FormField>
+              <FormField
+                label="Horizon"
+                error={
+                  horizon !== "" && !horizonValid
+                    ? "The horizon must be a whole number of at least 1."
+                    : undefined
+                }
+              >
+                <Input
                   type="number"
                   min={1}
                   step={1}
@@ -516,51 +563,45 @@ export function TrainModelPage() {
                   onChange={(e) => setHorizon(e.target.value)}
                   placeholder="periods to forecast"
                 />
-                {horizon !== "" && !horizonValid && (
-                  <span className="block text-xs text-danger">
-                    The horizon must be a whole number of at least 1.
-                  </span>
-                )}
-              </label>
+              </FormField>
             </div>
           )}
-          <label className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              className="mt-0.5"
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id={ensembleId}
               checked={ensemble}
-              onChange={(e) => setEnsemble(e.target.checked)}
+              onCheckedChange={(c) => setEnsemble(c === true)}
+              className="mt-0.5"
             />
-            <span className="text-xs">
+            <Label htmlFor={ensembleId} className="block gap-0 text-xs font-normal cursor-pointer">
               <span className="font-medium">Ensemble</span>
               <span className="block text-text-tertiary">
                 Stack the best models found into an ensemble: slower to train, often more accurate.
               </span>
-            </span>
-          </label>
+            </Label>
+          </div>
           <div className="space-y-1">
             <span className="text-xs font-medium">Search budget</span>
             <div className="grid grid-cols-2 gap-3">
-              <input
-                className={fieldClass}
+              <Input
                 type="number"
                 min={1}
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
                 aria-label="Budget amount"
               />
-              <select
-                className={fieldClass}
-                value={budgetUnit}
-                onChange={(e) => setBudgetUnit(e.target.value as BudgetUnit)}
-                aria-label="Budget unit"
-              >
-                {(Object.keys(BUDGET_UNITS) as BudgetUnit[]).map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
+              <Select value={budgetUnit} onValueChange={(v) => setBudgetUnit(v as BudgetUnit)}>
+                <SelectTrigger className="w-full" aria-label="Budget unit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(BUDGET_UNITS) as BudgetUnit[]).map((u) => (
+                    <SelectItem key={u} value={u}>
+                      {u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {budget !== "" && !budgetValid ? (
               <p className="text-xs text-danger">

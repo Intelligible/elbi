@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { FeedbackProvider } from "@/components/ui/feedback"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { NotebookEnvironmentsSection } from "./SettingsPage"
 
 /**
@@ -28,15 +29,17 @@ describe("NotebookEnvironmentsSection", () => {
 
   it("keeps each row's own DOM state when one before it is removed", async () => {
     render(
-      <FeedbackProvider>
-        <NotebookEnvironmentsSection />
-      </FeedbackProvider>,
+      <TooltipProvider delayDuration={0}>
+        <FeedbackProvider>
+          <NotebookEnvironmentsSection />
+        </FeedbackProvider>
+      </TooltipProvider>,
     )
     await waitFor(() => expect(screen.getByDisplayValue("first")).toBeInTheDocument())
 
     const third = screen.getByDisplayValue("third")
 
-    await userEvent.click(screen.getAllByTitle("Remove")[0])
+    await userEvent.click(screen.getAllByRole("button", { name: "Remove" })[0])
 
     await waitFor(() => expect(screen.queryByDisplayValue("first")).not.toBeInTheDocument())
     expect(screen.getByDisplayValue("second")).toBeInTheDocument()

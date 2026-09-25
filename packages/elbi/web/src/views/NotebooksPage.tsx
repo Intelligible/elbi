@@ -14,6 +14,8 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
+import { EmptyState } from "@/components/app/EmptyState"
+import { IconButton } from "@/components/app/IconButton"
 import { Scene, SceneBody, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -57,6 +59,7 @@ import {
   type NotebookSummary,
   renameFolder,
 } from "@/lib/notebooks"
+import { cn } from "@/lib/utils"
 
 // The sentinel a `Select` uses for "the root", since Radix items cannot hold "".
 const ROOT = "__root__"
@@ -216,9 +219,11 @@ function NotebooksBody() {
     ).length
     const total = nested.size + notebookCount
     if (total > 0) {
-      const ok = window.confirm(
-        `Delete "${row.folder.name}" and its ${total} item${total === 1 ? "" : "s"}?`,
-      )
+      const ok = await fb.confirm({
+        title: "Delete folder",
+        body: `Delete "${row.folder.name}" and its ${total} item${total === 1 ? "" : "s"}?`,
+        danger: true,
+      })
       if (!ok) return
       await deleteFolder(row.id, true)
     } else {
@@ -323,16 +328,13 @@ function NotebooksBody() {
       width: 48,
       align: "right",
       render: (r) => (
-        <span className="inline-flex">
+        // h-7.5 holds the rows at 42px: this cell is the tallest in each row.
+        <span className="flex h-7.5 justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Row actions"
-              >
+              <IconButton label="Row actions" size="icon-xs" className="text-text-tertiary">
                 <MoreHorizontal className="size-4" />
-              </button>
+              </IconButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-40">
               {r.kind === "folder" && (
@@ -428,26 +430,30 @@ function NotebooksBody() {
           className="mb-3 flex items-center gap-1 text-sm text-text-tertiary"
           aria-label="Breadcrumb"
         >
-          <button
-            type="button"
-            className="rounded px-1.5 py-0.5 font-medium transition-colors hover:bg-muted hover:text-foreground"
+          <Button
+            variant="ghost"
+            size="xs"
+            className="px-1.5 text-sm"
+            aria-current={breadcrumb.length === 0 ? "page" : undefined}
             onClick={() => goTo(null)}
           >
             Home
-          </button>
+          </Button>
           {breadcrumb.map((f, i) => (
             <span key={f.id} className="flex items-center gap-1">
               <ChevronRight className="size-3.5 shrink-0" />
-              <button
-                type="button"
-                className={
-                  "rounded px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground" +
-                  (i === breadcrumb.length - 1 ? " font-medium text-foreground" : "")
-                }
+              <Button
+                variant="ghost"
+                size="xs"
+                className={cn(
+                  "px-1.5 text-sm font-normal",
+                  i === breadcrumb.length - 1 && "font-medium text-foreground",
+                )}
+                aria-current={i === breadcrumb.length - 1 ? "page" : undefined}
                 onClick={() => goTo(f.id)}
               >
                 {f.name}
-              </button>
+              </Button>
             </span>
           ))}
         </nav>
@@ -460,12 +466,15 @@ function NotebooksBody() {
             q ? (
               "Nothing here matches your search."
             ) : (
-              <span className="flex flex-col items-center gap-3">
-                This folder is empty.
-                <Button size="sm" onClick={createHere}>
-                  <Plus className="size-4" /> New notebook
-                </Button>
-              </span>
+              <EmptyState
+                title="This folder is empty."
+                className="p-0"
+                action={
+                  <Button size="sm" onClick={createHere}>
+                    <Plus className="size-4" /> New notebook
+                  </Button>
+                }
+              />
             )
           }
           toolbar={

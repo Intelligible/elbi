@@ -32,10 +32,8 @@ contributors, MIT licensed. Its math webfonts ship under
 
 **PostHog** (https://posthog.com), Copyright (c) 2020-2026 PostHog Inc., MIT
 licensed. The warehouse "Sources" surface follows PostHog's Lemon UI for its
-layout, density and control shapes, and
-`packages/elbi/web/src/components/warehouse/phc.tsx` derives spacing and sizing
-values, and its success/danger/info colours, from that stylesheet. The accent
-and brand colours are this product's own.
+layout, density and control shapes. The accent and brand colours are this
+product's own.
 
 **Apache Ossie**, formerly the Open Semantic Interchange
 (https://github.com/open-semantic-interchange/OSI), Apache-2.0 licensed. The

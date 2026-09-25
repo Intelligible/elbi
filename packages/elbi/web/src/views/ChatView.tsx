@@ -32,9 +32,11 @@ import {
   PromptInputTools,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input"
+import { IconButton } from "@/components/app/IconButton"
 import { JobsBar } from "@/components/JobsBar"
 import { ProviderGlyph } from "@/components/ProviderIcon"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -42,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { type VizDescriptor, VizView } from "@/components/viz/VizView"
 import {
   certificateUrl,
@@ -54,7 +57,7 @@ import {
 } from "@/lib/chat"
 import { storedToUIMessages } from "@/lib/messages"
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition"
-import { uuid } from "@/lib/utils"
+import { cn, uuid } from "@/lib/utils"
 
 type Chat = ReturnType<typeof useChat>
 
@@ -138,6 +141,18 @@ type PartData = {
 }
 
 type Context = { name: string; text: string } | null
+
+// A 22px message action: the icon recolours on hover, with no fill.
+const ACTION =
+  "size-5.5 rounded text-text-tertiary hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
+
+// A 28px composer tool with a muted fill on hover.
+const TOOL =
+  "size-7 rounded-lg text-text-tertiary hover:bg-muted hover:text-foreground dark:hover:bg-muted"
+
+// A text-only disclosure toggle (the trace and receipt headers).
+const DISCLOSURE =
+  "flex h-auto justify-start gap-1.5 whitespace-normal text-xs text-text-tertiary transition hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
 
 export function ChatView({
   chat,
@@ -262,12 +277,18 @@ export function ChatView({
       )}
       {context && (
         <div className="flex">
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1 text-xs text-text-tertiary">
             <FileText className="h-3.5 w-3.5" />
             {context.name}
-            <button type="button" onClick={() => onContext(null)} aria-label="Remove context">
-              <X className="h-3 w-3 hover:text-foreground" />
-            </button>
+            {/* The 24px hit box keeps the bare 12px icon's footprint in the chip. */}
+            <IconButton
+              label="Remove context"
+              size="icon-xs"
+              onClick={() => onContext(null)}
+              className="-m-1.5 hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
+            >
+              <X className="size-3" />
+            </IconButton>
           </span>
         </div>
       )}
@@ -280,14 +301,14 @@ export function ChatView({
                 alt="attachment"
                 className="h-16 w-16 rounded-lg border border-border object-cover"
               />
-              <button
-                type="button"
+              <IconButton
+                label="Remove image"
+                size="icon-xs"
                 onClick={() => setImages((prev) => prev.filter((img) => img.id !== id))}
-                aria-label="Remove image"
-                className="absolute -right-1.5 -top-1.5 rounded-full bg-foreground/85 p-0.5 text-background"
+                className="absolute -top-1.5 -right-1.5 size-4 rounded-full bg-foreground/85 p-0.5 text-background hover:bg-foreground/85 hover:text-background dark:hover:bg-foreground/85"
               >
-                <X className="h-3 w-3" />
-              </button>
+                <X className="size-3" />
+              </IconButton>
             </div>
           ))}
         </div>
@@ -297,7 +318,6 @@ export function ChatView({
           onSubmit={(m) => {
             if (m.text) send(m.text)
           }}
-          className="rounded-2xl shadow-sm"
         >
           <PromptInputBody>
             <PromptInputTextarea placeholder="Ask anything about your data…" />
@@ -339,25 +359,25 @@ export function ChatView({
     return (
       <div className="flex flex-1 items-center justify-center px-6">
         <div className="w-full max-w-2xl pb-24">
-          <h1 className="mb-7 text-center text-[1.7rem] font-semibold tracking-tight">
+          <h1 className="mb-7 text-center text-display font-semibold tracking-tight">
             What do you want to analyze?
           </h1>
           {composer}
           <div className="mt-5 space-y-0.5">
             {EXAMPLES.map((e) => (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 key={e}
                 onClick={() => send(e)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted-foreground transition hover:text-foreground"
+                className="flex h-auto w-full justify-start gap-2 rounded-lg px-2 py-1.5 text-left font-normal whitespace-normal text-text-tertiary transition hover:bg-transparent hover:text-foreground has-[>svg]:px-2 dark:hover:bg-transparent"
               >
-                <CornerDownRight className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                <CornerDownRight className="size-3.5 shrink-0 opacity-60" />
                 {e}
-              </button>
+              </Button>
             ))}
           </div>
           {datasets.length > 0 && (
-            <p className="mt-4 text-center text-xs text-muted-foreground">
+            <p className="mt-4 text-center text-xs text-text-tertiary">
               connected: {datasets.map((d) => d.name).join(", ")}
             </p>
           )}
@@ -464,15 +484,13 @@ export function Turn({
     <div className="space-y-3">
       {trace.length > 0 && <Trace items={trace} running={busy} />}
       {busy && !text && (
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-text-tertiary">
           <span className="animate-pulse">Analyzing…</span>
         </div>
       )}
       {result && <Verdict result={result} />}
       {result && result.assumptions.length > 0 && <Assumptions items={result.assumptions} />}
-      {text && (
-        <Streamdown className="text-[0.95rem] leading-7 text-foreground/90">{text}</Streamdown>
-      )}
+      {text && <Streamdown className="text-sm leading-7 text-foreground/90">{text}</Streamdown>}
       {viz && <VizView viz={viz} />}
       {result && result.checks.length > 0 && <Receipt result={result} />}
       {!busy && (text || result) && (
@@ -503,34 +521,36 @@ function UserTurn({
   if (editing) {
     return (
       <div className="flex flex-col items-end gap-1.5">
-        <textarea
+        {/* Sized by `rows`, from the draft's line count, rather than by its content. */}
+        <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={Math.min(6, draft.split("\n").length + 1)}
-          className="w-full max-w-lg rounded-2xl border border-border bg-background p-3 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="field-sizing-fixed min-h-0 max-w-lg rounded-2xl p-3"
         />
-        <div className="flex gap-1.5 text-xs">
-          <button
-            type="button"
+        <div className="flex gap-1.5">
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => {
               setDraft(text)
               setEditing(false)
             }}
-            className="rounded-lg px-2.5 py-1 text-muted-foreground hover:bg-muted"
+            className="rounded-lg px-2.5 font-normal text-text-tertiary hover:bg-muted hover:text-text-tertiary dark:hover:bg-muted"
           >
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            size="xs"
             disabled={!draft.trim() || busy}
             onClick={() => {
               setEditing(false)
               onEdit?.(draft)
             }}
-            className="rounded-lg bg-primary px-2.5 py-1 text-primary-foreground hover:bg-accent-hover disabled:opacity-40"
+            className="rounded-lg px-2.5 font-normal disabled:opacity-40"
           >
             Send
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -538,17 +558,17 @@ function UserTurn({
   return (
     <div className="group flex items-center justify-end gap-1.5">
       {onEdit && (
-        <button
-          type="button"
+        <IconButton
+          label="Edit message"
+          size="icon-xs"
           onClick={() => {
             setDraft(text)
             setEditing(true)
           }}
-          aria-label="Edit message"
-          className="rounded p-1 text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
+          className={cn(ACTION, "opacity-0 group-hover:opacity-100 focus-visible:opacity-100")}
         >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
+          <Pencil className="size-3.5" />
+        </IconButton>
       )}
       <Message from="user">
         <MessageContent>{text}</MessageContent>
@@ -573,36 +593,31 @@ function MessageActions({
     setFeedback(next)
     void setMessageFeedback(messageId, next)
   }
-  const iconClass = (active: boolean) => `h-3.5 w-3.5 ${active ? "text-foreground" : ""}`
+  const iconClass = (active: boolean) => cn("size-3.5", active && "text-foreground")
   return (
-    <div className="flex items-center gap-1 text-muted-foreground">
-      <button
-        type="button"
+    <div className="flex items-center gap-1 text-text-tertiary">
+      <IconButton
+        label="Good response"
+        size="icon-xs"
         onClick={() => rate("up")}
-        aria-label="Good response"
         aria-pressed={feedback === "up"}
-        className="rounded p-1 transition hover:text-foreground"
+        className={ACTION}
       >
         <ThumbsUp className={iconClass(feedback === "up")} />
-      </button>
-      <button
-        type="button"
+      </IconButton>
+      <IconButton
+        label="Bad response"
+        size="icon-xs"
         onClick={() => rate("down")}
-        aria-label="Bad response"
         aria-pressed={feedback === "down"}
-        className="rounded p-1 transition hover:text-foreground"
+        className={ACTION}
       >
         <ThumbsDown className={iconClass(feedback === "down")} />
-      </button>
+      </IconButton>
       {onRegenerate && (
-        <button
-          type="button"
-          onClick={onRegenerate}
-          aria-label="Regenerate"
-          className="rounded p-1 transition hover:text-foreground"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </button>
+        <IconButton label="Regenerate" size="icon-xs" onClick={onRegenerate} className={ACTION}>
+          <RotateCcw className="size-3.5" />
+        </IconButton>
       )}
     </div>
   )
@@ -614,15 +629,21 @@ function Trace({ items, running }: { items: TraceItem[]; running: boolean }) {
   const tools = items.filter((i) => i.kind === "tool").length
   return (
     <div className="rounded-xl border border-border bg-card/50">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+        className={cn(
+          DISCLOSURE,
+          "w-full px-3 py-2 has-[>svg]:px-3",
+          // The header's corners follow the card's, so its focus ring does too.
+          open ? "rounded-t-xl rounded-b-none" : "rounded-xl",
+        )}
       >
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         How it got here · {tools} step{tools === 1 ? "" : "s"}
         {running && <span className="ml-1 animate-pulse text-primary">· working…</span>}
-      </button>
+      </Button>
       {open && (
         <div className="space-y-3 border-t border-border px-3 py-3">
           {items.map((item) =>
@@ -644,22 +665,23 @@ function ToolStep({ item }: { item: Extract<TraceItem, { kind: "tool" }> }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="text-sm">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 text-left transition hover:text-foreground"
+        className="flex h-auto justify-start gap-2 p-0 text-left font-normal whitespace-normal transition hover:bg-transparent hover:text-foreground has-[>svg]:px-0 dark:hover:bg-transparent"
       >
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
         <span className="font-medium text-foreground/80">
           {STEP_LABELS[item.name] ?? item.name}
         </span>
-        <span className="font-mono text-[11px] text-muted-foreground">{item.name}</span>
+        <span className="font-mono text-2xs text-text-tertiary">{item.name}</span>
         {open ? (
-          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          <ChevronDown className="size-3 text-text-tertiary" />
         ) : (
-          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          <ChevronRight className="size-3 text-text-tertiary" />
         )}
-      </button>
+      </Button>
       {open && (
         <div className="ml-3.5 mt-1.5 space-y-1.5">
           <Code label="input" text={formatInput(item.name, item.args)} />
@@ -674,10 +696,8 @@ function Code({ label, text }: { label: string; text: string }) {
   const clipped = text.length > 4000 ? `${text.slice(0, 4000)}\n… (truncated)` : text
   return (
     <div>
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <pre className="mt-0.5 max-h-64 overflow-auto rounded-lg border border-border bg-muted px-2.5 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+      <div className="text-3xs font-medium uppercase tracking-wide text-text-tertiary">{label}</div>
+      <pre className="mt-0.5 max-h-64 overflow-auto rounded-lg border border-border bg-muted px-2.5 py-2 font-mono text-2xs leading-relaxed whitespace-pre-wrap">
         {clipped}
       </pre>
     </div>
@@ -732,14 +752,15 @@ function Receipt({ result }: { result: ResultPayload }) {
   const claim = (result.spec?.claim as Record<string, unknown>) ?? {}
   return (
     <div>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+        className={cn(DISCLOSURE, "p-0 has-[>svg]:px-0")}
       >
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         Verification: {result.checks.length} check{result.checks.length === 1 ? "" : "s"}
-      </button>
+      </Button>
       {open && (
         <div className="mt-2.5 space-y-3 border-l-2 border-verified/30 pl-4">
           <ul className="space-y-1.5">
@@ -759,7 +780,7 @@ function Receipt({ result }: { result: ResultPayload }) {
               )
             })}
           </ul>
-          <div className="font-mono text-[10px] leading-relaxed text-muted-foreground/70">
+          <div className="font-mono text-3xs leading-relaxed text-text-tertiary/70">
             <span className="text-foreground/50">claim</span> {JSON.stringify(claim)}
             {result.data_hash && (
               <>
@@ -772,7 +793,7 @@ function Receipt({ result }: { result: ResultPayload }) {
             <a
               href={certificateUrl(result.spec.derivation as string)}
               download
-              className="inline-block text-xs font-medium text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+              className="inline-block text-xs font-medium text-text-tertiary underline-offset-2 transition hover:text-foreground hover:underline"
             >
               Download certificate
             </a>
@@ -788,7 +809,7 @@ function Assumptions({ items }: { items: string[] }) {
   // signal "true only under these", with the source the user can audit.
   return (
     <div className="rounded-lg border border-[var(--caution)]/25 bg-caution-tint px-3 py-2">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-caution">
+      <div className="text-2xs font-medium uppercase tracking-wide text-caution">
         Under stated assumptions
       </div>
       <ul className="mt-1 space-y-0.5 text-foreground/90">
@@ -818,14 +839,13 @@ function AttachContext({ onAttach }: { onAttach: (c: Context) => void }) {
           e.target.value = ""
         }}
       />
-      <button
-        type="button"
+      <IconButton
+        label="Attach a spec or data dictionary for context"
         onClick={() => input.current?.click()}
-        title="Attach a spec or data dictionary for context"
-        className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className={TOOL}
       >
-        <Plus className="h-4 w-4" />
-      </button>
+        <Plus className="size-4" />
+      </IconButton>
     </>
   )
 }
@@ -855,15 +875,14 @@ function AttachImage({
           e.target.value = ""
         }}
       />
-      <button
-        type="button"
+      <IconButton
+        label="Attach an image (e.g. a chart to read)"
         disabled={disabled}
         onClick={() => input.current?.click()}
-        title="Attach an image (e.g. a chart to read)"
-        className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-40"
+        className={cn(TOOL, "disabled:opacity-40")}
       >
-        <ImagePlus className="h-4 w-4" />
-      </button>
+        <ImagePlus className="size-4" />
+      </IconButton>
     </>
   )
 }
@@ -883,16 +902,15 @@ function MicButton() {
   if (state === "unsupported") return null
   return (
     <span className="flex items-center gap-1.5">
-      <button
-        type="button"
+      <IconButton
+        label="Dictate: real-time"
         onClick={toggle}
-        title="Dictate: real-time"
-        aria-label="Dictate"
-        className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        aria-pressed={state === "listening"}
+        className={TOOL}
       >
         <Mic className={state === "listening" ? "size-4 animate-pulse text-danger" : "size-4"} />
-      </button>
-      {error && <span className="text-[11px] text-danger">{error}</span>}
+      </IconButton>
+      {error && <span className="text-2xs text-danger">{error}</span>}
     </span>
   )
 }
@@ -918,7 +936,7 @@ function UsageBadge({ conversationId, settled }: { conversationId: string; settl
   const cost = usage.cost > 0 ? ` · $${usage.cost.toFixed(usage.cost < 0.01 ? 4 : 2)}` : ""
   return (
     <span
-      className="px-1 text-[11px] text-muted-foreground"
+      className="px-1 text-2xs text-text-tertiary"
       title={`${usage.prompt_tokens.toLocaleString()} in · ${usage.completion_tokens.toLocaleString()} out`}
     >
       {tokens.toLocaleString()} tok{cost}
@@ -942,7 +960,7 @@ function ProfileSelect({
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
         size="sm"
-        className="gap-1.5 border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none hover:text-foreground focus-visible:ring-0"
+        className="gap-1.5 border-0 bg-transparent px-2 text-xs text-text-tertiary shadow-none hover:text-foreground focus-visible:ring-0"
       >
         <SelectValue>
           <span className="flex items-center gap-1.5">

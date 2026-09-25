@@ -15,6 +15,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { FeatureEntity, FeatureView, TrainingSet } from "@/lib/features"
 import {
   defineEntity,
@@ -29,6 +36,9 @@ import {
 import { EMPTY, relativeTime, uuid } from "@/lib/utils"
 
 const VALUE_TYPES = ["", "string", "integer", "float", "boolean"] as const
+// Radix Select items can't carry "", so "no declared type" travels as this and is
+// mapped back to "" before it reaches the row state.
+const NO_TYPE = "__none__"
 
 export function FeatureStorePage() {
   const navigate = useNavigate()
@@ -422,7 +432,7 @@ function FeatureViewDialog({
           </Field>
           <FieldGroup label="Entities">
             {entities.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Define an entity first.</p>
+              <p className="text-xs text-text-tertiary">Define an entity first.</p>
             ) : (
               <div className="flex flex-wrap gap-1">
                 {entities.map((e) => {
@@ -466,17 +476,21 @@ function FeatureViewDialog({
                     placeholder="clicks_7d"
                     className="h-8 flex-1"
                   />
-                  <select
-                    value={f.dtype}
-                    onChange={(e) => setFeature(f.rowId, { dtype: e.target.value })}
-                    className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                  <Select
+                    value={f.dtype || NO_TYPE}
+                    onValueChange={(v) => setFeature(f.rowId, { dtype: v === NO_TYPE ? "" : v })}
                   >
-                    {VALUE_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t || "type"}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger size="sm" aria-label="Feature type" className="w-22.5 px-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VALUE_TYPES.map((t) => (
+                        <SelectItem key={t || NO_TYPE} value={t || NO_TYPE}>
+                          {t || "type"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     value={f.description}
                     onChange={(e) => setFeature(f.rowId, { description: e.target.value })}
@@ -555,7 +569,7 @@ function Field({ label, children }: { label: string; children: (id: string) => R
   const id = useId()
   return (
     <div className="block space-y-1">
-      <label className="text-xs font-medium text-muted-foreground" htmlFor={id}>
+      <label className="text-xs font-medium text-text-tertiary" htmlFor={id}>
         {label}
       </label>
       {children(id)}
@@ -567,7 +581,7 @@ function Field({ label, children }: { label: string; children: (id: string) => R
 function FieldGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="block space-y-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium text-text-tertiary">{label}</span>
       {children}
     </div>
   )

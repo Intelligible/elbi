@@ -19,6 +19,7 @@ import {
 import type { ComponentType } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+import { IconButton } from "@/components/app/IconButton"
 import { SectionHeader } from "@/components/settings/SectionHeader"
 import { type Column, DataTable } from "@/components/ui/data-table"
 import { useFeedback } from "@/components/ui/feedback"
@@ -148,28 +149,28 @@ export function TrashSection() {
       align: "right",
       render: (item) => (
         <span className="flex items-center justify-end gap-1">
-          <button
-            type="button"
+          <IconButton
+            label={`Restore ${item.name}`}
+            size="icon-xs"
+            className="text-text-tertiary hover:bg-muted hover:text-foreground dark:hover:bg-muted"
             onClick={(e) => {
               e.stopPropagation()
               void restore(item)
             }}
-            className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={`Restore ${item.name}`}
           >
             <RotateCcw className="size-4" />
-          </button>
-          <button
-            type="button"
+          </IconButton>
+          <IconButton
+            label={`Delete ${item.name} forever`}
+            size="icon-xs"
+            className="text-text-tertiary hover:bg-muted hover:text-danger dark:hover:bg-muted"
             onClick={(e) => {
               e.stopPropagation()
               void eraseForever(item)
             }}
-            className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-muted hover:text-danger"
-            aria-label={`Delete ${item.name} forever`}
           >
             <Trash2 className="size-4" />
-          </button>
+          </IconButton>
         </span>
       ),
     },

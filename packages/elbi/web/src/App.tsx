@@ -5,6 +5,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "re
 import { AssistantContextProvider } from "@/components/AssistantContext"
 import { AssistantMark } from "@/components/AssistantMark"
 import { AssistantPanel, type PageContext } from "@/components/AssistantPanel"
+import { IconButton } from "@/components/app/IconButton"
 import { InsecureContextBanner } from "@/components/InsecureContextBanner"
 import { Sidebar } from "@/components/Sidebar"
 import {
@@ -368,19 +369,20 @@ export default function App() {
             assistant is never lost in a corner. */}
             {!onChatRoute ? (
               <div className="m-1.5 ml-0 flex w-12 shrink-0 flex-col items-center gap-1 rounded-lg border border-border bg-card shadow-panel py-3">
-                <button
-                  type="button"
+                <IconButton
+                  label="Assistant (⌘I)"
+                  size="icon"
+                  aria-pressed={showAssistant}
                   onClick={() => setShowAssistant((open) => !open)}
-                  title="Assistant (⌘I)"
-                  className={`flex size-9 flex-col items-center justify-center rounded-md transition ${
+                  className={
                     showAssistant
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
+                      ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground dark:hover:bg-primary"
+                      : "text-text-tertiary hover:bg-muted hover:text-foreground dark:hover:bg-muted"
+                  }
                 >
                   <AssistantMark className="size-5" />
-                </button>
-                <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                </IconButton>
+                <span className="text-3xs font-medium uppercase tracking-wide text-text-tertiary">
                   AI
                 </span>
               </div>

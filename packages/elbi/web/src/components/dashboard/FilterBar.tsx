@@ -127,7 +127,7 @@ export function FilterBar({
     <div className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-3">
       {variables.map((variable) => (
         <div key={variable.name} className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground capitalize">
+          <span className="text-xs font-medium text-text-tertiary capitalize">
             {label(variable)}
           </span>
           <Control
