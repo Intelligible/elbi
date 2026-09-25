@@ -9,7 +9,7 @@
 # project so it boots with no host setup, and a mounted volume at /data overrides it.
 
 ############################  Stage 1: frontend (Vite)  ########################
-FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS web
+FROM node:25-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS web
 WORKDIR /web
 # Install deps against the lockfile first, so this layer caches across source edits.
 COPY packages/elbi/web/package.json packages/elbi/web/package-lock.json ./
