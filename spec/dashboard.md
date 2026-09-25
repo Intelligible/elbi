@@ -69,7 +69,8 @@ The `type` determines the required shape:
 
 - `metric`, `chart`, `map`, `table`: a *data* widget; it MUST have a `bind` and MAY
   have a `viz`.
-- `text`: MUST have `content` (Markdown) and MUST NOT have a `bind`.
+- `text`: MUST have exactly one of `content` (Markdown) or a `bind` naming a
+  derivation that returns markdown.
 - `filter`: MUST name a `variable` that exists, and MUST NOT have a `bind`.
 
 ## 5. Binding
