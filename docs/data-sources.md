@@ -134,8 +134,8 @@ the incremental cursor: a later sync reads only the files that have changed.
 
 **Applications** are read over their APIs, each with a token you create in that
 product: Stripe, HubSpot, Salesforce, Shopify, Zendesk, Chargebee, Mailchimp,
-Klaviyo, SendGrid, Braze, Pipedrive, Front, Vercel, Airtable, Mixpanel, GitHub,
-Jira, Notion, Slack, Sentry, Typeform and Intercom. If yours is not there, the
+Klaviyo, SendGrid, Braze, Pipedrive, Front, Vercel, Airtable, Mixpanel, PostHog,
+GitHub, Jira, Notion, Slack, Sentry, Typeform and Intercom. If yours is not there, the
 **Custom REST source** takes a manifest describing any JSON API.
 
 ### Deeply nested collections
