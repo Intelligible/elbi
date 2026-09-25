@@ -5793,6 +5793,28 @@ def create_app(
         stem = str(document.get("name") or dashboard_id)
         return _download_json(document, f"{stem}-record")
 
+    @app.get("/api/exports/dashboards/{dashboard_id}/snapshot")
+    async def export_dashboard_snapshot(
+        request: Request, dashboard_id: str
+    ) -> Response:
+        """The dashboard as one self-contained, read-only page: `elbi snapshot`."""
+        from elbi_cli.snapshot import render as render_snapshot
+
+        try:
+            document = await _dashboard_export_document(dashboard_id)
+        except DashboardError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        stem = str(document.get("name") or dashboard_id)
+        return Response(
+            content=render_snapshot(document),
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{_safe_filename_part(stem)}-snapshot.html"'
+                )
+            },
+        )
+
     def _metric_export_document(name: str) -> dict[str, Any] | None:
         """One metric's manifest plus its full definition history, or ``None``."""
         service = _metrics()

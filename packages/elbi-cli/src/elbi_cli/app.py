@@ -15,6 +15,7 @@ from .commands import (
     mcp_cmd,
     promote_cmd,
     serve_cmd,
+    snapshot_cmd,
     test_cmd,
     update_cmd,
     validate_cmd,
@@ -48,6 +49,7 @@ app.command(name="upload")(config_cmd.upload)
 app.command(name="update")(update_cmd.update)
 app.command(name="export")(export_cmd.export)
 app.command(name="import")(export_cmd.import_)
+app.command(name="snapshot")(snapshot_cmd.snapshot)
 app.add_typer(cache_app, name="cache")
 app.add_typer(search_app, name="search")
 app.add_typer(certificate_app, name="certificate")
