@@ -74,6 +74,7 @@ import {
   getNotebookVariables,
   inspectCell,
   interruptNotebook,
+  isSetupCell,
   type NotebookVariable,
   type NotebookView,
   type Output,
@@ -215,6 +216,12 @@ export function NotebookPage() {
   }, [notebookId])
 
   const reactive = (view?.metadata?.reactive ?? true) as boolean
+  // The environment a seeded derivation needs is bound by a cell that runs but is not
+  // drawn: imports and a contract are not what anyone opened the notebook to edit.
+  const visibleCells = useMemo(
+    () => (view?.cells ?? []).filter((cell) => !isSetupCell(cell)),
+    [view],
+  )
 
   // Streamed run events are buffered and flushed on an animation frame, not applied one at a
   // time. The `await reader.read()` loop that delivers them chains microtasks, and the browser
@@ -430,7 +437,7 @@ export function NotebookPage() {
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-4xl px-6 py-8">
-              {view.cells.map((cell, index) => (
+              {visibleCells.map((cell, index) => (
                 <CellRow
                   key={cell.id}
                   cell={cell}
@@ -457,10 +464,14 @@ export function NotebookPage() {
                   }
                   onDelete={() => void structural(() => deleteCell(notebookId, cell.id))}
                   onMove={(dir) => {
+                    // Swap with the neighbour that is drawn, in the full order: a
+                    // hidden setup cell is not a position anyone can move through.
+                    const neighbour = visibleCells[index + dir]
+                    if (!neighbour) return
                     const order = view.cells.map((c) => c.id)
-                    const target = index + dir
-                    if (target < 0 || target >= order.length) return
-                    ;[order[index], order[target]] = [order[target], order[index]]
+                    const from = order.indexOf(cell.id)
+                    const target = order.indexOf(neighbour.id)
+                    ;[order[from], order[target]] = [order[target], order[from]]
                     void structural(() => reorderCells(notebookId, order))
                   }}
                   onSetType={(cellType) =>

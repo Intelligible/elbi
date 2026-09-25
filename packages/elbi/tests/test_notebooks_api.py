@@ -1138,3 +1138,271 @@ def test_the_queries_a_cell_pushed_down_reach_the_editor(
     assert status and status[0]["queries"] == []
     saved = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]
     assert "queries" not in (saved["metadata"].get("elbi") or {})
+
+
+def test_a_derivation_and_its_upstream_share_one_preamble(tmp_path: Path) -> None:
+    """The context a module gave them is hoisted once, not repeated per cell.
+
+    Each stored source is self-contained — it carries the imports and constants its
+    module gave it — so seeding a derivation beside its upstream would otherwise print
+    the same import block in every cell.
+    """
+    from elbi.db import Derivation
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    context = "from collections import defaultdict\nLIMIT = 3\n\n"
+    store.save_derivation(
+        Derivation(
+            name="upstream",
+            source=context + "@derivation()\ndef upstream(ctx):\n    return LIMIT",
+            question="?",
+        )
+    )
+    store.save_derivation(
+        Derivation(
+            name="downstream",
+            source=context
+            + (
+                "@derivation(inputs={'u': upstream})\n"
+                "def downstream(ctx):\n    return LIMIT"
+            ),
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        notebook_id = service.create_from_derivation("downstream")
+        sources = [c["source"] for c in service.view(notebook_id)["cells"]]
+        joined = "\n".join(sources)
+
+        assert joined.count("from collections import defaultdict") == 1
+        assert joined.count("LIMIT = 3") == 1
+        # And the upstream is still defined before the cell that reads it.
+        up = next(i for i, s in enumerate(sources) if "def upstream" in s)
+        down = next(i for i, s in enumerate(sources) if "def downstream" in s)
+        assert up < down
+    finally:
+        service.close()
+
+
+def test_derivations_that_reference_each_other_still_terminate(tmp_path: Path) -> None:
+    """A cycle in the store must not seed a cell per hop."""
+    from elbi.db import Derivation
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    store.save_derivation(
+        Derivation(
+            name="a",
+            source="@derivation(inputs={'b': b})\ndef a(ctx): ...",
+            question="?",
+        )
+    )
+    store.save_derivation(
+        Derivation(
+            name="b",
+            source="@derivation(inputs={'a': a})\ndef b(ctx): ...",
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        notebook_id = service.create_from_derivation("a")
+        assert len(service.view(notebook_id)["cells"]) < 10
+    finally:
+        service.close()
+
+
+def test_a_derivation_notebook_ends_on_the_derivation_itself(tmp_path: Path) -> None:
+    """Nothing but the thing being edited. Running it is the kernel's job.
+
+    The scaffold used to seed a cell that called the derivation; that put the runner's
+    plumbing on screen beside the derivation, and re-imported names the environment had
+    already bound.
+    """
+    from elbi.db import Derivation
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    store.save_derivation(
+        Derivation(
+            name="totals",
+            source="@derivation()\ndef totals(ctx):\n    return Artifact.table([])",
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        notebook_id = service.create_from_derivation("totals")
+        last = service.view(notebook_id)["cells"][-1]["source"]
+
+        assert last.rstrip().endswith("return Artifact.table([])")
+        assert "def run(" not in last
+        assert "isinstance(spec, Dataset)" not in last
+    finally:
+        service.close()
+
+
+def test_a_derivation_notebook_hides_the_environment_it_needs(tmp_path: Path) -> None:
+    """Imports and helpers have to run, but they are not what anyone opened."""
+    from elbi.db import Derivation
+    from elbi.notebooks import SETUP_ROLE
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    store.save_derivation(
+        Derivation(
+            name="totals",
+            source=(
+                "from elbi_core import Artifact, derivation\n"
+                "SCALE = 2\n"
+                "@derivation()\n"
+                "def totals(ctx):\n"
+                "    return Artifact.table([{'n': SCALE}])"
+            ),
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        cells = service.view(service.create_from_derivation("totals"))["cells"]
+        setup = [
+            c for c in cells if c["metadata"].get("elbi", {}).get("role") == SETUP_ROLE
+        ]
+
+        assert len(setup) == 1
+        assert "SCALE = 2" in setup[0]["source"]
+        assert "from elbi_core import" in setup[0]["source"]
+        # Exactly once: the environment is bound there and nowhere else.
+        visible = "\n".join(c["source"] for c in cells if c not in setup)
+        assert "SCALE = 2" not in visible
+        assert "from elbi_core import" not in visible
+    finally:
+        service.close()
+
+
+def test_running_one_cell_binds_the_hidden_environment_first(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """A setup cell is not drawn, so it has no Run button to press.
+
+    Running a derivation cell on its own has to bind what the hidden cell defines, or
+    the cell dies on an import nobody can see, let alone run.
+    """
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Hidden"}).json()["id"]
+    setup = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{setup}",
+        json={"source": "SCALE = 7", "metadata": {"elbi": {"role": "setup"}}},
+    )
+    visible = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "SCALE * 2"}
+    ).json()["id"]
+
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [visible]})
+    )
+
+    started = [e["cell"] for e in events if e["event"] == "cell_start"]
+    assert started == [setup, visible]
+    results = {
+        e["cell"]: e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    }
+    assert results[visible] == "14"
+
+
+def test_a_bound_environment_is_not_rerun_for_every_cell(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """Once it has run in this kernel and has not changed, it is already bound."""
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Hidden"}).json()["id"]
+    setup = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{setup}",
+        json={"source": "counter = globals().get('counter', 0) + 1"},
+    )
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{setup}",
+        json={"metadata": {"elbi": {"role": "setup"}}},
+    )
+    visible = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "counter"}
+    ).json()["id"]
+
+    _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [visible]}))
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [visible]})
+    )
+
+    started = [e["cell"] for e in events if e["event"] == "cell_start"]
+    assert started == [visible]
+    results = [
+        e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    ]
+    assert results == ["1"]
+
+
+def test_running_a_cell_binds_upstreams_that_never_ran(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """A seeded derivation reads an upstream derivation defined in an earlier cell.
+
+    Running the one being edited, on a kernel where the earlier cell has not run, has
+    to define it first — reactivity cascades to dependents, and a dependency is the
+    other direction.
+    """
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Chain"}).json()["id"]
+    first = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(f"/api/notebooks/{notebook_id}/cells/{first}", json={"source": "base = 3"})
+    middle = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "mid = base * 2"}
+    ).json()["id"]
+    last = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "mid + 1"}
+    ).json()["id"]
+
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]})
+    )
+
+    started = [e["cell"] for e in events if e["event"] == "cell_start"]
+    assert started == [first, middle, last]
+    results = [
+        e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    ]
+    assert results == ["7"]
+
+
+def test_an_upstream_that_already_ran_is_left_alone(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    """Bound once is bound. Re-running it is the reactive engine's job, not this."""
+    http, _ = client
+    notebook_id = http.post("/api/notebooks", json={"name": "Chain"}).json()["id"]
+    first = http.get(f"/api/notebooks/{notebook_id}").json()["cells"][0]["id"]
+    http.put(
+        f"/api/notebooks/{notebook_id}/cells/{first}",
+        json={"source": "runs = globals().get('runs', 0) + 1"},
+    )
+    last = http.post(
+        f"/api/notebooks/{notebook_id}/cells", json={"source": "runs"}
+    ).json()["id"]
+
+    _sse(http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]}))
+    events = _sse(
+        http.post(f"/api/notebooks/{notebook_id}/run", json={"cells": [last]})
+    )
+
+    assert [e["cell"] for e in events if e["event"] == "cell_start"] == [last]
+    results = [
+        e["output"]["data"]["text/plain"]
+        for e in events
+        if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
+    ]
+    assert results == ["1"]

@@ -301,6 +301,17 @@ class _WarmPool:
             return counts
 
 
+#: Cells the editor does not draw: environment a derivation needs bound, not the
+#: thing being edited. They still run.
+SETUP_ROLE = "setup"
+
+
+def _is_setup(cell: Any) -> bool:
+    """Whether a cell is environment rather than something someone opened to edit."""
+    elbi = (cell.metadata or {}).get("elbi")
+    return isinstance(elbi, dict) and elbi.get("role") == SETUP_ROLE
+
+
 class NotebookService:
     """Owns notebook persistence and the pool of live kernels.
 
@@ -928,6 +939,51 @@ class NotebookService:
         """The dataflow graph over the notebook's current code-cell sources."""
         return DependencyGraph(self._document(notebook_id).dependency_pairs())
 
+    def _with_environment(
+        self,
+        runtime: _Runtime,
+        doc: NotebookDoc,
+        graph: DependencyGraph,
+        sources: Mapping[str, str],
+        plan: list[str],
+    ) -> list[str]:
+        """Put whatever the run reads but nothing has defined yet at the front of it.
+
+        Reactivity runs a cell's *dependents*; a dependency is the other direction, and
+        a cell whose inputs were never bound cannot run at all. That is the ordinary
+        shape of a seeded derivation notebook — imports in a cell the editor does not
+        draw, then each upstream derivation, then the one being edited — so running the
+        one you are editing has to bind the chain behind it.
+
+        Only what never ran on this kernel. An upstream that ran and has since changed
+        is stale, which the reactive engine already owns; re-running it here would
+        recompute someone's expensive cell behind their back. A setup cell is the
+        exception: it has no Run button, so an edit to one can only be picked up here.
+        """
+        cells = {cell.id: cell for cell in doc.code_cells()}
+        needed: set[str] = set()
+        stack = list(plan)
+        while stack:
+            for producer in graph.upstream.get(stack.pop(), ()):
+                cell = cells.get(producer)
+                if cell is None or producer in plan or producer in needed:
+                    continue
+                if not self._needs_binding(runtime, cell, sources):
+                    continue
+                needed.add(producer)
+                stack.append(producer)
+        return [cell_id for cell_id in graph.topo_order() if cell_id in needed] + plan
+
+    def _needs_binding(
+        self, runtime: _Runtime, cell: Any, sources: Mapping[str, str]
+    ) -> bool:
+        """Whether a cell has to run for what it defines to exist on this kernel."""
+        if cell.id not in runtime.run_seq:
+            return True
+        return _is_setup(cell) and runtime.ran.get(cell.id) != _hash(
+            sources.get(cell.id, "")
+        )
+
     def _stale(
         self, runtime: _Runtime, doc: NotebookDoc, graph: DependencyGraph
     ) -> set[str]:
@@ -1039,6 +1095,7 @@ class NotebookService:
         yield from self._apply_run_installs(notebook_id, plan, sources)
         row = self._store.get_notebook(notebook_id) or row
         runtime = self._runtime(notebook_id, self._provision_deps(row))
+        plan = self._with_environment(runtime, doc, graph, sources, plan)
 
         events: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
@@ -1340,6 +1397,61 @@ class NotebookService:
         self._store.replace_cells(notebook_id, cells)
         return notebook_id
 
+    def create_from_sources(
+        self,
+        name: str,
+        sources: Sequence[str],
+        heading: str | None = None,
+        setup: str | None = None,
+    ) -> str:
+        """Create a notebook seeded with several code cells, in the order given.
+
+        The single-cell :meth:`create_from_source` cannot express "this needs that
+        bound first", which a derivation reading an upstream derivation requires.
+
+        ``setup`` is seeded as a hidden cell before them: it runs, binding what the
+        visible cells reference, but the editor does not draw it. Imports and a data
+        contract are environment, not the thing being edited.
+        """
+        from elbi_core.notebook import new_id
+
+        notebook_id = self._store.create_notebook(name)
+        seeded = self._store.get_cells(notebook_id)[0].id
+        cells: list[NotebookCell] = []
+        if heading:
+            cells.append(
+                NotebookCell(
+                    id=seeded,
+                    notebook_id=notebook_id,
+                    position=0,
+                    cell_type="markdown",
+                    source=heading,
+                )
+            )
+        if setup:
+            cells.append(
+                NotebookCell(
+                    id=new_id() if cells else seeded,
+                    notebook_id=notebook_id,
+                    position=len(cells),
+                    cell_type="code",
+                    source=setup,
+                    metadata_json=json.dumps({"elbi": {"role": SETUP_ROLE}}),
+                )
+            )
+        for source in sources:
+            cells.append(
+                NotebookCell(
+                    id=new_id() if cells else seeded,
+                    notebook_id=notebook_id,
+                    position=len(cells),
+                    cell_type="code",
+                    source=source,
+                )
+            )
+        self._store.replace_cells(notebook_id, cells)
+        return notebook_id
+
     def duplicate(self, notebook_id: str) -> str | None:
         """Copy a notebook into a new one; ``None`` if the original is not found.
 
@@ -1387,11 +1499,18 @@ class NotebookService:
         return new_notebook_id
 
     def create_from_derivation(self, name: str) -> str | None:
-        """Open a stored derivation's source in a new notebook cell for iteration.
+        """Open a stored derivation's source in a new notebook, ready to run.
 
         Editing a certified derivation is a first-class task; this scaffolds a notebook
         with the derivation's code as a code cell (plus a heading), so a change can be
         explored here and re-promoted as a new version.
+
+        A derivation's stored source is captured with ``inspect.getsource(fn)`` — the
+        decorated function and nothing else, because imports live at module level.
+        Pasted into a notebook alone it cannot run: the kernel binds ``data`` and
+        ``sql`` and no more, so the first line dies on ``@derivation``. The scaffold
+        seeds what the source needs before it: the SDK names it references, and any
+        upstream derivation it reads, defined before the cell that reads it.
 
         ``None`` when there is no derivation of that name.
         """
@@ -1399,9 +1518,62 @@ class NotebookService:
         if derivation is None:
             return None
         heading = f"# Editing derivation `{name}`\n\n{derivation.question}".rstrip()
-        return self.create_from_source(
-            f"Editing {name}", derivation.source, heading=heading
+        from elbi_core._source import split_stored
+
+        _, own = split_stored(derivation.source)
+        setup, bodies = self._derivation_prelude(derivation.source)
+        return self.create_from_sources(
+            f"Editing {name}",
+            [*bodies, own],
+            heading=heading,
+            setup=setup,
         )
+
+    def _derivation_prelude(self, source: str) -> tuple[str, list[str]]:
+        """What a derivation needs bound before it: its environment, then its upstreams.
+
+        Each stored source is self-contained — it carries the imports, constants and
+        helpers its module gave it — so seeding a derivation beside its upstream would
+        repeat that context in every cell. It is split back out here and merged into one
+        environment, leaving each visible cell as just a derivation.
+
+        The closure matters, not just the one source: a derivation reading an upstream
+        needs that upstream *and* whatever the upstream itself references.
+        """
+        from elbi_core._source import _free_names, split_stored
+
+        preamble: list[str] = []
+        bodies: list[str] = []
+        seen: set[str] = set()
+
+        def add(statements: list[str]) -> None:
+            """Keep each distinct statement once, in the order first seen."""
+            for statement in statements:
+                if statement not in preamble:
+                    preamble.append(statement)
+
+        def walk(code: str) -> None:
+            """Seed a source's upstreams depth-first, then take its own context."""
+            statements, own = split_stored(code)
+            names = _free_names(own) | _free_names("\n".join(statements))
+            for ref in sorted(names):
+                if ref in seen:
+                    continue
+                row = self._store.get_derivation(ref)
+                if row is None:
+                    continue
+                # Marked before recursing, so a cycle terminates rather than seeding
+                # each derivation forever.
+                seen.add(ref)
+                walk(row.source)
+                inner_pre, inner_own = split_stored(row.source)
+                add(inner_pre)
+                bodies.append(inner_own)
+            add(statements)
+
+        walk(source)
+        environment = " \n".join(preamble).replace(" \n", "\n") if preamble else ""
+        return environment, bodies
 
     # -- interchange -------------------------------------------------------------
     def export_ipynb(

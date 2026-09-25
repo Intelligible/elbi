@@ -630,3 +630,80 @@ def test_a_cell_records_what_it_pushed_to_the_warehouse() -> None:
         assert kernel.last_queries[0]["duration_ms"] > 0
     finally:
         kernel.close()
+
+
+def test_defining_a_derivation_shows_what_it_returns() -> None:
+    """A decorated `def` has no value to echo, so the kernel runs it and shows one.
+
+    Someone editing a derivation in a notebook is editing it to see what changed; a
+    cell that ran clean and displayed nothing is the same as one that did not run.
+    """
+    kernel = SubprocessKernel(cell_timeout=30)
+    try:
+        status, outputs = _collect(
+            kernel,
+            "from elbi_core import Artifact, Context, derivation\n"
+            "@derivation()\n"
+            "def totals(ctx):\n"
+            "    return Artifact.table([{'n': 1}])",
+        )
+
+        assert status == "ok"
+        html = [
+            o["data"].get("text/html", "")
+            for o in outputs
+            if o["type"] == "execute_result"
+        ]
+        assert any("<td>1</td>" in rendering for rendering in html)
+    finally:
+        kernel.close()
+
+
+def test_a_derivation_reading_an_upstream_runs_the_upstream_first() -> None:
+    """The same resolution the runner does, so an edit upstream shows up downstream."""
+    kernel = SubprocessKernel(cell_timeout=30)
+    try:
+        _collect(
+            kernel,
+            "from elbi_core import Artifact, Context, derivation\n"
+            "@derivation()\n"
+            "def base(ctx):\n"
+            "    return Artifact.table([{'n': 2}])",
+        )
+        status, outputs = _collect(
+            kernel,
+            "@derivation(inputs={'rows': base})\n"
+            "def doubled(ctx):\n"
+            "    rows = ctx.input('rows').value\n"
+            "    return Artifact.table([{'n': r['n'] * 2} for r in rows])",
+            2,
+        )
+
+        assert status == "ok"
+        html = [
+            o["data"].get("text/html", "")
+            for o in outputs
+            if o["type"] == "execute_result"
+        ]
+        assert any("<td>4</td>" in rendering for rendering in html)
+    finally:
+        kernel.close()
+
+
+def test_a_derivation_taking_parameters_is_not_run_on_a_guess() -> None:
+    """No values for them here, and inventing some would show a fabricated result."""
+    kernel = SubprocessKernel(cell_timeout=30)
+    try:
+        status, outputs = _collect(
+            kernel,
+            "from elbi_core import Artifact, Context, derivation\n"
+            "from elbi_core.param import integer\n"
+            "@derivation(params={'n': integer()})\n"
+            "def scaled(ctx):\n"
+            "    return Artifact.table([{'n': ctx.param('n')}])",
+        )
+
+        assert status == "ok"
+        assert _results(outputs) == []
+    finally:
+        kernel.close()
