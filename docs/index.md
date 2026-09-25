@@ -9,7 +9,7 @@ testable transformations of your data) and serving them to AI agents through the
 You write Python. You run it locally. An agent reads exactly what you serve.
 
 ```python
-from elbi import Artifact, Context, Dataset, derivation, serve
+from elbi_core import Artifact, Context, Dataset, derivation, serve
 
 
 @derivation(

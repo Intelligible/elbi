@@ -18,7 +18,7 @@ Attach a `DataContract` to a derivation. On certification, the checker runs it
 over the output; an output that breaks the contract is held, not served.
 
 ```python
-from elbi import (
+from elbi_core import (
     Constraints,
     DataContract,
     FieldSpec,
@@ -121,7 +121,7 @@ does not overfit it and false-alarm on the next batch. The suggestion is a start
 point to review and tighten, never a certified verdict.
 
 ```python
-from elbi import profile_columns, suggest_contract, verify_contract
+from elbi_core import profile_columns, suggest_contract, verify_contract
 
 profile = profile_columns(rows)  # per-column data-quality summary
 contract = suggest_contract(rows)  # a proposed DataContract to review
