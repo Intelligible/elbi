@@ -251,3 +251,67 @@ describe("EditSourceDialog multi-line secrets", () => {
     expect(screen.getByLabelText("Host")).toBeTruthy()
   })
 })
+
+describe("EditSourceDialog typed fields", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const TUNNEL_FIELDS = [
+    { name: "ssh_enabled", label: "Connect through an SSH tunnel", type: "switch", options: [] },
+    {
+      name: "ssh_auth",
+      label: "Authenticate with",
+      type: "select",
+      dependsOn: "ssh_enabled",
+      options: [
+        { value: "password", label: "Password" },
+        { value: "key", label: "Private key" },
+      ],
+    },
+  ]
+
+  function renderTunnel() {
+    getSourceConfig.mockResolvedValue({
+      sourceType: "postgres",
+      config: { ssh_enabled: true, ssh_auth: "key" },
+      secretFields: [],
+    })
+    getCatalog.mockResolvedValue({ sources: [{ name: "postgres", fields: TUNNEL_FIELDS }] })
+    updateSource.mockResolvedValue({})
+    render(
+      <EditSourceDialog
+        sourceId="abc"
+        sourceType="postgres"
+        initialName="warehouse"
+        initialDescription=""
+        open
+        onOpenChange={() => {}}
+        onSaved={() => {}}
+      />,
+    )
+  }
+
+  it("turns a switch off as false, not as a string that reads as true", async () => {
+    const user = userEvent.setup()
+    renderTunnel()
+    const toggle = (await screen.findByLabelText(
+      "Connect through an SSH tunnel",
+    )) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+
+    await user.click(toggle)
+    expect(screen.queryByLabelText("Authenticate with")).toBeNull()
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    await waitFor(() => expect(updateSource).toHaveBeenCalled())
+    const [, patch] = updateSource.mock.calls[0]
+    expect(patch.config.ssh_enabled).toBe(false)
+  })
+
+  it("offers a select's options rather than free text", async () => {
+    renderTunnel()
+    const auth = await screen.findByLabelText("Authenticate with")
+
+    expect(auth.getAttribute("role")).toBe("combobox")
+    expect(auth.textContent).toContain("Private key")
+  })
+})
