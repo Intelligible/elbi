@@ -56,6 +56,17 @@ class SourceField:
     # the file in the warehouse and fills the field with its path (used by the CSV /
     # Parquet source, so a local file can be uploaded instead of typed as a path/URL).
     upload: bool = False
+    # Marks a credential whose ``type`` is not ``password``: a PEM key or a JSON key
+    # file is a multi-line document, so it renders as a textarea, but it is every bit
+    # as much a secret. A connector declares secrecy here rather than leaving it
+    # inferred from the control, so masking on edit and the refusal to store a
+    # credential in plaintext both cover it.
+    secret: bool = False
+
+    @property
+    def is_secret(self) -> bool:
+        """Whether this field holds a credential, whatever control it renders as."""
+        return self.secret or self.type == "password"
 
 
 @dataclass
@@ -75,8 +86,15 @@ class SourceConfig:
     coming_soon: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        """JSON form served to the wizard endpoint."""
-        return asdict(self)
+        """JSON form served to the wizard endpoint.
+
+        ``secret`` goes out resolved, so the form reads one flag instead of re-deriving
+        secretness from the control type and drifting from the server.
+        """
+        data = asdict(self)
+        for serialized, source_field in zip(data["fields"], self.fields, strict=True):
+            serialized["secret"] = source_field.is_secret
+        return data
 
 
 @dataclass

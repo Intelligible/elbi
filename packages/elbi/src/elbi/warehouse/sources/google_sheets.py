@@ -185,6 +185,7 @@ class GoogleSheetsSource(SimpleSource):
                     name="key_file",
                     label="Google Cloud JSON key file",
                     type="textarea",
+                    secret=True,
                     placeholder='{"type": "service_account", ...}',
                     caption="Then share the spreadsheet with the `client_email` in "
                     "that key, exactly as you would share it with a colleague. "

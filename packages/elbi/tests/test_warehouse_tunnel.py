@@ -85,10 +85,18 @@ def test_the_tunnel_fields_are_all_optional() -> None:
 
 
 def test_the_secrets_among_them_are_secrets() -> None:
-    kinds = {f.name: f.type for f in tunnel_fields()}
-    assert kinds["ssh_password"] == "password"
-    assert kinds["ssh_key_passphrase"] == "password"
-    assert kinds["ssh_private_key"] == "textarea"
+    fields = {f.name: f for f in tunnel_fields()}
+    assert fields["ssh_password"].type == "password"
+    assert fields["ssh_key_passphrase"].type == "password"
+    # A PEM key needs the multi-line control, so it cannot be typed `password` -- it
+    # says so outright instead, or the edit form hands it back out and a blank box
+    # overwrites it.
+    assert fields["ssh_private_key"].type == "textarea"
+    assert {name for name, f in fields.items() if f.is_secret} == {
+        "ssh_password",
+        "ssh_key_passphrase",
+        "ssh_private_key",
+    }
 
 
 @pytest.mark.parametrize(

@@ -2,6 +2,7 @@ import {
   Database,
   Loader2,
   Megaphone,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -63,6 +64,7 @@ import {
   updateSchema,
 } from "@/lib/warehouse"
 import { NewSourceForm } from "@/views/NewSourceForm"
+import { EditSourceDialog } from "./EditSourceDialog"
 
 const FREQUENCY_LABELS: { value: SyncFrequency; label: string }[] = [
   { value: "manual", label: "Manual only" },
@@ -689,6 +691,7 @@ function SourceDetailView({
 }) {
   const [detail, setDetail] = useState<SourceDetail | null>(null)
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [outcomes, setOutcomes] = useState<SyncOutcome[] | null>(null)
 
   const load = useCallback(() => {
@@ -782,6 +785,14 @@ function SourceDetailView({
           {busy ? "Syncing…" : "Sync now"}
         </Button>
         <Button
+          size="sm"
+          variant="outline"
+          aria-label="Edit source"
+          onClick={() => setEditing(true)}
+        >
+          <Pencil className="size-3.5" /> Edit
+        </Button>
+        <Button
           size="icon"
           variant="ghost"
           aria-label="Delete source"
@@ -793,6 +804,16 @@ function SourceDetailView({
           <Trash2 className="size-4" />
         </Button>
       </div>
+
+      <EditSourceDialog
+        sourceId={sourceId}
+        sourceType={detail.sourceType}
+        initialName={detail.name}
+        initialDescription={detail.description ?? ""}
+        open={editing}
+        onOpenChange={setEditing}
+        onSaved={load}
+      />
 
       {detail.lastError ? (
         <div className="rounded-md border border-danger/30 bg-danger-tint px-3 py-2 font-mono text-xs text-danger">
