@@ -9,6 +9,9 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "ci"
+    # `skip-news` exempts the pull request from the changelog-fragment check: a version
+    # bump is not a change a user reads about.
+    labels: ["dependencies", "github_actions", "skip-news"]
     groups:
       github-actions:
         patterns: ["*"]
@@ -19,6 +22,7 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "deps"
+    labels: ["dependencies", "python:uv", "skip-news"]
     ignore:
       # Pinned in elbi-core for a reason a version bump cannot see: 1.6 moved the
       # xgboost extra to `xgboost-cpu`, which publishes no macOS wheel, so the install
@@ -53,6 +57,7 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "deps"
+    labels: ["dependencies", "javascript", "skip-news"]
     ignore:
       # @tanstack/react-table 9 is a redesign, not a version bump: useReactTable becomes
       # useTable, the row models are rebuilt as createCoreRowModel and friends, and
@@ -90,3 +95,4 @@ updates:
       - "/docker"
     schedule:
       interval: "weekly"
+    labels: ["dependencies", "docker", "skip-news"]
