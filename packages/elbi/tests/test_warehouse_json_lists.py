@@ -176,7 +176,7 @@ def test_values_json_cannot_encode_natively_are_stringified(
             "id": "in_1",
             "lines": [
                 {
-                    "at": dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt.UTC),
+                    "at": dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt.timezone.utc),
                     "on": dt.date(2026, 1, 2),
                     "amount": Decimal("12.50"),
                     "blob": b"\x00\x01",
