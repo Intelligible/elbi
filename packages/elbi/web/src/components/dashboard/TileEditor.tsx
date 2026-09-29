@@ -70,7 +70,8 @@ export function TileEditor({
   dark: boolean
   schema?: Record<string, unknown> | null
   onCancel: () => void
-  onSave: (id: string, patch: TilePatch) => void
+  /** Rejects with the server's reason when the save is refused. */
+  onSave: (id: string, patch: TilePatch) => Promise<void>
 }) {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
@@ -82,7 +83,7 @@ export function TileEditor({
   const [height, setHeight] = useState(1)
   const [tab, setTab] = useState<"fields" | "json">("fields")
   const [draft, setDraft] = useState("")
-  const [jsonError, setJsonError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Reset every field when a different tile is opened, so the dialog never shows the
   // previous tile's values.
@@ -97,7 +98,7 @@ export function TileEditor({
     setWidth(widget?.gridPos.w ?? 1)
     setHeight(widget?.gridPos.h ?? 1)
     setTab("fields")
-    setJsonError(null)
+    setError(null)
   }, [widget])
 
   const [columnOptions, setColumnOptions] = useState<string[]>([])
@@ -148,7 +149,7 @@ export function TileEditor({
 
   const showJson = () => {
     setDraft(JSON.stringify(asWidget(), null, 2))
-    setJsonError(null)
+    setError(null)
     setTab("json")
   }
 
@@ -165,10 +166,20 @@ export function TileEditor({
       setFormat(typeof viz.format === "string" ? viz.format : "plain")
       setWidth(parsed.gridPos?.w ?? width)
       setHeight(parsed.gridPos?.h ?? height)
-      setJsonError(null)
+      setError(null)
       setTab("fields")
     } catch (err) {
-      setJsonError(err instanceof Error ? err.message : String(err))
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // A refused save keeps the dialog open with the server's reason, rather than closing
+  // on an edit that never landed.
+  const submit = async (patch: TilePatch) => {
+    try {
+      await onSave(widget.id, patch)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -177,12 +188,12 @@ export function TileEditor({
     try {
       parsed = JSON.parse(draft) as Record<string, unknown>
     } catch (err) {
-      setJsonError(err instanceof Error ? err.message : String(err))
+      setError(err instanceof Error ? err.message : String(err))
       return
     }
     // The id addresses the tile in the layout and in this dialog; changing it here
     // would orphan both, so it is pinned rather than trusted from the text.
-    onSave(widget.id, { widget: { ...parsed, id: widget.id } })
+    void submit({ widget: { ...parsed, id: widget.id } })
   }
 
   const save = () => {
@@ -199,7 +210,7 @@ export function TileEditor({
     // "first" and "plain" are the absence of an aggregate and of a format, so they are
     // dropped rather than written as values the renderer would have to know.
     if (editsMetric) patch.viz = vizFromFields()
-    onSave(widget.id, patch)
+    void submit(patch)
   }
 
   return (
@@ -249,13 +260,13 @@ export function TileEditor({
                 definition="widget"
                 onChange={(next) => {
                   setDraft(next)
-                  setJsonError(null)
+                  setError(null)
                 }}
               />
             </Field>
-            {jsonError ? (
+            {error ? (
               <p role="alert" className="text-xs text-destructive">
-                {jsonError}
+                {error}
               </p>
             ) : null}
             <DialogFooter>
@@ -397,6 +408,11 @@ export function TileEditor({
               </div>
             </Field>
 
+            {error ? (
+              <p role="alert" className="text-xs text-destructive">
+                {error}
+              </p>
+            ) : null}
             <DialogFooter>
               <Button variant="ghost" onClick={onCancel}>
                 Cancel

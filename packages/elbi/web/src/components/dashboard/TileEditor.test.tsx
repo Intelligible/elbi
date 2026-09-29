@@ -27,7 +27,7 @@ vi.mock("@/lib/dashboards", async (importOriginal) => ({
 
 import type { Widget } from "@/lib/dashboards"
 import { derivationColumns } from "@/lib/dashboards"
-import { TileEditor } from "./TileEditor"
+import { TileEditor, type TilePatch } from "./TileEditor"
 
 const pos = { x: 0, y: 0, w: 12, h: 6 }
 const textTile: Widget = { id: "note", type: "text", gridPos: pos, content: "before" }
@@ -55,8 +55,13 @@ async function pick(user: ReturnType<typeof userEvent.setup>, label: string, opt
   await user.click(await screen.findByRole("option", { name: option }))
 }
 
-function open(widget: Widget | null, props: { catalog?: string[]; onCancel?: () => void } = {}) {
-  const onSave = vi.fn()
+function open(
+  widget: Widget | null,
+  props: { catalog?: string[]; onCancel?: () => void; onSave?: () => Promise<void> } = {},
+) {
+  const onSave = vi.fn<(id: string, patch: TilePatch) => Promise<void>>(
+    props.onSave ?? (async () => {}),
+  )
   const rendered = render(
     <MemoryRouter>
       <TileEditor
@@ -73,6 +78,23 @@ function open(widget: Widget | null, props: { catalog?: string[]; onCancel?: () 
 }
 
 describe("TileEditor", () => {
+  it("keeps the dialog open with the server's reason when a save is refused", async () => {
+    const user = userEvent.setup()
+    const onCancel = vi.fn()
+    open(textTile, {
+      onCancel,
+      onSave: async () => {
+        throw new Error("widget 'note': unknown type 'txt'")
+      },
+    })
+
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("unknown type 'txt'")
+    expect(screen.getByRole("dialog")).toBeInTheDocument()
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
   it("edits a static text tile's title and content", async () => {
     const user = userEvent.setup()
     const { onSave } = open(textTile)
@@ -157,7 +179,7 @@ describe("TileEditor", () => {
     await user.type(width, "99")
     await user.click(screen.getByRole("button", { name: "Save" }))
 
-    expect(onSave.mock.calls[0][1].gridPos.w).toBe(24)
+    expect(onSave.mock.calls[0]?.[1].gridPos?.w).toBe(24)
   })
 
   it("rebinds a data tile rather than offering it a content box", async () => {
@@ -200,7 +222,7 @@ describe("TileEditor", () => {
           columns={24}
           dark={false}
           onCancel={() => {}}
-          onSave={() => {}}
+          onSave={async () => {}}
         />
       </MemoryRouter>,
     )
@@ -292,7 +314,7 @@ describe("the JSON tab", () => {
     })
     await user.click(screen.getByRole("button", { name: "Save" }))
 
-    expect(onSave.mock.calls[0][1].widget.id).toBe("mrr")
+    expect(onSave.mock.calls[0]?.[1].widget?.id).toBe("mrr")
   })
 })
 
