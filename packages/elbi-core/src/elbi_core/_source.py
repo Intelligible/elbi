@@ -22,7 +22,7 @@ import ast
 import importlib
 import inspect
 import textwrap
-from typing import Any
+from typing import Any, TypeGuard
 
 #: Node types that bind a name at module level and are worth carrying: imports, the
 #: constants and objects a derivation reads, and the helpers it calls.
@@ -50,7 +50,7 @@ def _bound_names(node: ast.stmt) -> set[str]:
     return set()
 
 
-def _is_derivation(node: ast.stmt) -> bool:
+def _is_derivation(node: ast.stmt) -> TypeGuard[ast.FunctionDef | ast.AsyncFunctionDef]:
     """Whether a statement defines a derivation, which is its own stored record."""
     if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         return False
