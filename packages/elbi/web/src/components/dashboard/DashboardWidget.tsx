@@ -6,6 +6,7 @@
 import { AlertCircle, Download, GripVertical } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { IconButton } from "@/components/app/IconButton"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -235,18 +236,17 @@ export function DashboardWidget({
         </div>
         <div className="flex items-center gap-1.5">
           {widget.type !== "text" && !data?.error && asRows(data?.value).length > 0 ? (
-            <button
-              type="button"
-              className="dash-no-drag text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100"
-              title="Download this widget's data as CSV"
-              aria-label={`Download ${widget.title ?? widget.id} data as CSV`}
+            <IconButton
+              label={`Download ${widget.title ?? widget.id} data as CSV`}
+              size="icon-xs"
+              className="dash-no-drag text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100"
               onClick={() => {
                 const rows = asRows(data?.value)
                 downloadText(`${widget.id}.csv`, toCsv(Object.keys(rows[0]), rows), "text/csv")
               }}
             >
-              <Download className="h-3.5 w-3.5" />
-            </button>
+              <Download className="size-3.5" />
+            </IconButton>
           ) : null}
           {drillThrough && onDrillThrough ? (
             <Button

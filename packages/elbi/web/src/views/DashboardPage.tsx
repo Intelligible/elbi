@@ -203,7 +203,7 @@ export function DashboardPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                <DropdownMenuLabel className="text-xs font-normal text-text-tertiary">
                   Runs every page's widgets; can take a few seconds
                 </DropdownMenuLabel>
                 <DropdownMenuItem asChild>
@@ -211,7 +211,7 @@ export function DashboardPage() {
                     <FileCode2 className="mt-0.5 size-4" />
                     <span className="flex flex-col">
                       <span>Shareable page (.html)</span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-text-tertiary">
                         Read-only snapshot anyone can open, no app access needed
                       </span>
                     </span>
@@ -222,7 +222,7 @@ export function DashboardPage() {
                     <FileJson className="mt-0.5 size-4" />
                     <span className="flex flex-col">
                       <span>Record (.json)</span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-text-tertiary">
                         Spec, saved versions, and current values
                       </span>
                     </span>

@@ -23,7 +23,7 @@ from .config_cmd import resolve_host
 def _find(client: httpx.Client, dashboard: str) -> dict[str, Any]:
     resp = client.get("/api/dashboards")
     resp.raise_for_status()
-    rows = resp.json()
+    rows: list[dict[str, Any]] = resp.json()
     for row in rows:
         if dashboard in (row.get("name"), row.get("id")):
             return row
