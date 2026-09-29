@@ -159,8 +159,8 @@
   }
 
   // -- formatting (mirrors DashboardWidget.tsx) -------------------------------------
+  // Only called with a value: metricBody renders the empty state itself.
   function formatValue(value, format) {
-    if (value === null || value === undefined) return EMPTY;
     const num = typeof value === "number" ? value : Number(value);
     if (Number.isNaN(num)) return String(value);
     if (format === "currency") return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -308,13 +308,13 @@
     const xq = enc.x.type === "quantitative", yq = enc.y.type === "quantitative";
     if (xq === yq) return null;
     const horizontal = xq;
-    return { mark, enc, horizontal, cat: horizontal ? enc.y : enc.x, val: horizontal ? enc.x : enc.y, catCh: horizontal ? "y" : "x", valCh: horizontal ? "x" : "y" };
+    return { mark, enc, horizontal, cat: horizontal ? enc.y : enc.x, val: horizontal ? enc.x : enc.y, valCh: horizontal ? "x" : "y" };
   }
 
   function chartBody(w, rows) {
     const spec = chartSpec(w.viz || {});
     if (!spec) return tableBody(w, rows, "This chart type is not drawn in snapshots; its data is shown instead.");
-    const { enc, cat, val, catCh, valCh, horizontal, mark } = spec;
+    const { enc, cat, val, valCh, horizontal, mark } = spec;
     const colorField = enc.color?.field;
 
     // Categories, each with its stacked segments, in the encoding's sort order.
