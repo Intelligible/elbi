@@ -9,6 +9,12 @@ import type { ReactNode } from "react"
 import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { Button } from "@/components/ui/button"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Table,
   TableBody,
   TableCell,
@@ -16,12 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { VizView } from "@/components/viz/VizView"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Widget, WidgetData } from "@/lib/dashboards"
