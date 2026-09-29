@@ -13,6 +13,7 @@ import pytest
 
 from elbi_core import DashboardSpec
 from elbi_core.dashboard import is_valid_dashboard, validate_dashboard
+from elbi_core.dashboard.spec import Bind, GridPos, Widget
 from elbi_core.errors import SpecValidationError
 
 
@@ -129,22 +130,6 @@ def test_data_widget_requires_bind() -> None:
     assert any("requires 'bind'" in m for m in err.value.messages)
 
 
-def test_text_widget_may_not_bind() -> None:
-    manifest = _manifest()
-    manifest["pages"][1]["widgets"].append(
-        {
-            "id": "note",
-            "type": "text",
-            "gridPos": {"x": 0, "y": 11, "w": 24, "h": 2},
-            "content": "hello",
-            "bind": {"derivation": "revenue_rows"},
-        }
-    )
-    with pytest.raises(SpecValidationError) as err:
-        validate_dashboard(manifest)
-    assert any("may not have 'bind'" in m for m in err.value.messages)
-
-
 def test_drill_through_to_missing_page_rejected() -> None:
     manifest = _manifest()
     through = manifest["pages"][0]["widgets"][1]["interactions"]["drillThrough"]
@@ -172,3 +157,77 @@ def test_missing_pages_rejected() -> None:
     manifest = _manifest()
     manifest["pages"] = []
     assert not is_valid_dashboard(manifest)
+
+
+def test_a_text_widget_binding_a_derivation_is_resolved() -> None:
+    """The documented way to put a bespoke visual on a dashboard.
+
+    A derivation returning markdown is the only governed escape hatch from the fixed
+    widget types, so a text tile that names one has to be run like any other tile.
+    """
+    widget = Widget(
+        id="verdict",
+        type="text",
+        grid_pos=GridPos(x=0, y=0, w=12, h=6),
+        bind=Bind(derivation="cost_fixed_share"),
+    )
+
+    assert widget.is_data_bound
+
+
+def test_a_text_widget_carrying_its_own_prose_is_not() -> None:
+    """Static content needs no run, and running one would be a wasted derivation."""
+    widget = Widget(
+        id="note",
+        type="text",
+        grid_pos=GridPos(x=0, y=0, w=12, h=6),
+        content="Read the window, not the day.",
+    )
+
+    assert not widget.is_data_bound
+
+
+def _text_widget(**extra: object) -> dict:
+    pos = {"x": 0, "y": 0, "w": 12, "h": 6}
+    widget = {"id": "note", "type": "text", "gridPos": pos}
+    widget.update(extra)
+    return widget
+
+
+def _with_widget(widget: dict) -> dict:
+    manifest = _manifest()
+    manifest["pages"][0]["widgets"] = [widget]
+    return manifest
+
+
+def test_a_text_widget_may_take_its_body_from_a_derivation() -> None:
+    """The documented escape hatch: a bespoke visual is a markdown derivation."""
+    manifest = _with_widget(_text_widget(bind={"derivation": "cost_fixed_share"}))
+
+    assert is_valid_dashboard(manifest)
+
+
+def test_a_text_widget_may_still_carry_its_own_prose() -> None:
+    manifest = _with_widget(_text_widget(content="Read the window, not the day."))
+
+    assert is_valid_dashboard(manifest)
+
+
+def test_a_text_widget_with_neither_body_is_rejected() -> None:
+    """An empty tile is a mistake, not a layout: say which of the two is missing."""
+    manifest = _with_widget(_text_widget())
+
+    with pytest.raises(SpecValidationError) as excinfo:
+        validate_dashboard(manifest)
+    assert "requires 'content' or 'bind'" in str(excinfo.value)
+
+
+def test_a_text_widget_with_both_bodies_is_rejected() -> None:
+    """Two sources for one body: which one wins would be invisible in the spec."""
+    manifest = _with_widget(
+        _text_widget(content="prose", bind={"derivation": "cost_fixed_share"})
+    )
+
+    with pytest.raises(SpecValidationError) as excinfo:
+        validate_dashboard(manifest)
+    assert "not both" in str(excinfo.value)
