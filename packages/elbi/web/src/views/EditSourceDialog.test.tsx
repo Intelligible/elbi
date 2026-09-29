@@ -293,10 +293,8 @@ describe("EditSourceDialog typed fields", () => {
   it("turns a switch off as false, not as a string that reads as true", async () => {
     const user = userEvent.setup()
     renderTunnel()
-    const toggle = (await screen.findByLabelText(
-      "Connect through an SSH tunnel",
-    )) as HTMLInputElement
-    expect(toggle.checked).toBe(true)
+    const toggle = await screen.findByRole("checkbox", { name: "Connect through an SSH tunnel" })
+    expect(toggle).toBeChecked()
 
     await user.click(toggle)
     expect(screen.queryByLabelText("Authenticate with")).toBeNull()

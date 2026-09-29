@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -163,12 +164,10 @@ export function EditSourceDialog({
                 return (
                   <div key={field.name} className="flex flex-col gap-1.5">
                     <label htmlFor={id} className="flex items-center gap-2 font-medium text-sm">
-                      <input
+                      <Checkbox
                         id={id}
-                        type="checkbox"
-                        className="accent-primary"
                         checked={Boolean(held)}
-                        onChange={(e) => set(e.target.checked)}
+                        onCheckedChange={(checked) => set(checked === true)}
                       />
                       {field.label}
                     </label>
