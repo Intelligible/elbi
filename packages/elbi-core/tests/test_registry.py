@@ -135,7 +135,7 @@ def test_search_respects_limit(bm25_registry: Registry) -> None:
 def test_a_notebook_registry_lets_a_rerun_redefine() -> None:
     """Re-running a cell that defines a derivation must not collide with itself.
 
-    A notebook re-runs constantly — the reactive engine does it unprompted whenever an
+    A notebook re-runs constantly: the reactive engine does it unprompted whenever an
     upstream cell changes. Under the strict registry a derivation cell runs exactly
     once and raises on every run after, which makes iterating on one impossible.
     """

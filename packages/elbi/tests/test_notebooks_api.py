@@ -1143,8 +1143,8 @@ def test_the_queries_a_cell_pushed_down_reach_the_editor(
 def test_a_derivation_and_its_upstream_share_one_preamble(tmp_path: Path) -> None:
     """The context a module gave them is hoisted once, not repeated per cell.
 
-    Each stored source is self-contained — it carries the imports and constants its
-    module gave it — so seeding a derivation beside its upstream would otherwise print
+    Each stored source is self-contained, carrying the imports and constants its
+    module gave it, so seeding a derivation beside its upstream would otherwise print
     the same import block in every cell.
     """
     from elbi.db import Derivation
@@ -1207,7 +1207,50 @@ def test_derivations_that_reference_each_other_still_terminate(tmp_path: Path) -
     service = NotebookService(store=store, load_datasets=lambda: {})
     try:
         notebook_id = service.create_from_derivation("a")
-        assert len(service.view(notebook_id)["cells"]) < 10
+        cells = service.view(notebook_id)["cells"]
+        assert len(cells) < 10
+        # `b` reads `a` back, which must not seed the one being opened a second time.
+        code = [c["source"] for c in cells if c["cell_type"] == "code"]
+        assert "\n".join(code).count("def a(") == 1
+        assert "def a(" in code[-1]
+    finally:
+        service.close()
+
+
+def test_a_local_sharing_a_derivations_name_does_not_seed_it(tmp_path: Path) -> None:
+    """Only a name the source reads from module scope can be an upstream.
+
+    A local ``revenue``, or an attribute such as ``r.revenue``, says nothing about a
+    stored derivation of that name; seeding it would put an unrelated derivation in the
+    notebook, and Run all would compute it.
+    """
+    from elbi.db import Derivation
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    store.save_derivation(
+        Derivation(
+            name="revenue",
+            source="@derivation()\ndef revenue(ctx):\n    return []",
+            question="?",
+        )
+    )
+    store.save_derivation(
+        Derivation(
+            name="top_customers",
+            source=(
+                "@derivation()\n"
+                "def top_customers(ctx):\n"
+                "    revenue = {r.customer: r.revenue for r in ctx.input('s').rows}\n"
+                "    return sorted(revenue)"
+            ),
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        cells = service.view(service.create_from_derivation("top_customers"))["cells"]
+
+        assert not any("def revenue" in c["source"] for c in cells)
     finally:
         service.close()
 
@@ -1351,7 +1394,7 @@ def test_running_a_cell_binds_upstreams_that_never_ran(
     """A seeded derivation reads an upstream derivation defined in an earlier cell.
 
     Running the one being edited, on a kernel where the earlier cell has not run, has
-    to define it first — reactivity cascades to dependents, and a dependency is the
+    to define it first: reactivity cascades to dependents, and a dependency is the
     other direction.
     """
     http, _ = client
@@ -1406,3 +1449,33 @@ def test_an_upstream_that_already_ran_is_left_alone(
         if e["event"] == "output" and e["output"]["output_type"] == "execute_result"
     ]
     assert results == ["1"]
+
+
+def test_the_environment_keeps_its_statements_as_written(tmp_path: Path) -> None:
+    """A hoisted constant runs in the setup cell exactly as the module declares it.
+
+    Two trailing spaces are a Markdown line break, so trimming one inside a string
+    changes what the derivation renders.
+    """
+    from elbi.db import Derivation
+    from elbi.notebooks import SETUP_ROLE
+
+    store = open_store(f"sqlite:{tmp_path / 'd.db'}")
+    note = 'NOTE = """**Total**  \nsecond line"""'
+    store.save_derivation(
+        Derivation(
+            name="noted",
+            source=f"{note}\n\n@derivation()\ndef noted(ctx):\n    return NOTE",
+            question="?",
+        )
+    )
+    service = NotebookService(store=store, load_datasets=lambda: {})
+    try:
+        cells = service.view(service.create_from_derivation("noted"))["cells"]
+        setup = [
+            c for c in cells if c["metadata"].get("elbi", {}).get("role") == SETUP_ROLE
+        ]
+
+        assert note in setup[0]["source"]
+    finally:
+        service.close()

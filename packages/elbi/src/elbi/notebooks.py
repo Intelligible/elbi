@@ -39,6 +39,7 @@ from elbi_core.notebook import (
     DependencyGraph,
     Kernel,
     SubprocessKernel,
+    analyze_code,
     apply_overrides,
     resolve_lock,
 )
@@ -951,8 +952,8 @@ class NotebookService:
 
         Reactivity runs a cell's *dependents*; a dependency is the other direction, and
         a cell whose inputs were never bound cannot run at all. That is the ordinary
-        shape of a seeded derivation notebook — imports in a cell the editor does not
-        draw, then each upstream derivation, then the one being edited — so running the
+        shape of a seeded derivation notebook (imports in a cell the editor does not
+        draw, then each upstream derivation, then the one being edited), so running the
         one you are editing has to bind the chain behind it.
 
         Only what never ran on this kernel. An upstream that ran and has since changed
@@ -1505,12 +1506,11 @@ class NotebookService:
         with the derivation's code as a code cell (plus a heading), so a change can be
         explored here and re-promoted as a new version.
 
-        A derivation's stored source is captured with ``inspect.getsource(fn)`` — the
-        decorated function and nothing else, because imports live at module level.
-        Pasted into a notebook alone it cannot run: the kernel binds ``data`` and
-        ``sql`` and no more, so the first line dies on ``@derivation``. The scaffold
-        seeds what the source needs before it: the SDK names it references, and any
-        upstream derivation it reads, defined before the cell that reads it.
+        A derivation's stored source carries the module-level context it reads (its
+        imports, constants and helpers), since the kernel binds ``data`` and ``sql`` and
+        no more. The scaffold splits that context back out into one setup cell, then
+        seeds each upstream derivation the source reads, defined before the cell that
+        reads it.
 
         ``None`` when there is no derivation of that name.
         """
@@ -1521,7 +1521,7 @@ class NotebookService:
         from elbi_core._source import split_stored
 
         _, own = split_stored(derivation.source)
-        setup, bodies = self._derivation_prelude(derivation.source)
+        setup, bodies = self._derivation_prelude(name, derivation.source)
         return self.create_from_sources(
             f"Editing {name}",
             [*bodies, own],
@@ -1529,22 +1529,25 @@ class NotebookService:
             setup=setup,
         )
 
-    def _derivation_prelude(self, source: str) -> tuple[str, list[str]]:
+    def _derivation_prelude(self, name: str, source: str) -> tuple[str, list[str]]:
         """What a derivation needs bound before it: its environment, then its upstreams.
 
-        Each stored source is self-contained — it carries the imports, constants and
-        helpers its module gave it — so seeding a derivation beside its upstream would
+        Each stored source is self-contained, carrying the imports, constants and
+        helpers its module gave it, so seeding a derivation beside its upstream would
         repeat that context in every cell. It is split back out here and merged into one
         environment, leaving each visible cell as just a derivation.
 
         The closure matters, not just the one source: a derivation reading an upstream
-        needs that upstream *and* whatever the upstream itself references.
+        needs that upstream *and* whatever the upstream itself references. What a source
+        references is what the notebook's own dependency graph says it reads, so a
+        local or an attribute sharing a derivation's name does not seed that derivation.
         """
-        from elbi_core._source import _free_names, split_stored
+        from elbi_core._source import split_stored
 
         preamble: list[str] = []
         bodies: list[str] = []
-        seen: set[str] = set()
+        # The derivation being opened is its own last cell, never an upstream of itself.
+        seen: set[str] = {name}
 
         def add(statements: list[str]) -> None:
             """Keep each distinct statement once, in the order first seen."""
@@ -1554,9 +1557,8 @@ class NotebookService:
 
         def walk(code: str) -> None:
             """Seed a source's upstreams depth-first, then take its own context."""
-            statements, own = split_stored(code)
-            names = _free_names(own) | _free_names("\n".join(statements))
-            for ref in sorted(names):
+            statements, _ = split_stored(code)
+            for ref in sorted(analyze_code(code).refs):
                 if ref in seen:
                     continue
                 row = self._store.get_derivation(ref)
@@ -1572,7 +1574,7 @@ class NotebookService:
             add(statements)
 
         walk(source)
-        environment = " \n".join(preamble).replace(" \n", "\n") if preamble else ""
+        environment = "\n".join(preamble)
         return environment, bodies
 
     # -- interchange -------------------------------------------------------------

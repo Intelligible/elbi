@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 //
 // Math is display-only: `$…$` would claim every dollar amount in a notebook, and
 // "$2,692.89 of $4,254.31" silently rendering as an integrand is worse than inline TeX
-// needing the doubled delimiter. This is a data workbench — currency is the common case.
+// needing the doubled delimiter. This is a data workbench: currency is the common case.
 const REMARK_PLUGINS: PluggableList = [remarkGfm, [remarkMath, { singleDollarTextMath: false }]]
 const REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeHighlight]
 

@@ -707,3 +707,92 @@ def test_a_derivation_taking_parameters_is_not_run_on_a_guess() -> None:
         assert _results(outputs) == []
     finally:
         kernel.close()
+
+
+def test_a_derivation_whose_parameters_all_have_defaults_runs_on_them() -> None:
+    """A declared default is the author's value, the one a run supplying none uses."""
+    kernel = SubprocessKernel(cell_timeout=30)
+    try:
+        status, outputs = _collect(
+            kernel,
+            "from elbi_core import Artifact, Context, derivation\n"
+            "from elbi_core.param import integer\n"
+            "@derivation(params={'n': integer(required=False, default=3)})\n"
+            "def scaled(ctx):\n"
+            "    return Artifact.table([{'n': ctx.param('n')}])",
+        )
+
+        assert status == "ok"
+        html = [
+            o["data"].get("text/html", "")
+            for o in outputs
+            if o["type"] == "execute_result"
+        ]
+        assert any("<td>3</td>" in rendering for rendering in html)
+    finally:
+        kernel.close()
+
+
+def test_a_raw_return_is_coerced_as_the_runner_coerces_it() -> None:
+    """A compute may return a plain list of dicts; the runner makes it a table.
+
+    A downstream reads ``ctx.input(...).value``, which production hands it as an
+    artifact, so the notebook coerces the same way before showing or passing it on.
+    """
+    kernel = SubprocessKernel(cell_timeout=30)
+    try:
+        _collect(
+            kernel,
+            "from elbi_core import derivation\n"
+            "@derivation()\n"
+            "def base(ctx):\n"
+            "    return [{'n': 2}]",
+        )
+        status, outputs = _collect(
+            kernel,
+            "@derivation(inputs={'rows': base})\n"
+            "def doubled(ctx):\n"
+            "    return [{'n': r['n'] * 2} for r in ctx.input('rows').value]",
+            2,
+        )
+
+        assert status == "ok"
+        html = [
+            o["data"].get("text/html", "")
+            for o in outputs
+            if o["type"] == "execute_result"
+        ]
+        assert any("<td>4</td>" in rendering for rendering in html)
+    finally:
+        kernel.close()
+
+
+def test_a_semantic_model_input_is_handed_over_as_itself() -> None:
+    """The runner passes a semantic model through; it is not an upstream to compute."""
+    kernel = SubprocessKernel(cell_timeout=30)
+    try:
+        status, outputs = _collect(
+            kernel,
+            "from elbi_core import Artifact, SemanticModel, derivation\n"
+            "from elbi_core.metrics.osi import OSI_VERSION\n"
+            "dataset = {'name': 's', 'source': 's', 'fields': []}\n"
+            "metric = {'name': 'total', 'expression': {'dialects': [\n"
+            "    {'dialect': 'ANSI_SQL', 'expression': 'SUM(x)'}]}}\n"
+            "doc = {'version': OSI_VERSION, 'semantic_model': [\n"
+            "    {'name': 'm', 'datasets': [dataset], 'metrics': [metric]}]}\n"
+            "MODEL = SemanticModel.from_osi(doc)\n"
+            "@derivation(inputs={'model': MODEL})\n"
+            "def metric_names(ctx):\n"
+            "    metrics = ctx.input('model').metrics.metrics\n"
+            "    return Artifact.table([{'metric': m.name} for m in metrics])",
+        )
+
+        assert status == "ok"
+        html = [
+            o["data"].get("text/html", "")
+            for o in outputs
+            if o["type"] == "execute_result"
+        ]
+        assert any("<td>total</td>" in rendering for rendering in html)
+    finally:
+        kernel.close()

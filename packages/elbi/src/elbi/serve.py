@@ -406,7 +406,7 @@ def build(
         With the module-level context it depends on: the imports, constants, contracts
         and helpers a derivation reads all live outside the function, so the function
         alone is something to look at rather than something to run. Anything that pastes
-        this where it will execute — opening a derivation in a notebook — needs the
+        this where it will execute (opening a derivation in a notebook) needs the
         whole of it. Sibling derivations are left out, being their own records.
 
         Empty when the source is unavailable (a REPL- or C-defined compute).

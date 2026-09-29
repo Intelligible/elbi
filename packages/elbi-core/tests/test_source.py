@@ -179,7 +179,7 @@ def test_a_relative_import_is_resolved_not_copied(tmp_path) -> None:
     """`from .sibling import x` cannot run in a notebook cell.
 
     A cell has no parent package, so copying the line verbatim raises
-    "attempted relative import with no known parent package" — a failure with no
+    "attempted relative import with no known parent package", a failure with no
     relationship to what the reader was trying to do. The names it brings in have to
     arrive as definitions instead.
     """
@@ -222,3 +222,179 @@ def test_an_absolute_import_is_still_copied(tmp_path) -> None:
     main = importlib.import_module(f"{package.__name__}.main")
 
     assert "from collections import defaultdict" in compute_source(main.counts)
+
+
+def test_a_relatively_imported_module_comes_with_it(tmp_path) -> None:
+    # `from . import helpers` binds a submodule, not a definition in one, and a cell has
+    # no package to import it from, so the module has to come with the source.
+    import importlib
+
+    package = _package(
+        tmp_path,
+        {
+            "helpers": "def double(x):\n    return 2 * x\n",
+            "main": (
+                "from . import helpers\n\ndef total(n):\n    return helpers.double(n)\n"
+            ),
+        },
+    )
+    main = importlib.import_module(f"{package.__name__}.main")
+    namespace = {"__name__": "__main__"}
+
+    exec(compile(compute_source(main.total), "<cell>", "exec"), namespace)
+
+    assert namespace["total"](3) == 6
+
+
+def test_a_relatively_imported_module_brings_its_own_relative_imports(tmp_path) -> None:
+    # The rebuilt module has no package either, so what it imports from a sibling has to
+    # arrive as definitions, the same as for the derivation's own module.
+    package = _package(
+        tmp_path,
+        {
+            "shared": "FACTOR = 3\n",
+            "helpers": (
+                "from .shared import FACTOR\n\ndef triple(x):\n    return FACTOR * x\n"
+            ),
+            "main": (
+                "from . import helpers\n\nLIMIT = 5\n\n"
+                "def total():\n    return helpers.triple(LIMIT)\n"
+            ),
+        },
+    )
+
+    assert _run(package, "total") == 15
+
+
+def test_a_rebuilt_module_keeps_its_future_import_first(tmp_path) -> None:
+    # `from __future__` has to be the first statement the rebuilt module runs, ahead of
+    # the `__file__` its own lines read.
+    package = _package(
+        tmp_path,
+        {
+            "helpers": (
+                "from __future__ import annotations\n\nfrom pathlib import Path\n\n"
+                "NAME = Path(__file__).stem\n"
+            ),
+            "main": "from . import helpers\n\ndef name():\n    return helpers.NAME\n",
+        },
+    )
+
+    assert _run(package, "name") == "helpers"
+
+
+def test_a_constant_reading_its_own_file_still_finds_it(tmp_path) -> None:
+    # The import system binds `__file__`, not a statement, so a cell running the lifted
+    # `Path(__file__)` line needs it bound to the module's own file.
+    module = _module(
+        tmp_path,
+        """
+        from pathlib import Path
+
+        HERE = Path(__file__).parent
+
+        def here():
+            return HERE
+        """,
+    )
+    namespace = {"__name__": "__main__"}
+
+    exec(compile(compute_source(module.here), "<cell>", "exec"), namespace)
+
+    assert namespace["here"]() == tmp_path
+
+
+def _run(package, fn_name: str, *args):
+    """Exec ``main.<fn_name>``'s source the way a notebook cell does, then call it."""
+    import importlib
+
+    main = importlib.import_module(f"{package.__name__}.main")
+    namespace = {"__name__": "__main__"}
+    exec(compile(compute_source(getattr(main, fn_name)), "<cell>", "exec"), namespace)
+    return namespace[fn_name](*args)
+
+
+def test_a_module_a_sibling_imports_is_still_imported(tmp_path) -> None:
+    # `json` is the sibling's import, not a submodule of the package, so its import line
+    # is what comes along, not the module's own source.
+    package = _package(
+        tmp_path,
+        {
+            "shared": "import json\n",
+            "main": (
+                "from .shared import json\n\ndef dump(x):\n    return json.dumps(x)\n"
+            ),
+        },
+    )
+
+    assert _run(package, "dump", {"a": 1}) == '{"a": 1}'
+
+
+def test_a_renamed_relative_import_is_bound_under_its_new_name(tmp_path) -> None:
+    # The sibling defines `CEILING`; the function reads it as `CAP`.
+    package = _package(
+        tmp_path,
+        {
+            "shared": "CEILING = 10\n",
+            "main": (
+                "from .shared import CEILING as CAP\n\ndef cap():\n    return CAP\n"
+            ),
+        },
+    )
+
+    assert _run(package, "cap") == 10
+
+
+def test_two_routes_into_one_sibling_each_get_what_they_need(tmp_path) -> None:
+    # `main` wants `CEILING` from `shared`, and so does `helpers`, for `FLOOR`. Reaching
+    # `shared` a second time is not a cycle.
+    package = _package(
+        tmp_path,
+        {
+            "shared": "CEILING = 10\nFLOOR = 1\n",
+            "helpers": (
+                "from .shared import FLOOR\n\ndef clamp(x):\n    return max(FLOOR, x)\n"
+            ),
+            "main": (
+                "from .shared import CEILING\nfrom .helpers import clamp\n\n"
+                "def capped(x):\n    return min(CEILING, clamp(x))\n"
+            ),
+        },
+    )
+
+    assert _run(package, "capped", 50) == 10
+    assert _run(package, "capped", -5) == 1
+
+
+def test_a_renamed_upstream_derivation_leaves_the_context_runnable(tmp_path) -> None:
+    # An upstream derivation is its own cell, after the context, so the context cannot
+    # bind a new name to it: that line would fail and take the rest of the context down.
+    import importlib
+
+    from elbi_core._source import split_stored
+
+    derivation = (
+        "from elbi_core import derivation\n"
+        "from elbi_core.registry import Registry\n\n"
+        "REGISTRY = Registry()\n\n"
+    )
+    package = _package(
+        tmp_path,
+        {
+            "up": derivation
+            + "@derivation(registry=REGISTRY)\ndef upstream(ctx):\n    return []\n",
+            "main": derivation
+            + (
+                "from .up import upstream as up\n\n"
+                "@derivation(inputs={'u': up}, registry=REGISTRY)\n"
+                "def down(ctx):\n    return []\n"
+            ),
+        },
+    )
+    main = importlib.import_module(f"{package.__name__}.main")
+    context, _ = split_stored(compute_source(main.down.compute))
+    namespace = {"__name__": "__main__"}
+
+    exec(compile("\n".join(context), "<setup>", "exec"), namespace)
+
+    assert "REGISTRY" in namespace

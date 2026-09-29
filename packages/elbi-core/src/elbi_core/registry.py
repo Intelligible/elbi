@@ -129,8 +129,8 @@ class NotebookRegistry(Registry):
 
     Discovery wants a duplicate name to fail loudly: two files claiming one name is a
     project error, and the last import winning silently would be worse than stopping. A
-    notebook inverts that. Re-running a cell is its normal motion — the reactive engine
-    does it unprompted whenever an upstream cell changes — so a second run must redefine
+    notebook inverts that. Re-running a cell is its normal motion (the reactive engine
+    does it unprompted whenever an upstream cell changes), so a second run must redefine
     what the first one declared. Without this a derivation cell runs exactly once, which
     makes "open this derivation and iterate on it" impossible by construction.
     """

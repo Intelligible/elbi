@@ -3,7 +3,7 @@
 ``inspect.getsource(fn)`` returns a function and nothing else, which is lossy for a
 derivation: the decorator, the contract it declares, the constants it reads and the
 helpers it calls all live at module level and none of them come with it. Read back that
-way, a derivation's "source" cannot be run, only looked at — and anything that pastes it
+way, a derivation's "source" cannot be run, only looked at, and anything that pastes it
 somewhere executable (opening one in a notebook) gets a ``NameError`` on line one.
 
 So the preamble is captured with it: every module-level statement the function actually
@@ -11,9 +11,10 @@ depends on, in the order the file declares them. Sibling derivations are left ou
 they are their own records and pulling one in would drag the whole module along with it.
 
 A relative import is resolved rather than copied. ``from .shared import CEILING`` is a
-statement a notebook cell cannot execute at all — there is no parent package there — so
+statement a notebook cell cannot execute at all (there is no parent package there), so
 the names it brings in are followed into the sibling module and emitted as the
-definitions they refer to.
+definitions they refer to, rebound under their ``as`` name where the import renames one.
+A submodule, as in ``from . import helpers``, is rebuilt from its file instead.
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ import importlib
 import inspect
 import textwrap
 from typing import Any, TypeGuard
+
+from .derivation import Derivation
 
 #: Node types that bind a name at module level and are worth carrying: imports, the
 #: constants and objects a derivation reads, and the helpers it calls.
@@ -50,7 +53,9 @@ def _bound_names(node: ast.stmt) -> set[str]:
     return set()
 
 
-def _is_derivation(node: ast.stmt) -> TypeGuard[ast.FunctionDef | ast.AsyncFunctionDef]:
+def _is_derivation(
+    node: ast.stmt,
+) -> TypeGuard[ast.FunctionDef | ast.AsyncFunctionDef]:
     """Whether a statement defines a derivation, which is its own stored record."""
     if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         return False
@@ -81,15 +86,16 @@ def _preamble(
     Returns the statements and the names still unaccounted for, so a caller can follow
     a relative import into the module that satisfies it.
     """
-    if module is None or getattr(module, "__name__", None) in seen_modules:
+    name = getattr(module, "__name__", "")
+    if module is None or name in seen_modules:
         return [], wanted
-    seen_modules.add(getattr(module, "__name__", ""))
     try:
         module_source = inspect.getsource(module)
         tree = ast.parse(module_source)
     except (OSError, TypeError, SyntaxError):
         return [], wanted
 
+    futures: list[str] = []
     keep: list[str] = []
     # Backwards, so a helper's own dependencies are wanted by the time the statement
     # that declares them is reached: `_environment` needs `_PREVIEW`, declared above it.
@@ -100,6 +106,11 @@ def _preamble(
         if not bound & wanted:
             continue
         segment = ast.get_source_segment(module_source, node) or ""
+        if isinstance(node, ast.ImportFrom) and node.module == "__future__":
+            # It has to stay the first statement, ahead of the `__file__` binding.
+            futures.append(segment)
+            wanted -= bound
+            continue
 
         if isinstance(node, ast.ImportFrom) and node.level:
             # A cell has no parent package, so this line cannot run there. Follow it
@@ -111,15 +122,67 @@ def _preamble(
                 )
             except (ImportError, TypeError, ValueError):
                 continue
-            inner, _ = _preamble(sibling, set(bound & wanted), seen_modules)
-            keep.extend(reversed(inner))
+            there: set[str] = set()
+            for alias in node.names:
+                local = alias.asname or alias.name
+                if local not in wanted:
+                    continue
+                member = getattr(sibling, alias.name, None)
+                if (
+                    inspect.ismodule(member)
+                    and member.__name__ == f"{sibling.__name__}.{alias.name}"
+                ):
+                    # `from . import helpers` binds a submodule, not a definition.
+                    rebuilt = _rebuilt_module(local, member, seen_modules | {name})
+                    if rebuilt:
+                        keep.append(rebuilt)
+                    continue
+                if local != alias.name and not isinstance(member, Derivation):
+                    # `from .ci import _window as _ci_window`: the sibling defines the
+                    # original name. Not a derivation, which is a later cell of its own.
+                    keep.append(f"{local} = {alias.name}")
+                there.add(alias.name)
+            if there:
+                # Only the modules on this route count as seen: a cycle stops, and a
+                # second route into the same sibling still gets what it needs.
+                inner, _ = _preamble(sibling, there, seen_modules | {name})
+                keep.extend(reversed(inner))
             wanted -= bound
             continue
 
         keep.append(segment)
         wanted = (wanted - bound) | _free_names(segment)
 
-    return list(reversed(keep)), wanted
+    path = getattr(module, "__file__", None)
+    if "__file__" in wanted and path:
+        # The import system binds `__file__`, and a cell has no file of its own, so
+        # the statements lifted out of this module get the one it was loaded from.
+        keep.append(f"__file__ = {path!r}")
+        wanted = wanted - {"__file__"}
+    return [*futures, *reversed(keep)], wanted
+
+
+def _rebuilt_module(local: str, module: Any, seen_modules: set[str]) -> str:
+    """A statement binding ``local`` to ``module``, rebuilt from its file.
+
+    A cell cannot import a sibling module, having no parent package, but it can do what
+    the import system does: create the module and run its definitions in it. Those are
+    read the way any preamble is, so the module's own relative imports are resolved
+    too. Empty when the source cannot be read.
+    """
+    try:
+        tree = ast.parse(inspect.getsource(module))
+    except (OSError, TypeError, SyntaxError):
+        return ""
+    names = set().union(*(_bound_names(node) for node in tree.body))
+    statements, _ = _preamble(module, names, seen_modules)
+    source = "\n".join(statements)
+    return (
+        "import types as _types\n"
+        f"{local} = _types.ModuleType({module.__name__!r})\n"
+        f"{local}.__file__ = {module.__file__!r}\n"
+        f"exec(compile({source!r}, {local}.__file__, 'exec'), vars({local}))"
+    )
 
 
 def split_stored(source: str) -> tuple[list[str], str]:
