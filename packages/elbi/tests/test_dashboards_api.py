@@ -309,8 +309,10 @@ def test_the_dashboard_schema_is_served_for_an_editor(client: TestClient) -> Non
     assert schema["$defs"]["widget"]["required"] == ["id", "type", "gridPos"]
 
 
-def test_a_derivation_s_columns_are_listed_for_the_field_picker(client: TestClient) -> None:
-    """The editor offers the columns a derivation actually returns, not typed guesses."""
+def test_a_derivation_s_columns_are_listed_for_the_field_picker(
+    client: TestClient,
+) -> None:
+    """The editor offers the columns a derivation returns, not typed guesses."""
     body = client.get("/api/dashboards/columns/revenue").json()
 
     assert body["columns"] == ["region", "revenue"]
@@ -320,4 +322,6 @@ def test_columns_of_something_unrunnable_are_empty_rather_than_an_error(
     client: TestClient,
 ) -> None:
     """A picker with no options beats a dialog that will not open."""
-    assert client.get("/api/dashboards/columns/no_such_derivation").json() == {"columns": []}
+    body = client.get("/api/dashboards/columns/no_such_derivation").json()
+
+    assert body == {"columns": []}
