@@ -23,6 +23,10 @@ export interface SourceField {
   // When true, the form offers a file upload for this field; the uploaded file's stored
   // warehouse path fills the field value (the CSV / Parquet source).
   upload?: boolean
+  // Whether the field holds a credential. The server resolves this, so a PEM key or a
+  // JSON key file -- a secret that renders as a textarea, not a password box -- is
+  // flagged as one; never infer secrecy from `type` here.
+  secret?: boolean
 }
 
 export interface SourceConfig {
@@ -149,6 +153,35 @@ export const setSyncFrequency = (sourceId: string, sync_frequency: SyncFrequency
   send<SourceDetail>("PATCH", `/api/warehouse/sources/${id(sourceId)}`, {
     sync_frequency,
   })
+
+export interface SourceConfigView {
+  sourceType: string
+  /**
+   * Keyed by the connector's own field names (`auth_token`, not `authToken`): the API
+   * treats `config` as opaque so these survive the casing boundary. Secrets come back
+   * blank, and an edit sends them back blank to keep them.
+   */
+  config: Record<string, unknown>
+  secretFields: string[]
+}
+
+export const getSourceConfig = (sourceId: string) =>
+  json<SourceConfigView>(`/api/warehouse/sources/${id(sourceId)}/config`)
+
+/**
+ * Edit a source in place.
+ *
+ * A password field left blank keeps the stored secret, so a manifest can be corrected
+ * without the operator re-entering credentials that were already working.
+ */
+export const updateSource = (
+  sourceId: string,
+  patch: {
+    config?: Record<string, unknown>
+    name?: string
+    description?: string
+  },
+) => send<SourceDetail>("PATCH", `/api/warehouse/sources/${id(sourceId)}`, patch)
 
 export const deleteSource = (sourceId: string) =>
   json<{ ok: boolean }>(`/api/warehouse/sources/${id(sourceId)}`, {

@@ -512,6 +512,7 @@ class GcsSource(_ObjectStoreSource):
                 name="key_file",
                 label="Google Cloud JSON key file",
                 type="textarea",
+                secret=True,
                 required=False,
                 placeholder='{"type": "service_account", ...}',
                 caption="A service-account key with read access to the bucket. Leave "
@@ -639,6 +640,7 @@ class SftpSource(_ObjectStoreSource):
                 name="private_key",
                 label="Private key",
                 type="textarea",
+                secret=True,
                 required=False,
                 placeholder="-----BEGIN OPENSSH PRIVATE KEY-----",
             ),

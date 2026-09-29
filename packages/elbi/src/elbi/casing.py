@@ -33,9 +33,10 @@ _SNAKE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 _CAMEL = re.compile(r"^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)+$")
 
 #: Keys whose values are opaque data (row dicts keyed by user column names, live kernel
-#: variables, run-history cells keyed by asset name): the value is copied verbatim
-#: rather than recursed into, so its data keys survive the API's casing boundary intact.
-OPAQUE_KEYS = frozenset({"rows", "variables", "cells", "claims"})
+#: variables, run-history cells keyed by asset name, a warehouse source's ``config``
+#: keyed by the connector's own field names): the value is copied verbatim rather than
+#: recursed into, so its data keys survive the API's casing boundary intact.
+OPAQUE_KEYS = frozenset({"rows", "variables", "cells", "claims", "config"})
 
 
 def _to_camel(key: str) -> str:
