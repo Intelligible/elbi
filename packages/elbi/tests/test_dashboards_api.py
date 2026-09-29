@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -148,6 +149,16 @@ def test_create_get_and_list(client: TestClient) -> None:
 
     listing = client.get("/api/dashboards").json()
     assert [d["id"] for d in listing] == [dashboard_id]
+
+
+def test_updated_at_carries_its_utc_offset(client: TestClient) -> None:
+    # SQLite reads the stamp back naive; without an offset a browser (and a snapshot's
+    # "Last edited") takes the UTC wall time as local.
+    dashboard_id = _create(client)
+    got = client.get(f"/api/dashboards/{dashboard_id}").json()
+    exported = client.get(f"/api/exports/dashboards/{dashboard_id}").json()
+    for stamp in (got["updatedAt"], exported["updated_at"]):
+        assert datetime.fromisoformat(stamp).utcoffset() == timedelta(0)
 
 
 def test_invalid_manifest_is_rejected(client: TestClient) -> None:
