@@ -73,6 +73,7 @@ export function DashboardPage() {
   const [widgets, setWidgets] = useState<Record<string, WidgetData>>({})
   const [loading, setLoading] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -83,9 +84,13 @@ export function DashboardPage() {
   // Snapshots of the spec before each edit, for ⌘Z. Session-only: a reload starts
   // clean, and the dashboard's own version history is the durable record.
   const history = useRef(createHistory<DashboardSpec>())
+  // The spec the server last accepted. A rejected save rolls the board back to it, so
+  // the layout on screen is never one a reload would undo.
+  const confirmed = useRef<DashboardSpec | null>(null)
 
   const load = useCallback(async () => {
     const view = await getDashboard(id)
+    confirmed.current = view.spec
     setDashboard(view)
     setPageName((current) => current || view.spec.pages[0]?.name || "")
     setVariables((current) => (Object.keys(current).length > 0 ? current : initialState(view.spec)))
@@ -148,6 +153,29 @@ export function DashboardPage() {
     [visibleWidgets],
   )
 
+  // Write a spec the board already shows. On a rejection, put back the last accepted
+  // spec and drop the undo entry the edit recorded, then rethrow for the caller to
+  // report: the dialog that made the edit, or the banner.
+  const persist = useCallback(
+    async (nextSpec: DashboardSpec, recorded: boolean) => {
+      try {
+        await saveDashboard(id, nextSpec)
+        confirmed.current = nextSpec
+        setSaveError(null)
+      } catch (err) {
+        const last = confirmed.current
+        if (last) setDashboard((current) => (current ? { ...current, spec: last } : current))
+        if (recorded) history.current.past.pop()
+        throw err
+      }
+    },
+    [id],
+  )
+
+  const reportSaveError = useCallback((err: unknown) => {
+    setSaveError(`Not saved: ${err instanceof Error ? err.message : String(err)}`)
+  }, [])
+
   // Persist a drag/resize back into the spec (debounced), so the layout a user arranges is
   // durable: the dashboard-as-code stays the source of truth.
   const persistLayout = useCallback(
@@ -175,10 +203,10 @@ export function DashboardPage() {
       setDashboard({ ...dashboard, spec: nextSpec })
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
-        void saveDashboard(id, nextSpec)
+        persist(nextSpec, true).catch(reportSaveError)
       }, 600)
     },
-    [dashboard, page, id],
+    [dashboard, page, persist, reportSaveError],
   )
 
   // One place every spec edit goes through: rebuild the spec, show it immediately, and
@@ -188,9 +216,9 @@ export function DashboardPage() {
     async (nextSpec: DashboardSpec, previous?: DashboardSpec) => {
       if (previous) record(history.current, previous)
       setDashboard((current) => (current ? { ...current, spec: nextSpec } : current))
-      await saveDashboard(id, nextSpec)
+      await persist(nextSpec, previous !== undefined)
     },
-    [id],
+    [persist],
   )
 
   // ⌘Z / Ctrl-Z steps back through this session's edits; ⇧⌘Z steps forward. A drag, a
@@ -203,9 +231,11 @@ export function DashboardPage() {
       if (!restored) return
       if (saveTimer.current) clearTimeout(saveTimer.current)
       setDashboard({ ...dashboard, spec: restored })
-      void saveDashboard(id, restored).then(() => resolve())
+      persist(restored, false)
+        .then(() => resolve())
+        .catch(reportSaveError)
     },
-    [dashboard, id, resolve],
+    [dashboard, persist, resolve, reportSaveError],
   )
 
   useEffect(() => {
@@ -256,8 +286,9 @@ export function DashboardPage() {
         }),
       )
       if (!nextSpec) return
-      setTileUnderEdit(null)
+      // Rejections propagate to the editor, which stays open and shows the reason.
       await writeSpec(nextSpec, dashboard?.spec)
+      setTileUnderEdit(null)
       void resolve()
     },
     [mapWidgets, writeSpec, resolve, dashboard?.spec],
@@ -268,9 +299,9 @@ export function DashboardPage() {
       const nextSpec = mapWidgets((widgets) => widgets.filter((w) => w.id !== widgetId))
       if (!nextSpec) return
       setTileToDelete(null)
-      await writeSpec(nextSpec, dashboard?.spec)
+      await writeSpec(nextSpec, dashboard?.spec).catch(reportSaveError)
     },
-    [mapWidgets, writeSpec, dashboard?.spec],
+    [mapWidgets, writeSpec, dashboard?.spec, reportSaveError],
   )
 
   const publish = async () => {
@@ -358,6 +389,15 @@ export function DashboardPage() {
         ) : null}
       </SceneHeader>
 
+      {saveError ? (
+        <div
+          role="alert"
+          className="shrink-0 border-b border-danger/30 bg-danger-tint px-6 py-2 text-sm text-danger"
+        >
+          {saveError}
+        </div>
+      ) : null}
+
       {publishError ? (
         <div className="shrink-0 border-b border-danger/30 bg-danger-tint px-6 py-2 text-sm text-danger">
           {publishError}
@@ -431,7 +471,7 @@ export function DashboardPage() {
         dark={dark}
         schema={schema}
         onCancel={() => setTileUnderEdit(null)}
-        onSave={(widgetId, patch) => void saveTile(widgetId, patch)}
+        onSave={saveTile}
       />
 
       <Dialog open={tileToDelete !== null} onOpenChange={(open) => !open && setTileToDelete(null)}>
