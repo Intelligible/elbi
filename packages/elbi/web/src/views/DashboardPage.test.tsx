@@ -1,7 +1,7 @@
 // Pins what a refused save does: the board goes back to the last spec the server
 // accepted, and the editor that made the edit stays open with the server's reason.
 
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -85,5 +85,60 @@ describe("DashboardPage", () => {
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
     expect(screen.getByLabelText("Tile actions: Caveat")).toBeInTheDocument()
     expect(screen.queryByText("Renamed")).toBeNull()
+  })
+
+  it("does not undo one dashboard's edits onto the next one drilled into", async () => {
+    // A drill-through stays on this route, so React reuses the page for the new id.
+    const user = userEvent.setup()
+    const [note] = DASHBOARD.spec.pages[0].widgets
+    const first: Dashboard = {
+      ...DASHBOARD,
+      spec: {
+        ...DASHBOARD.spec,
+        pages: [
+          {
+            name: "main",
+            widgets: [{ ...note, interactions: { drillThrough: { target: "dashboard:d2" } } }],
+          },
+        ],
+      },
+    }
+    const second: Dashboard = {
+      ...DASHBOARD,
+      id: "d2",
+      spec: {
+        ...DASHBOARD.spec,
+        pages: [{ name: "main", widgets: [{ ...note, id: "other", title: "Elsewhere" }] }],
+      },
+    }
+    vi.mocked(getDashboard).mockImplementation(async (id) => (id === "d2" ? second : first))
+    vi.mocked(saveDashboard).mockResolvedValue(first)
+    render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/dashboards/d1"]}>
+          <Routes>
+            <Route path="/dashboards/:id" element={<DashboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>,
+    )
+
+    const trigger = await screen.findByLabelText("Tile actions: Caveat")
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Edit…" }))
+    const title = within(await screen.findByRole("dialog")).getByLabelText("Title")
+    await user.clear(title)
+    await user.type(title, "Renamed")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    await user.click(screen.getByRole("button", { name: "Details →" }))
+    await screen.findByLabelText("Tile actions: Elsewhere")
+    vi.mocked(saveDashboard).mockClear()
+    await user.keyboard("{Control>}z{/Control}")
+
+    expect(saveDashboard).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText("Tile actions: Caveat")).toBeNull()
   })
 })

@@ -98,6 +98,7 @@ export function TileEditor({
     setWidth(widget?.gridPos.w ?? 1)
     setHeight(widget?.gridPos.h ?? 1)
     setTab("fields")
+    setDraft("")
     setError(null)
   }, [widget])
 
@@ -154,6 +155,14 @@ export function TileEditor({
   }
 
   const showFields = () => {
+    // The draft is only live on the JSON tab. From anywhere else the fields are already
+    // current, and parsing a draft written earlier, or for the previous tile, would
+    // overwrite them.
+    if (tab !== "json") {
+      setError(null)
+      setTab("fields")
+      return
+    }
     // Parse first: dropping back to the fields would otherwise discard a JSON edit.
     try {
       const parsed = JSON.parse(draft) as Widget

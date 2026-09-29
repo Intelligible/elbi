@@ -3,19 +3,17 @@ import { Link } from "react-router-dom"
 
 import { derivationProvenance, type Provenance } from "@/lib/dashboards"
 
-/** What a derivation reads. `null` until fetched, or if it cannot be. */
-function useProvenance(derivation: string | undefined): Provenance | null {
-  const [upstream, setUpstream] = useState<Provenance | null>(null)
+/** What a derivation reads, kept apart from "not fetched yet" and "could not be". */
+function useProvenance(derivation: string | undefined): Provenance | "loading" | "failed" {
+  const [upstream, setUpstream] = useState<Provenance | "loading" | "failed">("loading")
 
   useEffect(() => {
     let live = true
-    if (!derivation) {
-      setUpstream(null)
-      return
-    }
+    setUpstream("loading")
+    if (!derivation) return
     void derivationProvenance(derivation)
       .then((p) => live && setUpstream(p))
-      .catch(() => live && setUpstream(null))
+      .catch(() => live && setUpstream("failed"))
     return () => {
       live = false
     }
@@ -64,7 +62,11 @@ export function ProvenanceTab({ derivation }: { derivation: string }) {
           has returned.
         </p>
       </div>
-      {upstream && (upstream.derivation.length > 0 || upstream.dataset.length > 0) ? (
+      {upstream === "loading" ? (
+        <p className="text-xs text-text-tertiary">Loading what this derivation reads…</p>
+      ) : upstream === "failed" ? (
+        <p className="text-xs text-text-tertiary">Could not load what this derivation reads.</p>
+      ) : upstream.derivation.length > 0 || upstream.dataset.length > 0 ? (
         <div className="space-y-1">
           <p className="text-sm font-medium">Which reads</p>
           <ul className="space-y-1 text-sm">

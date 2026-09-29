@@ -63,8 +63,14 @@ function pageVariables(spec: DashboardSpec, page: string): Variable[] {
   )
 }
 
+// Keyed by id: the undo history, the last accepted spec and the page's own state belong to
+// one dashboard, and a drill-through to another stays on this route.
 export function DashboardPage() {
   const { id = "" } = useParams()
+  return <DashboardBoard key={id} id={id} />
+}
+
+function DashboardBoard({ id }: { id: string }) {
   const navigate = useNavigate()
   const dark = useDarkTheme()
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)

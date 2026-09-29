@@ -26,7 +26,7 @@ vi.mock("@/lib/dashboards", async (importOriginal) => ({
 }))
 
 import type { Widget } from "@/lib/dashboards"
-import { derivationColumns } from "@/lib/dashboards"
+import { derivationColumns, derivationProvenance } from "@/lib/dashboards"
 import { TileEditor, type TilePatch } from "./TileEditor"
 
 const pos = { x: 0, y: 0, w: 12, h: 6 }
@@ -231,6 +231,60 @@ describe("TileEditor", () => {
     expect(screen.queryByLabelText("Content")).toBeNull()
   })
 
+  it("comes back from the Lineage tab to the fields", async () => {
+    const user = userEvent.setup()
+    open(textTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+
+    expect(screen.getByRole("button", { name: "Fields" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByLabelText("Content")).toHaveValue("before")
+  })
+
+  it("keeps a field edit across a visit to the Lineage tab", async () => {
+    const user = userEvent.setup()
+    open(textTile)
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+
+    await user.type(screen.getByLabelText("Title"), "Caveat")
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Caveat")
+  })
+
+  it("never fills one tile's fields from the JSON of the tile opened before it", async () => {
+    // The dashboard keeps one editor mounted and hands it each tile in turn.
+    const user = userEvent.setup()
+    const onSave = vi.fn(async () => {})
+    const editor = (widget: Widget) => (
+      <MemoryRouter>
+        <TileEditor
+          widget={widget}
+          catalog={["revenue_by_product"]}
+          columns={24}
+          dark={false}
+          onCancel={() => {}}
+          onSave={onSave}
+        />
+      </MemoryRouter>
+    )
+    const { rerender } = render(editor(boundTile))
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+    rerender(editor(textTile))
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      "note",
+      expect.objectContaining({ title: "", content: "before" }),
+    )
+  })
+
   it("renders nothing when no tile is open", () => {
     const { container } = open(null)
     expect(container).toBeEmptyDOMElement()
@@ -342,6 +396,28 @@ describe("the Lineage tab", () => {
     await user.click(screen.getByRole("button", { name: "Lineage" }))
 
     expect(screen.getByText(/carries its own content/)).toBeInTheDocument()
+  })
+
+  it("does not say nothing is upstream before it knows", async () => {
+    const user = userEvent.setup()
+    vi.mocked(derivationProvenance).mockReturnValueOnce(new Promise(() => {}))
+    open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(screen.getByText(/Loading what this derivation reads/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing upstream/)).toBeNull()
+  })
+
+  it("says the lineage could not be loaded, rather than that there is none", async () => {
+    const user = userEvent.setup()
+    vi.mocked(derivationProvenance).mockRejectedValueOnce(new Error("500"))
+    open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(await screen.findByText(/Could not load what this derivation reads/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing upstream/)).toBeNull()
   })
 
   it("stays out of the way until asked for", () => {
