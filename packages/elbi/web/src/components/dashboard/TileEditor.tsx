@@ -213,22 +213,24 @@ export function TileEditor({
         </DialogHeader>
 
         <div className="flex gap-1 rounded-md bg-surface-secondary p-1">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             aria-pressed={tab === "fields"}
             className={tabClass(tab === "fields")}
             onClick={showFields}
           >
             Fields
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             aria-pressed={tab === "json"}
             className={tabClass(tab === "json")}
             onClick={showJson}
           >
             JSON
-          </button>
+          </Button>
         </div>
 
         {bound ? <TileProvenance derivation={derivation} /> : null}
@@ -489,8 +491,8 @@ function named(values: string[]): { value: string; label: string }[] {
 
 function tabClass(active: boolean): string {
   return active
-    ? "flex-1 rounded px-3 py-1 text-sm font-medium bg-card shadow-sm"
-    : "flex-1 rounded px-3 py-1 text-sm text-text-tertiary hover:text-foreground"
+    ? "flex-1 bg-card shadow-sm hover:bg-card"
+    : "flex-1 font-normal text-text-tertiary hover:text-foreground"
 }
 
 function clamp(value: number, low: number, high: number): number {

@@ -139,12 +139,17 @@ describe("tile actions", () => {
     const onDelete = vi.fn()
     render(<DashboardWidget widget={widget} variables={{}} onEdit={onEdit} onDelete={onDelete} />)
 
-    await user.click(screen.getByLabelText(/Tile actions/))
-    await user.click(screen.getByText("Edit…"))
+    const trigger = screen.getByLabelText(/Tile actions/)
+    // Radix menus close on a window blur, which jsdom fires at pointerdown when nothing
+    // is focused; focusing first avoids it (jsdom only).
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Edit…" }))
     expect(onEdit).toHaveBeenCalledOnce()
 
-    await user.click(screen.getByLabelText(/Tile actions/))
-    await user.click(screen.getByText("Delete"))
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }))
     expect(onDelete).toHaveBeenCalledOnce()
   })
 
