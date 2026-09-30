@@ -77,7 +77,7 @@
     "vega-lite": "^6.4.3"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.7",
+    "@babel/core": "^8.0.6",
     "@babel/eslint-parser": "^7.29.9",
     "@biomejs/biome": "^2.5.14",
     "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
