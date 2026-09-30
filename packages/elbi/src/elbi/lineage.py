@@ -156,11 +156,14 @@ class LineageService:
         registry = self._registry_provider()
         verdicts = self._derivation_verdicts()
         graph = from_registry(registry, self._dataset_names(), verdict_of=verdicts.get)
-        self._add_dashboards(graph)
+        displayed_metrics = self._add_dashboards(graph)
         self._add_feature_views(graph)
         self._add_training_sets(graph)
         self._add_models(graph)
         metric_sources = self._add_metrics(graph, verdicts)
+        # After the metric nodes exist, so an edge never stands in a bare placeholder.
+        for metric_name, dashboard_id in displayed_metrics:
+            graph.add_edge(node_id("metric", metric_name), dashboard_id, "displays")
         self._add_monitors(graph, verdicts, metric_sources)
         return graph
 
@@ -203,7 +206,13 @@ class LineageService:
             for view in sorted(views):
                 graph.add_edge(node_id("feature_view", view), ts_id, "joins")
 
-    def _add_dashboards(self, graph: LineageGraph) -> None:
+    def _add_dashboards(self, graph: LineageGraph) -> list[tuple[str, str]]:
+        """Add each dashboard downstream of the derivations it binds.
+
+        Returns each (metric, dashboard node) pair a tile displays, for the caller to
+        link once the metric nodes are in the graph.
+        """
+        displayed: list[tuple[str, str]] = []
         for row in self._store.list_dashboards():
             dashboard_id = node_id("dashboard", row["name"])
             graph.add_node(
@@ -226,6 +235,8 @@ class LineageService:
                 graph.add_edge(
                     node_id("derivation", derivation_name), dashboard_id, "displays"
                 )
+            displayed.extend((name, dashboard_id) for name in spec.metric_names())
+        return displayed
 
     def _add_feature_views(self, graph: LineageGraph) -> None:
         for row in self._store.list_feature_views():

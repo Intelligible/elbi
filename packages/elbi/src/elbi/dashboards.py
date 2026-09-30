@@ -67,6 +67,7 @@ class DashboardService:
         certified_catalog: Callable[[], list[dict[str, Any]]],
         resolve_metric: MetricResolver | None = None,
         metric_exists: Callable[[str], bool] | None = None,
+        metric_format: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self._store = store
         self._make_runner = make_runner
@@ -75,6 +76,9 @@ class DashboardService:
         # exists. Injected by the app (the dashboard core has no metric engine).
         self._resolve_metric = resolve_metric
         self._metric_exists = metric_exists
+        # A metric tile displays its value the way the metric says to, so the format
+        # lives on the shared metric rather than on each tile.
+        self._metric_format = metric_format
 
     # -- authoring ---------------------------------------------------------------
     def create(self, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -226,9 +230,20 @@ class DashboardService:
                 "value": data.value,
                 "data_version": data.data_version,
                 "error": data.error,
+                "format": self._format_for(spec, data.widget_id),
             }
             for data in results
         ]
+
+    def _format_for(self, spec: DashboardSpec, widget_id: str) -> dict[str, Any] | None:
+        """The display format of the metric a widget binds, or ``None``."""
+        if self._metric_format is None:
+            return None
+        for page in spec.pages:
+            for widget in page.widgets:
+                if widget.id == widget_id and widget.bind and widget.bind.metric:
+                    return self._metric_format(widget.bind.metric)
+        return None
 
     def options(self, dashboard_id: str, variable: str) -> list[dict[str, Any]]:
         """The selectable options for a filter control, static or derivation-backed."""

@@ -2,6 +2,8 @@
 // widgets bind to certified derivations. Mirrors the throwing helper style in
 // notebooks.ts. The spec is the Dashboard manifest (camelCase, as stored).
 
+import type { Format } from "@/lib/metrics"
+
 export type WidgetType = "metric" | "chart" | "map" | "table" | "text" | "filter"
 
 export interface GridPos {
@@ -12,7 +14,8 @@ export interface GridPos {
 }
 
 // A tile binds either a certified derivation (with params) or a semantic-layer metric
-// (with groupBy/grain/filters). Exactly one of `derivation` or `metric` is set.
+// (with groupBy/grain/filters). Exactly one of `derivation` or `metric` is set, and a
+// `metric` tile always binds a metric. A filter value may be a "$var" reference.
 export interface Bind {
   derivation?: string
   params?: Record<string, unknown>
@@ -106,6 +109,8 @@ export interface WidgetData {
   value: unknown
   dataVersion: string | null
   error: string | null
+  // The bound metric's display format; null for a derivation-bound widget.
+  format?: Format | null
 }
 
 export interface Option {
@@ -187,7 +192,7 @@ export function starterSpec(name: string): DashboardSpec {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
   return {
-    specVersion: "1.0",
+    specVersion: "2.0",
     kind: "Dashboard",
     name: slug || "dashboard",
     title: name,

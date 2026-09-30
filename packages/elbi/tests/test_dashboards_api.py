@@ -121,6 +121,11 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
             {"region": "east", name: 20},
         ],
         metric_exists=lambda name: name == "region_revenue",
+        metric_format=lambda name: (
+            {"kind": "currency", "currency": "EUR"}
+            if name == "region_revenue"
+            else None
+        ),
     )
     app = create_app(
         load_datasets=lambda: DATASETS,
@@ -294,3 +299,54 @@ def test_publish_refuses_unknown_metric(client: TestClient) -> None:
     created = client.post("/api/dashboards", json=_metric_dashboard("nope")).json()
     published = client.post(f"/api/dashboards/{created['id']}/publish")
     assert published.status_code == 409
+
+
+def _kpi_tile(bind: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "specVersion": "2.0",
+        "kind": "Dashboard",
+        "name": "kpis",
+        "pages": [
+            {
+                "name": "main",
+                "widgets": [
+                    {
+                        "id": "kpi",
+                        "type": "metric",
+                        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+                        "bind": bind,
+                    },
+                    {
+                        "id": "rows",
+                        "type": "table",
+                        "gridPos": {"x": 6, "y": 0, "w": 12, "h": 8},
+                        "bind": {"derivation": "revenue"},
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def test_metric_tile_carries_its_metrics_format(client: TestClient) -> None:
+    created = client.post(
+        "/api/dashboards", json=_kpi_tile({"metric": "region_revenue"})
+    )
+    assert created.status_code == 200, created.text
+    resolved = client.post(
+        f"/api/dashboards/{created.json()['id']}/pages/main/data",
+        json={"variables": {}},
+    )
+    widgets = {w["widgetId"]: w for w in resolved.json()["widgets"]}
+    # The display format is the shared metric's, never the tile's.
+    assert widgets["kpi"]["format"] == {"kind": "currency", "currency": "EUR"}
+    assert widgets["rows"]["format"] is None
+
+
+def test_metric_tile_bound_to_a_derivation_is_refused(client: TestClient) -> None:
+    response = client.post(
+        "/api/dashboards",
+        json=_kpi_tile({"derivation": "revenue"}) | {"name": "private_kpi"},
+    )
+    assert response.status_code == 400
+    assert "binds a shared metric, not a derivation" in response.text

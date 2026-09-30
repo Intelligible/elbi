@@ -1,6 +1,6 @@
 # The Dashboard Spec
 
-**Version 1.0**
+**Version 2.0**
 
 This document is the normative specification of an elbi *dashboard*. It uses
 the keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY as defined in
@@ -69,6 +69,9 @@ The `type` determines the required shape:
 
 - `metric`, `chart`, `map`, `table`: a *data* widget; it MUST have a `bind` and MAY
   have a `viz`.
+- `metric`: its `bind` MUST name a shared `metric`, not a `derivation`, and MUST NOT
+  set `groupBy` or `grain`. The tile shows that metric's single value in the metric's
+  own `format`, so a figure is defined once and reads the same on every surface.
 - `text`: MUST have exactly one of `content` (Markdown) or a `bind` naming a
   derivation that returns markdown.
 - `filter`: MUST name a `variable` that exists, and MUST NOT have a `bind`.
@@ -82,6 +85,14 @@ dollar sign is escaped. A `$name` reference MUST resolve to a declared variable.
 
 A runner resolves each `$name` to the viewer's current selection, or the variable's
 `default` when unset, and runs the derivation with the resulting parameters.
+
+A metric binding is `{ "metric", "groupBy", "grain", "filters" }` instead. `metric`
+names a shared metric; `groupBy` and `grain` slice it; `filters` is a list of
+`{ "column", "op", "value" }` clauses applied before aggregation. A filter `value`
+MAY be a `$name` reference, resolved like a parameter, which MUST resolve to a declared
+variable. A clause whose variable resolves to no selection (`null` or an empty list)
+is dropped, so a cleared control leaves the metric unfiltered. Exactly one of
+`derivation` or `metric` is set.
 
 ## 6. Interactions
 
