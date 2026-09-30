@@ -230,9 +230,10 @@ describe("ModelDetailPage", () => {
     renderPage()
     const pane = await section("Auto-retrain")
 
+    // The heading renders before the policy loads; wait for the form, not the skeleton.
     await choose(
       user,
-      within(pane).getByRole("combobox", { name: /^Data source/ }),
+      await within(pane).findByRole("combobox", { name: /^Data source/ }),
       "churn_features",
     )
     await user.type(within(pane).getByRole("textbox", { name: "Target column" }), "label")
