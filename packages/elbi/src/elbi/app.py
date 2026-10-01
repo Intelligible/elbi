@@ -570,9 +570,9 @@ def create_app(
     Trust model: the app is local-first and single-user. Its endpoints are
     unauthenticated and everything it holds -- conversations, jobs, derivations -- is
     the one person's, so it assumes a trusted user on a trusted machine. Reaching it
-    from anywhere else means putting something that authenticates in front of it. The
-    oracle's verdict stays unforgeable either way, so this is a data-isolation
-    boundary, not a soundness one.
+    from anywhere else means putting something that authenticates in front of it. A
+    caller still cannot forge a verification verdict either way, so this is a
+    data-isolation boundary, not a soundness one.
     """
     mcp_app = None
     if mcp_server is not None:
@@ -674,7 +674,7 @@ def create_app(
         )
         prompt = (
             f"Your background training job for derivation '{job.label}' has finished "
-            f"and CERTIFIED (oracle verdict: {attestation.verdict}). Its verified "
+            f"and CERTIFIED (verdict: {attestation.verdict}). Its verified "
             f"output:\n{result.get('rendered', '')}\n\nInterpret this certified result "
             "and call `answer` now with the finding for the user, in plain language. "
             "The analysis is already certified, so do not run tools or derive again."

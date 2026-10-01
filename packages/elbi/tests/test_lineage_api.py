@@ -244,7 +244,7 @@ def test_impact_on_feature_view_reaches_training_sets_and_models(
 def test_metrics_and_monitors_are_nodes_with_inherited_verdict(tmp_path: Path) -> None:
     # A metric aggregating a certified derivation, and monitors watching that metric and
     # the derivation directly, must appear as first-class nodes downstream of it, each
-    # inheriting the derivation's oracle verdict, so impact analysis reaches them.
+    # showing the derivation's verification verdict, so impact analysis reaches them.
     from elbi.db import Derivation as DerivationRow
     from elbi.db import MetricMonitor
 

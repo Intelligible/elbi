@@ -438,7 +438,7 @@ def test_certify_carries_the_claim_through(
             "claim": {"x": "region", "y": "amount"},
         },
     )
-    # The certified derivation keeps the claim, so its verdict is the oracle's.
+    # The certified derivation keeps the claim, so its verdict comes from verifying it.
     assert captured.claim == {"x": "region", "y": "amount"}
 
 

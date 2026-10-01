@@ -1131,7 +1131,7 @@ def test_propose_reports_a_certified_derivation_to_on_author(
     assert record["source"] == source
     assert record["format"] == "table"
     assert record["question"] == "Proposed via MCP"
-    # No claim was declared, so there is no oracle verdict to carry.
+    # No claim was declared, so nothing was verified and there is no verdict.
     assert record["verdict"] is None
     assert record["claim"] is None
 
