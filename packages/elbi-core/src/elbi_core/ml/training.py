@@ -1279,7 +1279,7 @@ def _experiment_id(name: str, artifact_root: str | Path | None) -> str:
 def _tag_version(
     tracking_uri: str, name: str, version: int, tags: Mapping[str, str]
 ) -> None:
-    """Record the oracle's verdict and data lineage on the registered version.
+    """Record the signal check's verdict and data lineage on the registered version.
 
     The training run carries the full record, but the registry is what a person
     browses when choosing a version to promote, so the verdict and provenance

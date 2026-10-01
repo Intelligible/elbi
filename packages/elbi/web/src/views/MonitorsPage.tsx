@@ -53,7 +53,7 @@ export function MonitorsPage() {
       <SceneHeader
         icon={<Activity className="size-5" />}
         title="Monitors"
-        description="Watch a certified metric or derivation; an anomaly against its learned baseline raises an alert carrying the oracle's verdict."
+        description="Watch a certified metric or derivation; an anomaly against its learned baseline raises an alert that includes the source's verification verdict."
         actions={
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="size-4" /> New monitor

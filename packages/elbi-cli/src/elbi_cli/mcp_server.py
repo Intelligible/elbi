@@ -798,7 +798,7 @@ def _register_operate(server: MCPServer, operations: Operations) -> None:
         )
 
     async def asset_status() -> str:
-        """List every asset with its freshness and oracle verdict (read-only)."""
+        """List every asset with its freshness and verification verdict (read-only)."""
         rows = await asyncio.to_thread(operations.asset_status)
         if not rows:
             return "No assets."

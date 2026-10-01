@@ -232,7 +232,7 @@ The chat model has four tools: `train_model`, `list_models`, `predict`, and
 `promote_model`. It is instructed to reach for them when you want a reusable model,
 and to keep using `derive` when the question is only whether predictive signal
 exists: training is for a deliverable, certification is for a claim. Reported
-numbers in a training answer are the held-out metrics from the report, and the
-oracle's verdict rides along in the run and version tags
+numbers in a training answer are the held-out metrics from the report. The
+signal check's verdict is stored in the run and version tags
 (`elbi.oracle_verdict`), so an audit can always separate certified signal
 from registered-but-unproven models.

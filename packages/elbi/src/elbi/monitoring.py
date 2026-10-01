@@ -4,8 +4,8 @@ A monitor snapshots its target's value on each check, learns a baseline from the
 recent snapshot history, and flags a value the anomaly detector finds out of
 line (or outside a static bound). Consecutive anomalies fold into one **incident** so a
 run of bad values raises one alert, not one per check; the incident closes when values
-return to normal. Because a monitor only watches a certified metric or derivation, an
-alert carries the source's oracle verdict -- the moved number was a verified one.
+return to normal. A monitor only watches a certified metric or derivation, so an alert
+includes the source's verification verdict and the number that moved is a verified one.
 
 The value source, the certified gate, and alert delivery are injected by the app; this
 service owns the snapshot, detection, and incident bookkeeping.
