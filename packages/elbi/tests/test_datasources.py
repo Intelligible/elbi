@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import make_url
 
 from elbi import create_app, crypto, datasources
 from elbi.db import DataSource, open_store
@@ -273,10 +274,14 @@ def test_no_connector_reaches_dlt_except_through_the_one_door() -> None:
 def test_a_failed_connection_test_masks_the_password(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A dialect is free to quote the URL it was handed, and that URL holds the secret.
+    """A driver is free to quote what it holds, and both forms hold the secret.
 
-    The driver is stubbed because the ones packaged here happen not to echo the URL;
-    what is under test is that the message is masked when one does.
+    The driver is stubbed because the ones packaged here happen not to echo anything;
+    what is under test is that neither the URL nor the password survives when one does.
+    The password contains ``@`` because percent-encoding changes it (``hunt%40r2``): a
+    password that encoding leaves alone cannot tell masking apart from an encoder that
+    never ran. The URL is written out by SQLAlchemy itself, so a change in how it
+    encodes fails here instead of slipping past the mask.
     """
     monkeypatch.setenv("APP_SECRET_KEY", "topsecret")
     source = DataSource(
@@ -286,14 +291,17 @@ def test_a_failed_connection_test_masks_the_password(
         port=5432,
         database="analytics",
         username="reader",
-        secret=crypto.encrypt("hunter2"),
+        secret=crypto.encrypt("hunt@r2"),
     )
 
-    def _echoes_the_url(url: str, **kwargs: object) -> object:
-        raise RuntimeError(f"could not connect using {url}")
+    def _echoes_everything(url: str, **kwargs: object) -> object:
+        held = make_url(url)  # what a dialect holds, whatever create_engine was given
+        clear = held.render_as_string(hide_password=False)
+        raise RuntimeError(f"could not connect using {clear} as {held.password}")
 
-    monkeypatch.setattr(datasources, "create_engine", _echoes_the_url)
+    monkeypatch.setattr(datasources, "create_engine", _echoes_everything)
     result = datasources.test_connection(source)
     assert result["ok"] is False
-    assert "hunter2" not in result["error"]
+    assert "hunt@r2" not in result["error"]
+    assert "hunt%40r2" not in result["error"]
     assert "db.internal" in result["error"]

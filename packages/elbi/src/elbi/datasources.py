@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy import create_engine, pool, text
 from sqlalchemy.engine import URL
@@ -64,9 +65,17 @@ def connection_url(source: DataSource) -> str:
 
 
 def _without_secret(source: DataSource, message: str) -> str:
-    """``message`` with the source's password masked out."""
+    """``message`` with the source's password masked out, in both forms it can take.
+
+    A driver may echo the password as handed to it, or the URL it holds written out in
+    full, where SQLAlchemy has percent-encoded it (``quote(secret, safe=" +")``), so
+    ``hunt@r2`` appears as ``hunt%40r2``.
+    """
     secret = _password(source)
-    return message.replace(secret, "***") if secret else message
+    if not secret:
+        return message
+    # Encoded form first: the raw form can be a substring of it ("%2" -> "%252").
+    return message.replace(quote(secret, safe=" +"), "***").replace(secret, "***")
 
 
 def test_connection(source: DataSource) -> dict[str, Any]:
