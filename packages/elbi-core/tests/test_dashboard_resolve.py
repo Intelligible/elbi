@@ -284,3 +284,75 @@ def test_metric_bound_widget_without_resolver_errors(runner: Runner) -> None:
     results = resolve_page(runner, spec, "overview", {})
     assert results[0].error is not None
     assert "not resolvable" in results[0].error
+
+
+def _filtered_metric_tile() -> DashboardSpec:
+    """A KPI tile whose metric follows the page's ``region`` control."""
+    return DashboardSpec.from_manifest(
+        {
+            "specVersion": "2.0",
+            "kind": "Dashboard",
+            "name": "revenue_board",
+            "variables": [
+                {"name": "region", "type": "string", "control": "multiselect"}
+            ],
+            "pages": [
+                {
+                    "name": "overview",
+                    "widgets": [
+                        {
+                            "id": "rev",
+                            "type": "metric",
+                            "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+                            "bind": {
+                                "metric": "revenue",
+                                "filters": [
+                                    {
+                                        "column": "region",
+                                        "op": "in",
+                                        "value": "$region",
+                                    },
+                                    {"column": "status", "op": "eq", "value": "paid"},
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        (
+            {"region": ["west"]},
+            [
+                {"column": "region", "op": "in", "value": ["west"]},
+                {"column": "status", "op": "eq", "value": "paid"},
+            ],
+        ),
+        # A cleared control leaves the metric unfiltered on that column.
+        ({"region": []}, [{"column": "status", "op": "eq", "value": "paid"}]),
+        ({}, [{"column": "status", "op": "eq", "value": "paid"}]),
+    ],
+)
+def test_metric_tile_filters_follow_dashboard_variables(
+    runner: Runner, state: dict, expected: list
+) -> None:
+    seen: list[list] = []
+
+    def metric_resolver(name, group_by, grain, filters):
+        seen.append(list(filters))
+        return [{"revenue": 60}]
+
+    results = resolve_page(
+        runner,
+        _filtered_metric_tile(),
+        "overview",
+        state,
+        metric_resolver=metric_resolver,
+    )
+    assert seen == [expected]
+    assert results[0].value == [{"revenue": 60}]

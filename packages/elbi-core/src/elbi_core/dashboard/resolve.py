@@ -97,7 +97,7 @@ def resolve_widget(
     if widget.bind is None:
         return WidgetData(widget.id, "", error="widget has no data binding")
     if widget.bind.is_metric:
-        return _resolve_metric_widget(widget, metric_resolver)
+        return _resolve_metric_widget(spec, widget, state, metric_resolver)
     name = widget.bind.derivation or ""
     params = resolve_params(spec, widget, state)
     try:
@@ -125,8 +125,30 @@ def resolve_widget(
     )
 
 
+def resolve_filters(
+    spec: DashboardSpec, widget: Widget, state: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """The concrete metric filters for ``widget`` given the variable ``state``.
+
+    A filter ``value`` resolves like a bind param. One whose variable has no selection
+    (``None`` or an empty list) is dropped, so a cleared control means unfiltered.
+    """
+    if widget.bind is None:
+        return []
+    out: list[dict[str, Any]] = []
+    for clause in widget.bind.filters:
+        value = resolve_value(clause.get("value"), state, spec)
+        if value is None or value == []:
+            continue
+        out.append({**clause, "value": value})
+    return out
+
+
 def _resolve_metric_widget(
-    widget: Widget, metric_resolver: MetricResolver | None
+    spec: DashboardSpec,
+    widget: Widget,
+    state: dict[str, Any],
+    metric_resolver: MetricResolver | None,
 ) -> WidgetData:
     """Resolve a metric-bound widget through the injected metric resolver."""
     bind = widget.bind
@@ -136,8 +158,9 @@ def _resolve_metric_widget(
         return WidgetData(
             widget.id, bind.metric, error="metric bindings are not resolvable here"
         )
+    filters = resolve_filters(spec, widget, state)
     try:
-        rows = metric_resolver(bind.metric, bind.group_by, bind.grain, bind.filters)
+        rows = metric_resolver(bind.metric, bind.group_by, bind.grain, filters)
     except ElbiError as exc:
         return WidgetData(widget.id, bind.metric, error=str(exc))
     return WidgetData(widget.id, bind.metric, kind="table", value=rows)

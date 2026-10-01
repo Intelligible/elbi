@@ -1,6 +1,6 @@
 // Renders a single dashboard widget from its spec and resolved data. Chart and map
 // widgets reuse the shared VizView (which routes a lat/long spec to the deck.gl map);
-// metric, table, and text are light renderers. A widget whose derivation failed shows
+// metric (a shared metric's value), table, and text are light renderers. A widget whose derivation failed shows
 // its error in place rather than blanking.
 
 import { AlertCircle, GripVertical } from "lucide-react"
@@ -19,6 +19,7 @@ import {
 import { VizView } from "@/components/viz/VizView"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Widget, WidgetData } from "@/lib/dashboards"
+import { formatMetricValue } from "@/lib/metrics"
 import { EMPTY } from "@/lib/utils"
 
 type Row = Record<string, string | number>
@@ -31,65 +32,14 @@ function CenterNote({ children }: { children: ReactNode }) {
   return <div className="grid h-full place-items-center text-xs text-text-tertiary">{children}</div>
 }
 
-function formatValue(value: unknown, format?: string): string {
-  if (value === null || value === undefined) return EMPTY
-  const num = typeof value === "number" ? value : Number(value)
-  if (Number.isNaN(num)) return String(value)
-  if (format === "currency")
-    return num.toLocaleString(undefined, {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    })
-  if (format === "percent")
-    return num.toLocaleString(undefined, { style: "percent", maximumFractionDigits: 1 })
-  // Integers read cleanest with no decimals; a fractional KPI (a mean) keeps one.
-  return num.toLocaleString(undefined, {
-    maximumFractionDigits: Number.isInteger(num) ? 0 : 1,
-  })
-}
-
-function aggregate(rows: Row[], field: string, agg: string): number | undefined {
-  const nums = rows.map((r) => Number(r[field])).filter((n) => Number.isFinite(n))
-  if (nums.length === 0) return undefined
-  switch (agg) {
-    case "sum":
-      return nums.reduce((a, b) => a + b, 0)
-    case "mean":
-      return nums.reduce((a, b) => a + b, 0) / nums.length
-    case "min":
-      return Math.min(...nums)
-    case "max":
-      return Math.max(...nums)
-    default:
-      return undefined
-  }
-}
-
 function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
-  const viz = widget.viz ?? {}
-  const field = typeof viz.field === "string" ? viz.field : undefined
-  const agg = typeof viz.agg === "string" ? viz.agg : undefined
-  const rows = asRows(data?.value)
-  // A KPI is usually an aggregate over the bound derivation's rows: a count of rows,
-  // or a mean/sum/min/max of a column. Falling back to the first row's value (or a
-  // scalar result) covers a derivation that already returns a single figure.
-  let raw: unknown
-  if (agg === "count") {
-    raw = rows.length
-  } else if (agg && field) {
-    raw = aggregate(rows, field, agg)
-  } else if (field && rows.length > 0) {
-    raw = rows[0][field]
-  } else if (typeof data?.value === "number" || typeof data?.value === "string") {
-    raw = data?.value
-  }
+  // The tile shows its shared metric's single value (the one row, keyed by the metric's
+  // name), formatted as the metric defines, so the number and its display live in one
+  // place for every surface that shows it.
+  const name = widget.bind?.metric
+  const raw = name ? asRows(data?.value)[0]?.[name] : undefined
   if (raw === null || raw === undefined) {
-    // Say why it's blank: a metric needs a `viz.field` naming a column the bound derivation
-    // returns, or a scalar result, so a wrong field is obvious, not a silent dash.
-    const hint = field
-      ? `no column “${field}” in the result`
-      : "set viz.field to a column of the bound derivation"
+    const hint = name ? `no value for metric “${name}”` : "bind a metric to this tile"
     return (
       <div className="flex h-full flex-col justify-center">
         <div className="text-3xl font-semibold text-text-tertiary/40">{EMPTY}</div>
@@ -100,7 +50,7 @@ function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
   return (
     <div className="flex h-full flex-col justify-center">
       <div className="text-3xl font-semibold tabular-nums">
-        {formatValue(raw, typeof viz.format === "string" ? viz.format : undefined)}
+        {formatMetricValue(raw, data?.format ?? undefined)}
       </div>
     </div>
   )

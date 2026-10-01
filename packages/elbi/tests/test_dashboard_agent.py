@@ -155,6 +155,30 @@ def test_invalid_spec_is_returned_for_self_correction(tmp_path: Path) -> None:
     assert "Invalid dashboard" in out
 
 
+def _kpi_spec(bind: dict) -> dict:
+    spec = _spec()
+    spec["pages"][0]["widgets"].append(
+        {"id": "kpi", "type": "metric", "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}}
+        | {"bind": bind}
+    )
+    return spec
+
+
+def test_read_names_the_metric_a_tile_binds(tmp_path: Path) -> None:
+    ws = _ws(tmp_path)
+    created = _call(ws, "write_dashboard", spec=_kpi_spec({"metric": "mrr"}))
+    read = _call(ws, "read_dashboard", dashboard_id=_id_from(created))
+    assert "kpi (metric) → mrr" in read
+
+
+def test_a_private_kpi_is_returned_with_the_fix(tmp_path: Path) -> None:
+    # The agent learns to define a shared metric rather than aggregate in the tile.
+    ws = _ws(tmp_path)
+    out = _call(ws, "write_dashboard", spec=_kpi_spec({"derivation": "revenue"}))
+    assert "Invalid dashboard" in out
+    assert "binds a shared metric, not a derivation" in out
+
+
 def test_bare_workspace_declines(tmp_path: Path) -> None:
     out = _dispatch_dashboard(
         ToolCall(id="1", name="list_dashboards", arguments={}), Workspace(datasets={})

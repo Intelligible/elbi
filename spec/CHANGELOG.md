@@ -3,6 +3,20 @@
 This changelog tracks the Open Derivation Spec (ODS) only. It is independent of the SDK and
 CLI changelog at the repository root.
 
+## Dashboard Spec 2.0 (unreleased)
+
+Makes the shared metric the one definition of a dashboard number. Breaking.
+
+- A `metric` widget's `bind` MUST name a `metric`; a `derivation` binding, with the
+  tile aggregating rows through `viz.field` / `viz.agg`, is invalid. The tile takes its
+  value and display format from the metric, and MUST NOT set `groupBy` or `grain`.
+- A metric binding's filter `value` MAY reference a dashboard variable as `$name`, so a
+  metric tile follows the page's filters. A clause with no selection is dropped.
+- Migration: define each tile's figure as a metric over the derivation it bound
+  (`viz.agg` becomes the measure's `agg`, with `mean` spelled `average`; `viz.field`
+  becomes its `column`), then bind the tile as `{"metric": name}`. A derivation
+  `param` a tile passed becomes a metric `filter` or a dimension.
+
 ## 1.1 (unreleased)
 
 Adds provenance and lifecycle, supporting agent-authored derivations.

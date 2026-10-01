@@ -1264,6 +1264,7 @@ def build(
             # through the metric service so a metric renders like any other tile.
             resolve_metric=resolve_metric_tile,
             metric_exists=lambda name: metric_service.get(name) is not None,
+            metric_format=lambda name: (metric_service.get(name) or {}).get("format"),
         ),
         # Feature store: entities + feature views over certified derivations, with
         # point-in-time historical joins and a materialized online store.

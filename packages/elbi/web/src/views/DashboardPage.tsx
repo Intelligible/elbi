@@ -290,7 +290,8 @@ export function DashboardPage() {
             <p className="text-xs text-text-tertiary">
               A widget’s <code>bind</code> is a certified derivation (
               <code>{'{"derivation": "name", "params": {…}}'}</code>) or a metric (
-              <code>{'{"metric": "name", "groupBy": ["…"], "grain": "month"}'}</code>).
+              <code>{'{"metric": "name", "groupBy": ["…"], "grain": "month"}'}</code>). A{" "}
+              <code>metric</code> tile always binds a metric from the Metrics page.
             </p>
           </DialogHeader>
           <Textarea
