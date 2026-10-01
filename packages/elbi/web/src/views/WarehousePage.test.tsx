@@ -176,4 +176,104 @@ describe("SourceDetailPage", () => {
     expect(updateSchema).toHaveBeenCalledWith("sch1", { should_sync: true })
     expect(await screen.findByRole("switch")).toHaveAttribute("aria-checked", "true")
   })
+
+  const schema = (s: Partial<SourceDetail["schemas"][number]>) =>
+    ({
+      id: "sch1",
+      name: "activation_funnel",
+      table: "custom__activation_funnel",
+      shouldSync: true,
+      syncType: "full_refresh",
+      incrementalField: null,
+      incrementalFields: [],
+      status: "synced",
+      rowCount: 0,
+      lastError: null,
+      lastSyncedAt: "2026-10-01T09:00:00",
+      ...s,
+    }) as SourceDetail["schemas"][number]
+
+  const open = (schemas: SourceDetail["schemas"], s: Partial<SourceSummary> = {}) => {
+    vi.mocked(getSource).mockResolvedValue({
+      ...summary({
+        id: "a",
+        name: "posthog",
+        prefix: "custom",
+        lastSyncedAt: "2026-10-01T09:00:00",
+        ...s,
+      }),
+      schemas,
+    })
+    renderAt("/warehouse/sources/a")
+  }
+
+  const tooltipOn = async (trigger: HTMLElement) => {
+    await userEvent.hover(trigger)
+    return screen.findByRole("tooltip")
+  }
+
+  it("a sync that landed no rows reads as a warning, not as idle and synced", async () => {
+    open([schema({ rowCount: 0 })])
+    const headline = await screen.findByText("Synced, but no rows")
+    expect(headline).toHaveAttribute("data-variant", "warning")
+    expect(screen.queryByText("idle")).toBeNull()
+    const row = screen.getByText("custom__activation_funnel").closest("tr") as HTMLElement
+    expect(within(row).getByText("No rows")).toHaveAttribute("data-variant", "warning")
+    expect(await tooltipOn(headline)).toHaveTextContent(
+      "The last sync succeeded, but 1 table got no rows: custom__activation_funnel.",
+    )
+  })
+
+  it("a failed last run is the headline and is marked on the table that failed", async () => {
+    open(
+      [
+        schema({ status: "error", rowCount: 233, lastError: "cannot merge line items" }),
+        schema({ id: "sch2", table: "custom__charges", rowCount: 5 }),
+      ],
+      { status: "error", lastError: "cannot merge line items" },
+    )
+    expect(
+      await screen.findByText("Failed", { selector: "[data-slot=badge]:not(td *)" }),
+    ).toHaveAttribute("data-variant", "danger")
+    const failed = screen.getByText("custom__activation_funnel").closest("tr") as HTMLElement
+    const badge = within(failed).getByText("Failed")
+    expect(badge).toHaveAttribute("data-variant", "danger")
+    expect(await tooltipOn(badge)).toHaveTextContent(
+      "The last sync of this table failed: cannot merge line items",
+    )
+    const ok = screen.getByText("custom__charges").closest("tr") as HTMLElement
+    expect(within(ok).getByText("Synced")).toHaveAttribute("data-variant", "success")
+  })
+
+  it.each([
+    ["Method", "Full refresh reads every row and replaces the table on each sync."],
+    ["Rows", "Rows recorded by this table's last successful sync"],
+    [
+      "Table",
+      "Each table lands in the warehouse as custom__<stream>, for example custom__activation_funnel.",
+    ],
+    ["1 of 1 tables enabled", "Enabled tables are the ones a sync reads"],
+    [
+      "last synced 2026-10-01 09:00",
+      "When a sync last finished with every enabled table succeeding.",
+    ],
+  ])("%s explains itself on hover, with a docs link", async (label, text) => {
+    open([schema({ rowCount: 10 })])
+    const tip = await tooltipOn(await screen.findByRole("button", { name: label }))
+    expect(tip).toHaveTextContent(text)
+  })
+
+  it("the schedule explains that it runs only while the app does", async () => {
+    open([schema({ rowCount: 10 })])
+    const tip = await tooltipOn(await screen.findByRole("combobox", { name: "Sync frequency" }))
+    expect(tip).toHaveTextContent("Scheduled syncs run only while the app is running")
+    expect(tip).toHaveTextContent("Manual only means it syncs only when you click Sync now.")
+  })
+
+  it("a tooltip's docs link goes to the data-sources page", async () => {
+    open([schema({ rowCount: 10 })])
+    await userEvent.hover(await screen.findByRole("button", { name: "Method" }))
+    const links = await screen.findAllByRole("link", { name: "Learn more in the docs" })
+    expect(links[0]).toHaveAttribute("href", "https://docs.elbi.ai/data-sources/#incremental-sync")
+  })
 })

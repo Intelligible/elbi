@@ -43,8 +43,15 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { Explained, SYNC_DOCS, SYNC_HELP, tableNameHelp } from "@/components/warehouse/Explained"
 import { SourceIcon } from "@/components/warehouse/SourceIcon"
 import { type Dataset, getDatasets } from "@/lib/chat"
+import {
+  outcomeStatus,
+  type SyncStatus,
+  sourceSyncStatus,
+  tableSyncStatus,
+} from "@/lib/sync-status"
 import { EMPTY } from "@/lib/utils"
 import {
   type Catalog,
@@ -419,15 +426,16 @@ export function SourceDetailPage() {
   )
 }
 
-function SourceStatusBadge({ status }: { status: string }) {
-  if (status === "syncing")
-    return (
-      <Badge variant="info">
-        <Loader2 className="size-3 animate-spin" /> syncing
+// A sync state as a badge whose hover says what the state means here.
+function SyncStatusBadge({ status }: { status: SyncStatus }) {
+  return (
+    <Explained tip={status.explanation} docs={SYNC_DOCS.status}>
+      <Badge variant={status.variant}>
+        {status.health === "syncing" ? <Loader2 className="size-3 animate-spin" /> : null}
+        {status.label}
       </Badge>
-    )
-  if (status === "error") return <Badge variant="danger">error</Badge>
-  return <Badge variant="neutral">idle</Badge>
+    </Explained>
+  )
 }
 
 // -- Source catalog -----------------------------------------------------------
@@ -745,13 +753,18 @@ function SourceDetailView({
             <Badge variant="neutral" className="font-mono">
               {detail.sourceType}
             </Badge>
-            <SourceStatusBadge status={detail.status} />
+            <SyncStatusBadge status={sourceSyncStatus(detail)} />
           </div>
           <p className="mt-0.5 font-mono text-xs text-text-tertiary">
-            {enabled} of {detail.schemas.length} tables enabled
-            {detail.lastSyncedAt
-              ? ` · last synced ${detail.lastSyncedAt.slice(0, 16).replace("T", " ")}`
-              : " · never synced"}
+            <Explained tip={SYNC_HELP.enabled} docs={SYNC_DOCS.status}>
+              {enabled} of {detail.schemas.length} tables enabled
+            </Explained>
+            {" · "}
+            <Explained tip={SYNC_HELP.lastSynced} docs={SYNC_DOCS.status}>
+              {detail.lastSyncedAt
+                ? `last synced ${detail.lastSyncedAt.slice(0, 16).replace("T", " ")}`
+                : "never synced"}
+            </Explained>
           </p>
         </div>
         <Select
@@ -765,9 +778,11 @@ function SourceDetailView({
             }
           }}
         >
-          <SelectTrigger className="h-8 w-40 text-xs" aria-label="Sync frequency">
-            <SelectValue />
-          </SelectTrigger>
+          <Explained tip={SYNC_HELP.schedule} docs={SYNC_DOCS.schedule} asChild>
+            <SelectTrigger className="h-8 w-40 text-xs" aria-label="Sync frequency">
+              <SelectValue />
+            </SelectTrigger>
+          </Explained>
           <SelectContent>
             {FREQUENCY_LABELS.map((f) => (
               <SelectItem key={f.value} value={f.value}>
@@ -826,9 +841,24 @@ function SourceDetailView({
           <TableHeader>
             <TableRow>
               <TableHead className="px-4">Sync</TableHead>
-              <TableHead className="px-4">Table</TableHead>
-              <TableHead className="px-4">Method</TableHead>
-              <TableHead className="px-4">Rows</TableHead>
+              <TableHead className="px-4">
+                <Explained
+                  tip={tableNameHelp(detail.prefix, detail.schemas[0]?.table)}
+                  docs={SYNC_DOCS.tables}
+                >
+                  Table
+                </Explained>
+              </TableHead>
+              <TableHead className="px-4">
+                <Explained tip={SYNC_HELP.method} docs={SYNC_DOCS.method}>
+                  Method
+                </Explained>
+              </TableHead>
+              <TableHead className="px-4">
+                <Explained tip={SYNC_HELP.rows} docs={SYNC_DOCS.status}>
+                  Rows
+                </Explained>
+              </TableHead>
               <TableHead className="px-4">Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -846,13 +876,11 @@ function SourceDetailView({
           <ul className="space-y-1 text-sm">
             {outcomes.map((o) => (
               <li key={o.table} className="flex items-center gap-2">
-                {o.ok ? (
-                  <Badge variant="success">ok</Badge>
-                ) : (
-                  <Badge variant="danger">failed</Badge>
-                )}
+                <SyncStatusBadge status={outcomeStatus(o)} />
                 <span className="font-mono text-xs">{o.table}</span>
-                <span className="text-text-tertiary">{o.ok ? `${o.rows} rows` : o.error}</span>
+                <span className="text-text-tertiary">
+                  {o.ok ? `${o.rows.toLocaleString()} rows` : o.error}
+                </span>
               </li>
             ))}
           </ul>
@@ -935,19 +963,7 @@ function SchemaRow({
         {schema.rowCount ?? EMPTY}
       </TableCell>
       <TableCell className="px-4 py-2.5">
-        {schema.status === "synced" ? (
-          <Badge variant="success">synced</Badge>
-        ) : schema.status === "error" ? (
-          <Badge variant="danger" title={schema.lastError ?? undefined}>
-            error
-          </Badge>
-        ) : schema.status === "syncing" ? (
-          <Badge variant="info">
-            <Loader2 className="size-3 animate-spin" /> syncing
-          </Badge>
-        ) : (
-          <Badge variant="neutral">pending</Badge>
-        )}
+        <SyncStatusBadge status={tableSyncStatus(schema)} />
       </TableCell>
     </TableRow>
   )
