@@ -17,10 +17,13 @@ from sqlmodel import create_engine
 from elbi.db import (
     Derivation,
     Store,
+    derivation_row,
     migrate,
     open_store,
     sqlalchemy_url,
 )
+from elbi_core import Derivation as CoreDerivation
+from elbi_core import serve
 
 
 @pytest.fixture
@@ -299,6 +302,67 @@ def test_derivation_persist_and_list(store: Store) -> None:
     assert got.verdict == "sound"
     assert got.data_hash == "abc123"
     assert [d.name for d in store.list_derivations()] == ["x_on_y_effect"]
+
+
+def test_derivation_row_carries_every_field() -> None:
+    """The claim and display settings are taken from the derivation.
+
+    Every other value passed in is stored in its own column.
+    """
+    table = serve.table(title="Effect", max_rows=10)
+    derivation = CoreDerivation(
+        name="dose_effect",
+        compute=lambda ctx: None,
+        serve=table,
+        claim={"x": "dose", "y": "response"},
+        deps=("numpy",),
+    )
+
+    row = derivation_row(
+        derivation,
+        source="def dose_effect(ctx): ...",
+        origin="agent",
+        question="Does dose raise response?",
+        conversation_id="c1",
+        verdict="sound",
+        rendered="| slope |",
+        attestation={"checks": ["no_nulls"]},
+        assumptions=["dose is randomized"],
+        data_hash="abc",
+    )
+
+    assert row.name == "dose_effect"
+    assert row.claim_json is not None
+    assert json.loads(row.claim_json) == {"x": "dose", "y": "response"}
+    assert row.serve_json is not None
+    assert json.loads(row.serve_json) == {**table.to_manifest(), "deps": ["numpy"]}
+    assert row.source == "def dose_effect(ctx): ..."
+    assert row.origin == "agent"
+    assert row.question == "Does dose raise response?"
+    assert row.conversation_id == "c1"
+    assert row.verdict == "sound"
+    assert row.rendered == "| slope |"
+    assert row.attestation_json is not None
+    assert json.loads(row.attestation_json) == {"checks": ["no_nulls"]}
+    assert row.assumptions_json is not None
+    assert json.loads(row.assumptions_json) == ["dose is randomized"]
+    assert row.data_hash == "abc"
+
+
+def test_derivation_row_leaves_absent_fields_empty() -> None:
+    """No claim, no deps and no attestation or assumptions leave those columns null."""
+    table = serve.table()
+    derivation = CoreDerivation(name="plain", compute=lambda ctx: None, serve=table)
+
+    row = derivation_row(derivation, source="", origin="repo")
+
+    assert row.name == "plain"
+    assert row.claim_json is None
+    assert row.serve_json is not None
+    assert json.loads(row.serve_json) == table.to_manifest()
+    assert row.origin == "repo"
+    assert row.attestation_json is None
+    assert row.assumptions_json is None
 
 
 def test_derivation_save_replaces_same_name(store: Store) -> None:
