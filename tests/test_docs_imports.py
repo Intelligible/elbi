@@ -21,9 +21,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 #: A fenced Python block in Markdown.
 _BLOCK = re.compile(r"```python\n(.*?)```", re.S)
-#: An import of one of this project's packages, at the top level of a block.
+#: An import of one of this project's packages, at the top level of a block, on one
+#: line or parenthesized across several (``[^)]*`` crosses newlines without re.S).
 _IMPORT = re.compile(
-    r"^(from\s+elbi[\w.]*\s+import\s+[^\n(]+|import\s+elbi[\w.]*)$", re.M
+    r"^(from\s+elbi[\w.]*\s+import\s+\([^)]*\)"
+    r"|from\s+elbi[\w.]*\s+import\s+[^\n(]+"
+    r"|import\s+elbi[\w.]*)$",
+    re.M,
 )
 
 
