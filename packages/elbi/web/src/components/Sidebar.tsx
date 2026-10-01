@@ -1,6 +1,7 @@
 import {
   Activity,
   Bell,
+  BookOpen,
   Boxes,
   Download,
   ExternalLink,
@@ -49,6 +50,7 @@ import { Input } from "@/components/ui/input"
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll"
 import { type Theme, useTheme } from "@/hooks/useTheme"
 import { type ConversationSummary, exportConversation } from "@/lib/chat"
+import { docsUrl } from "@/lib/docs"
 import { getNotifications, onNotificationsChanged } from "@/lib/notifications"
 import { cn } from "@/lib/utils"
 
@@ -164,16 +166,7 @@ export function Sidebar({
             <Item to="/features" icon={Layers} label="Feature store" />
             {/* The real MLflow UI, served alongside the app; a separate SPA, so a plain
                 anchor into a new tab rather than a router link. */}
-            <a
-              href="/mlflow/"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/70 transition hover:bg-sidebar-accent"
-            >
-              <FlaskConical className="h-4 w-4 shrink-0" />
-              <span className="flex-1">MLflow</span>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40" />
-            </a>
+            <ExternalItem href="/mlflow/" icon={FlaskConical} label="MLflow" />
           </Section>
           <Section label="Analytics">
             <Item to="/metrics" icon={Gauge} label="Metrics" />
@@ -183,6 +176,9 @@ export function Sidebar({
             <Item to="/orchestration" icon={Workflow} label="Orchestration" />
             <Item to="/monitors" icon={Activity} label="Monitors" />
             <Item to="/catalog" icon={Network} label="Catalog & lineage" />
+          </Section>
+          <Section label="Help">
+            <ExternalItem href={docsUrl()} icon={BookOpen} label="Docs" />
           </Section>
         </nav>
       ) : (
@@ -535,5 +531,29 @@ function Item({
         </span>
       )}
     </NavLink>
+  )
+}
+
+// A nav row that leaves the app in a new tab, styled like an inactive Item.
+function ExternalItem({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string
+  icon: ComponentType<{ className?: string }>
+  label: string
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/70 transition hover:bg-sidebar-accent"
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="flex-1">{label}</span>
+      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40" />
+    </a>
   )
 }
