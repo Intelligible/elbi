@@ -37,7 +37,7 @@ run executes as a background job you can watch in the jobs bar), ask the chat, o
 call `train_automl` directly:
 
 ```python
-from elbi.ml import train_automl
+from elbi_core.ml import train_automl
 
 report = train_automl(
     rows,  # the dataset's records
@@ -93,7 +93,7 @@ version never displaces a champion silently: compare its held-out metrics and
 promote when they earn it.
 
 ```python
-from elbi.ml import ModelRegistry
+from elbi_core.ml import ModelRegistry
 
 registry = ModelRegistry("sqlite:///.elbi/mlflow.db")
 registry.models()  # every registered model, champion included

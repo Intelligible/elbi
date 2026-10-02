@@ -71,7 +71,7 @@ incidents, and creates monitors over your metrics and derivations. The same surf
 The detection itself is a small, pure SDK primitive:
 
 ```python
-from elbi import detect_anomaly
+from elbi_core import detect_anomaly
 
 verdict = detect_anomaly([100, 101, 99, 100, 102], value=500, sensitivity=3)
 verdict.anomalous  # True
