@@ -1,0 +1,429 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router-dom"
+import { describe, expect, it, vi } from "vitest"
+
+// The provenance trail links to the derivation a tile binds.
+vi.mock("./JsonEditor", () => ({
+  JsonEditor: ({
+    value,
+    label,
+    onChange,
+  }: {
+    value: string
+    label: string
+    onChange: (next: string) => void
+  }) => <textarea aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />,
+}))
+
+vi.mock("@/lib/dashboards", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/dashboards")>()),
+  derivationProvenance: vi.fn(async () => ({
+    derivation: ["analyses_clean"],
+    dataset: ["posthog_analyses"],
+  })),
+  derivationColumns: vi.fn(async () => ["subscriptions", "mrr_usd", "nominal"]),
+}))
+
+import type { Widget } from "@/lib/dashboards"
+import { derivationColumns, derivationProvenance } from "@/lib/dashboards"
+import { TileEditor, type TilePatch } from "./TileEditor"
+
+const pos = { x: 0, y: 0, w: 12, h: 6 }
+const textTile: Widget = { id: "note", type: "text", gridPos: pos, content: "before" }
+const boundTile: Widget = {
+  id: "mrr",
+  type: "metric",
+  gridPos: { x: 6, y: 2, w: 6, h: 3 },
+  title: "Subscriptions (all)",
+  bind: { derivation: "revenue_by_product" },
+  viz: { field: "subscriptions", agg: "sum" },
+}
+
+/**
+ * The column picker is filled from a request, and a Select opened before it lands keeps
+ * the list it opened with. Wait for the columns, then choose.
+ */
+async function columnsReady() {
+  await waitFor(() => expect(vi.mocked(derivationColumns)).toHaveBeenCalled())
+  await waitFor(() => expect(screen.getByLabelText("Column")).toBeInTheDocument())
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function pick(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
+  await user.click(screen.getByLabelText(label))
+  await user.click(await screen.findByRole("option", { name: option }))
+}
+
+function open(
+  widget: Widget | null,
+  props: { catalog?: string[]; onCancel?: () => void; onSave?: () => Promise<void> } = {},
+) {
+  const onSave = vi.fn<(id: string, patch: TilePatch) => Promise<void>>(
+    props.onSave ?? (async () => {}),
+  )
+  const rendered = render(
+    <MemoryRouter>
+      <TileEditor
+        widget={widget}
+        catalog={props.catalog ?? ["revenue_by_product", "collected_revenue"]}
+        columns={24}
+        dark={false}
+        onCancel={props.onCancel ?? (() => {})}
+        onSave={onSave}
+      />
+    </MemoryRouter>,
+  )
+  return { onSave, ...rendered }
+}
+
+describe("TileEditor", () => {
+  it("keeps the dialog open with the server's reason when a save is refused", async () => {
+    const user = userEvent.setup()
+    const onCancel = vi.fn()
+    open(textTile, {
+      onCancel,
+      onSave: async () => {
+        throw new Error("widget 'note': unknown type 'txt'")
+      },
+    })
+
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("unknown type 'txt'")
+    expect(screen.getByRole("dialog")).toBeInTheDocument()
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
+  it("edits a static text tile's title and content", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(textTile)
+
+    await user.type(screen.getByLabelText("Title"), "Caveat")
+    const content = screen.getByLabelText("Content")
+    await user.clear(content)
+    await user.type(content, "after")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith("note", {
+      title: "Caveat",
+      content: "after",
+      gridPos: pos,
+    })
+  })
+
+  it("shows a metric's existing column and aggregate", () => {
+    open(boundTile)
+
+    expect(screen.getByLabelText("Column")).toHaveTextContent("subscriptions")
+    expect(screen.getByLabelText("Aggregate")).toHaveTextContent("Sum")
+  })
+
+  it("offers the columns the bound derivation actually returns", async () => {
+    const user = userEvent.setup()
+    open(boundTile)
+    await columnsReady()
+
+    await user.click(screen.getByLabelText("Column"))
+
+    const offered = (await screen.findAllByRole("option")).map((o) => o.textContent)
+    expect(offered).toEqual(["subscriptions", "mrr_usd", "nominal"])
+  })
+
+  it("keeps a column the derivation no longer returns, rather than blanking it", async () => {
+    const user = userEvent.setup()
+    const stale: Widget = { ...boundTile, viz: { field: "gone_away", agg: "sum" } }
+    open(stale)
+    await columnsReady()
+
+    expect(screen.getByLabelText("Column")).toHaveTextContent("gone_away")
+    await user.click(screen.getByLabelText("Column"))
+    const offered = (await screen.findAllByRole("option")).map((o) => o.textContent)
+    expect(offered[0]).toBe("gone_away")
+  })
+
+  it("edits a metric's column", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    await pick(user, "Column", "mrr_usd")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      "mrr",
+      expect.objectContaining({ viz: { field: "mrr_usd", agg: "sum" } }),
+    )
+  })
+
+  it("resizes a tile without touching its position", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    const width = screen.getByLabelText("Width")
+    await user.clear(width)
+    await user.type(width, "12")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      "mrr",
+      expect.objectContaining({ gridPos: { x: 6, y: 2, w: 12, h: 3 } }),
+    )
+  })
+
+  it("clamps a width wider than the page", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    const width = screen.getByLabelText("Width")
+    await user.clear(width)
+    await user.type(width, "99")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave.mock.calls[0]?.[1].gridPos?.w).toBe(24)
+  })
+
+  it("rebinds a data tile rather than offering it a content box", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    expect(screen.queryByLabelText("Content")).toBeNull()
+    await pick(user, "Derivation", "collected_revenue")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      "mrr",
+      expect.objectContaining({ derivation: "collected_revenue" }),
+    )
+  })
+
+  it("warns about a binding nothing provides, and keeps it selectable", () => {
+    // A tile bound to something the catalog no longer lists: the name has to survive
+    // opening the dialog, or Save would quietly clear it.
+    open(
+      { ...boundTile, bind: { derivation: "no_such_derivation" } },
+      {
+        catalog: ["revenue_by_product"],
+      },
+    )
+
+    expect(screen.getByText(/Nothing named/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Derivation")).toHaveTextContent("no_such_derivation")
+  })
+
+  it("shows the tile it was opened on, not the previous one", () => {
+    const { rerender } = open(textTile)
+    expect(screen.getByLabelText("Content")).toHaveValue("before")
+
+    rerender(
+      <MemoryRouter>
+        <TileEditor
+          widget={boundTile}
+          catalog={[]}
+          columns={24}
+          dark={false}
+          onCancel={() => {}}
+          onSave={async () => {}}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Subscriptions (all)")
+    expect(screen.queryByLabelText("Content")).toBeNull()
+  })
+
+  it("comes back from the Lineage tab to the fields", async () => {
+    const user = userEvent.setup()
+    open(textTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+
+    expect(screen.getByRole("button", { name: "Fields" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByLabelText("Content")).toHaveValue("before")
+  })
+
+  it("keeps a field edit across a visit to the Lineage tab", async () => {
+    const user = userEvent.setup()
+    open(textTile)
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+
+    await user.type(screen.getByLabelText("Title"), "Caveat")
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Caveat")
+  })
+
+  it("never fills one tile's fields from the JSON of the tile opened before it", async () => {
+    // The dashboard keeps one editor mounted and hands it each tile in turn.
+    const user = userEvent.setup()
+    const onSave = vi.fn(async () => {})
+    const editor = (widget: Widget) => (
+      <MemoryRouter>
+        <TileEditor
+          widget={widget}
+          catalog={["revenue_by_product"]}
+          columns={24}
+          dark={false}
+          onCancel={() => {}}
+          onSave={onSave}
+        />
+      </MemoryRouter>
+    )
+    const { rerender } = render(editor(boundTile))
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+    rerender(editor(textTile))
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+    await user.click(screen.getByRole("button", { name: "Fields" }))
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      "note",
+      expect.objectContaining({ title: "", content: "before" }),
+    )
+  })
+
+  it("renders nothing when no tile is open", () => {
+    const { container } = open(null)
+    expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe("the JSON tab", () => {
+  it("shows the tile exactly as the spec stores it", async () => {
+    const user = userEvent.setup()
+    open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+
+    const config = JSON.parse(
+      (screen.getByLabelText("This tile's config") as HTMLTextAreaElement).value,
+    )
+    expect(config.id).toBe("mrr")
+    expect(config.bind).toEqual({ derivation: "revenue_by_product" })
+    expect(config.viz).toEqual({ field: "subscriptions", agg: "sum" })
+  })
+
+  it("carries an unsaved field edit into the JSON", async () => {
+    const user = userEvent.setup()
+    open(boundTile)
+    await columnsReady()
+
+    await pick(user, "Column", "mrr_usd")
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+
+    const config = JSON.parse(
+      (screen.getByLabelText("This tile's config") as HTMLTextAreaElement).value,
+    )
+    expect(config.viz.field).toBe("mrr_usd")
+  })
+
+  it("saves the whole widget, so a removed key is really removed", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+    // fireEvent, not user.type: userEvent reads `{` as a key descriptor.
+    fireEvent.change(screen.getByLabelText("This tile's config"), {
+      target: {
+        value: JSON.stringify({ id: "mrr", type: "metric", gridPos: { x: 6, y: 2, w: 6, h: 3 } }),
+      },
+    })
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith("mrr", {
+      widget: { id: "mrr", type: "metric", gridPos: { x: 6, y: 2, w: 6, h: 3 } },
+    })
+  })
+
+  it("refuses to save text that is not JSON, and says why", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+    fireEvent.change(screen.getByLabelText("This tile's config"), {
+      target: { value: "{ not json" },
+    })
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).not.toHaveBeenCalled()
+    expect(screen.getByRole("alert")).toBeInTheDocument()
+  })
+
+  it("keeps the id even when the text changes it", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+    fireEvent.change(screen.getByLabelText("This tile's config"), {
+      target: {
+        value: JSON.stringify({
+          id: "renamed",
+          type: "metric",
+          gridPos: { x: 0, y: 0, w: 6, h: 3 },
+        }),
+      },
+    })
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave.mock.calls[0]?.[1].widget?.id).toBe("mrr")
+  })
+})
+
+describe("the Lineage tab", () => {
+  it("links a bound tile to its derivation and what that reads", async () => {
+    const user = userEvent.setup()
+    open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(await screen.findByRole("link", { name: "revenue_by_product" })).toHaveAttribute(
+      "href",
+      "/derivations/revenue_by_product",
+    )
+    expect(await screen.findByRole("link", { name: "analyses_clean" })).toHaveAttribute(
+      "href",
+      "/derivations/analyses_clean",
+    )
+  })
+
+  it("says a tile that binds nothing reads nothing", async () => {
+    const user = userEvent.setup()
+    open(textTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(screen.getByText(/carries its own content/)).toBeInTheDocument()
+  })
+
+  it("does not say nothing is upstream before it knows", async () => {
+    const user = userEvent.setup()
+    vi.mocked(derivationProvenance).mockReturnValueOnce(new Promise(() => {}))
+    open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(screen.getByText(/Loading what this derivation reads/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing upstream/)).toBeNull()
+  })
+
+  it("says the lineage could not be loaded, rather than that there is none", async () => {
+    const user = userEvent.setup()
+    vi.mocked(derivationProvenance).mockRejectedValueOnce(new Error("500"))
+    open(boundTile)
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(await screen.findByText(/Could not load what this derivation reads/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing upstream/)).toBeNull()
+  })
+
+  it("stays out of the way until asked for", () => {
+    // A panel over the fields fetched on every open; a tab fetches when opened.
+    open(boundTile)
+
+    expect(screen.queryByText(/Computed by/)).toBeNull()
+  })
+})
