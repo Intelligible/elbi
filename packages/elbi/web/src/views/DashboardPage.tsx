@@ -1,4 +1,13 @@
-import { Code2, Download, LayoutDashboard, RefreshCw, Rocket } from "lucide-react"
+import {
+  ChevronDown,
+  Code2,
+  Download,
+  FileCode2,
+  FileJson,
+  LayoutDashboard,
+  RefreshCw,
+  Rocket,
+} from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import GridLayout, { type Layout, type LayoutItem, WidthProvider } from "react-grid-layout/legacy"
 import { useNavigate, useParams } from "react-router-dom"
@@ -20,8 +29,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useDarkTheme } from "@/hooks/useTheme"
-import { dashboardExportUrl } from "@/lib/chat"
+import { dashboardExportUrl, dashboardSnapshotUrl } from "@/lib/chat"
 import type { Dashboard, DashboardSpec, Variable, Widget, WidgetData } from "@/lib/dashboards"
 import {
   bindableDerivations,
@@ -354,20 +370,45 @@ function DashboardBoard({ id }: { id: string }) {
             <Button variant="ghost" size="sm" onClick={() => void resolve()}>
               <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
             </Button>
-            {/* Resolves every page to capture what the dashboard actually shows, so
-                this one is genuinely slow -- and a plain <a download> shows no
-                progress. The title says so before the click, not after. */}
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={dashboardExportUrl(id)}
-                download
-                title="Runs every page's widgets to capture current values; this can take a few seconds"
-                aria-label="Export this dashboard's record: spec, saved versions, and current values"
-              >
-                <Download className="size-4" />
-                Export record
-              </a>
-            </Button>
+            {/* Both exports resolve every page to capture what the dashboard actually
+                shows, so they are genuinely slow -- and a plain <a download> shows no
+                progress. The label says so before the click, not after. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="size-4" />
+                  Export
+                  <ChevronDown className="size-3.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel className="text-xs font-normal text-text-tertiary">
+                  Runs every page's widgets; can take a few seconds
+                </DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <a href={dashboardSnapshotUrl(id)} download className="items-start">
+                    <FileCode2 className="mt-0.5 size-4" />
+                    <span className="flex flex-col">
+                      <span>Shareable page (.html)</span>
+                      <span className="text-xs text-text-tertiary">
+                        Read-only snapshot anyone can open, no app access needed
+                      </span>
+                    </span>
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href={dashboardExportUrl(id)} download className="items-start">
+                    <FileJson className="mt-0.5 size-4" />
+                    <span className="flex flex-col">
+                      <span>Record (.json)</span>
+                      <span className="text-xs text-text-tertiary">
+                        Spec, saved versions, and current values
+                      </span>
+                    </span>
+                  </a>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" size="sm" onClick={openEditor}>
               <Code2 className="size-4" />
               Edit spec

@@ -450,6 +450,12 @@ export function dashboardExportUrl(id: string): string {
   return `/api/exports/dashboards/${encodeURIComponent(id)}`
 }
 
+// The same resolution as the record, rendered as one self-contained, read-only page:
+// what `elbi snapshot` writes, for sharing with someone who has no access to the app.
+export function dashboardSnapshotUrl(id: string): string {
+  return `/api/exports/dashboards/${encodeURIComponent(id)}/snapshot`
+}
+
 export function metricExportUrl(name: string): string {
   return `/api/exports/metrics/${encodeURIComponent(name)}`
 }

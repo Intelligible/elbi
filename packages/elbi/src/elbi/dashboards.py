@@ -24,7 +24,7 @@ from elbi_core import DashboardSpec, Runner
 from elbi_core.dashboard import MetricResolver, resolve_options, resolve_page
 from elbi_core.errors import ElbiError, SpecValidationError
 
-from .db import Dashboard, DashboardSubscription, Store
+from .db import Dashboard, DashboardSubscription, Store, _iso_utc
 from .duplicate import copy_identifier, copy_label
 
 
@@ -371,7 +371,7 @@ def _summary(row: Dashboard) -> dict[str, Any]:
         "published_spec": _load(row.published_spec_json)
         if row.published_spec_json
         else None,
-        "updated_at": row.updated_at.isoformat(),
+        "updated_at": _iso_utc(row.updated_at),
     }
 
 
