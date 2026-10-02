@@ -54,7 +54,7 @@ jobs:
           # `cache-dependency-path` is absent too -- naming it is enough to turn caching
           # back on.
       - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # No cache on the release path. A cache is writable by anything that ran before
           # it, so a poisoned entry would reach the artifacts this workflow signs and
@@ -87,7 +87,7 @@ jobs:
           name: dist
           path: dist/
       - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # No cache on the release path. A cache is writable by anything that ran before
           # it, so a poisoned entry would reach the artifacts this workflow signs and

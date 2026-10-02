@@ -300,8 +300,9 @@ class Widget:
     """A single tile on a page.
 
     ``metric``/``chart``/``map``/``table`` widgets carry a :class:`Bind`; a ``text``
-    widget carries markdown ``content``; a ``filter`` widget names the ``variable``
-    whose control it renders.
+    widget carries markdown ``content``, or a :class:`Bind` naming a derivation that
+    returns markdown; a ``filter`` widget names the ``variable`` whose control it
+    renders.
     """
 
     id: str
@@ -316,8 +317,15 @@ class Widget:
 
     @property
     def is_data_bound(self) -> bool:
-        """Whether this widget draws its data from a derivation."""
-        return self.type in DATA_WIDGET_TYPES
+        """Whether this widget draws its data from a derivation.
+
+        A ``text`` tile usually carries its own prose, but naming a derivation makes it
+        the one governed escape hatch from the fixed widget types: a bespoke visual
+        belongs in a derivation returning markdown, which has to be run to be shown.
+        """
+        return self.type in DATA_WIDGET_TYPES or (
+            self.type == "text" and self.bind is not None
+        )
 
     def to_manifest(self) -> dict[str, Any]:
         """Serialize to a spec ``widget`` object, omitting unset fields."""
@@ -587,10 +595,18 @@ def _widget_errors(
 
     if wtype in DATA_WIDGET_TYPES and "bind" not in widget:
         messages.append(f"{where}: a {wtype!r} widget requires 'bind'")
-    if wtype in ("text", "filter") and "bind" in widget:
-        messages.append(f"{where}: a {wtype!r} widget may not have 'bind'")
-    if wtype == "text" and "content" not in widget:
-        messages.append(f"{where}: a 'text' widget requires 'content'")
+    if wtype == "filter" and "bind" in widget:
+        messages.append(f"{where}: a 'filter' widget may not have 'bind'")
+    # A text tile's body is its own prose or a derivation returning markdown. Both
+    # would leave which one renders decided somewhere other than the spec.
+    if wtype == "text":
+        has = ("content" in widget, "bind" in widget)
+        if has == (False, False):
+            messages.append(f"{where}: a 'text' widget requires 'content' or 'bind'")
+        elif has == (True, True):
+            messages.append(
+                f"{where}: a 'text' widget takes 'content' or 'bind', not both"
+            )
     if wtype == "filter":
         var = widget.get("variable")
         if var is None:

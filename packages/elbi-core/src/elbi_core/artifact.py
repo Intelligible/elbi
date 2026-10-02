@@ -15,9 +15,13 @@ agent. It is for internal derivations: a training derivation returns
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 from typing import Any, Literal
 
 ArtifactKind = Literal["table", "markdown", "json", "text", "opaque"]
+
+#: How many rows of a table an interactive display draws before it stops and says so.
+DISPLAY_ROWS = 1000
 
 
 @dataclass(frozen=True)
@@ -51,6 +55,34 @@ class Artifact:
         """A plain-text artifact."""
         return cls(kind="text", value=str(text))
 
+    def _repr_html_(self) -> str | None:
+        """Draw a table as one, so a notebook echoing an artifact shows its rows.
+
+        ``None`` for every other kind, which the display protocol reads as "no HTML
+        rendering, use another": markdown has its own hook below, and text, JSON and
+        opaque artifacts are better served by their repr than by invented markup.
+        """
+        if self.kind != "table":
+            return None
+        rows: list[dict[str, Any]] = self.value
+        if not rows:
+            return "<em>no rows</em>"
+        columns = list(dict.fromkeys(key for row in rows for key in row))
+        head = "".join(f"<th>{_cell(column)}</th>" for column in columns)
+        body = "".join(
+            "<tr>" + "".join(f"<td>{_cell(row.get(c))}</td>" for c in columns) + "</tr>"
+            for row in rows[:DISPLAY_ROWS]
+        )
+        table = f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+        if len(rows) <= DISPLAY_ROWS:
+            return table
+        note = f"showing {DISPLAY_ROWS:,} of {len(rows):,} rows"
+        return f"{table}<em>{note}</em>"
+
+    def _repr_markdown_(self) -> str | None:
+        """The document itself for markdown; ``None`` for every other kind."""
+        return self.value if self.kind == "markdown" else None
+
     @classmethod
     def opaque(cls, value: Any) -> Artifact:
         """An opaque object artifact (e.g. a trained model) for internal use.
@@ -60,6 +92,11 @@ class Artifact:
         serve contract).
         """
         return cls(kind="opaque", value=value)
+
+
+def _cell(value: object) -> str:
+    """One table cell's text, escaped, with ``None`` shown as an empty cell."""
+    return escape("" if value is None else str(value))
 
 
 def coerce_artifact(value: Any) -> Artifact:

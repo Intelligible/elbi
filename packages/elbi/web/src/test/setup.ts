@@ -43,14 +43,10 @@ if (typeof window !== "undefined") {
 
   // jsdom ships no ResizeObserver, and the conversation's stick-to-bottom scroller attaches
   // one to its viewport on mount. A no-op is enough: nothing in a test has a size to observe.
-  // It takes the callback like the real one, or CodeQL resolves every `new ResizeObserver(cb)`
-  // to this stub and reports the callback as a superfluous argument.
   if (!globalThis.ResizeObserver) {
     globalThis.ResizeObserver = class {
-      callback: ResizeObserverCallback
-      constructor(callback: ResizeObserverCallback) {
-        this.callback = callback
-      }
+      // Takes the callback a real one does, so a caller passing it is not flagged.
+      constructor(readonly callback: ResizeObserverCallback) {}
       observe() {}
       unobserve() {}
       disconnect() {}

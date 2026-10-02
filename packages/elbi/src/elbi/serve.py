@@ -7,13 +7,11 @@ The LLM client reads ``ANTHROPIC_API_KEY`` from the environment (bring-your-own-
 
 from __future__ import annotations
 
-import inspect
 import json
 import logging
 import os
 import shutil
 import subprocess
-import textwrap
 import threading
 import time
 import urllib.request
@@ -41,6 +39,7 @@ from elbi_core import (
 )
 from elbi_core import cache as cache_policies
 from elbi_core import serve as serve_builders
+from elbi_core._source import compute_source
 from elbi_core.cache import LocalCacheStore, derivation_tag
 from elbi_core.config import DataBindings, DatasetSpec, SourceSpec
 from elbi_core.data import Table
@@ -64,8 +63,7 @@ from .compute import (
     session_cost,
 )
 from .dashboards import DashboardService
-from .db import Derivation as DerivationRow
-from .db import PromotedQuery, open_store
+from .db import PromotedQuery, derivation_row, open_store
 from .env import env
 from .explore import WAREHOUSE_SOURCE, ExploreService
 from .extensions import service_class
@@ -402,13 +400,17 @@ def build(
         """The Python source of a repo derivation's compute, best-effort.
 
         Repo derivations carry their logic as a function (unlike agent-authored ones,
-        whose source is stored text), so it is read back from the function object for
-        display. Empty when the source is unavailable (a REPL- or C-defined compute).
+        whose source is stored text), so it is read back from the function object.
+
+        With the module-level context it depends on: the imports, constants, contracts
+        and helpers a derivation reads all live outside the function, so the function
+        alone is something to look at rather than something to run. Anything that pastes
+        this where it will execute (opening a derivation in a notebook) needs the
+        whole of it. Sibling derivations are left out, being their own records.
+
+        Empty when the source is unavailable (a REPL- or C-defined compute).
         """
-        try:
-            return textwrap.dedent(inspect.getsource(derivation.compute))
-        except (OSError, TypeError):
-            return ""
+        return compute_source(derivation.compute)
 
     def _sync_repo_derivations() -> None:
         """Record repo-authored derivations in the store so the UI reads them there.
@@ -421,19 +423,14 @@ def build(
         """
         # A human derivation is trusted (certified) but never oracle-run, so it carries
         # no soundness verdict: the same convention the catalog uses (verdict null for a
-        # human derivation). ``origin`` marks it as repo-authored for the UI.
+        # human derivation). ``origin`` marks it as repo-authored for the UI. The
+        # rendered output is filled in lazily on view, since producing it means running
+        # the derivation against bound data.
         rows = [
-            DerivationRow(
-                name=d.name,
-                question=(d.description or "").strip(),
-                # Mirror the compute source and serve contract so the detail view
-                # shows them; the rendered output is filled in lazily on view, since
-                # producing it means running the derivation against bound data.
+            derivation_row(
+                d,
                 source=_compute_source(d),
-                serve_json=(
-                    json.dumps(d.serve.to_manifest()) if d.serve is not None else None
-                ),
-                verdict=None,
+                question=(d.description or "").strip(),
                 origin="repo",
             )
             for d in project.registry
@@ -682,34 +679,27 @@ def build(
             project.authored_store.load_one(name, project.registry)
         return True
 
-    def derivation_on_author(name: str, record: dict[str, Any]) -> bool:
+    def derivation_on_author(derivation: Derivation, record: dict[str, Any]) -> bool:
         """Persist an MCP-authored derivation as a governed store row.
 
-        The MCP layer has no database, so ``propose_derivation`` calls back here
-        with the outcome's fields; this writes the same row shape the chat and
-        explore-promote paths do (``authoring.py``), which is what makes an
-        MCP-authored derivation visible in /api/derivations and holdable by
-        trash. ``conversation_id`` is synthetic, the way explore's is.
+        The MCP layer has no database, so ``propose_derivation`` calls back here with
+        the derivation and a record of what only that layer knows: the source,
+        question, verdict, rendered output and attestation. The row is built with
+        :func:`derivation_row`, as on every path that records a derivation, which is
+        what makes an MCP-authored derivation visible in /api/derivations and holdable
+        by trash. ``conversation_id`` is synthetic, the way explore's is.
         """
         attestation = record.get("attestation") or {}
         store.save_derivation(
-            DerivationRow(
-                name=name,
+            derivation_row(
+                derivation,
+                source=str(record.get("source") or ""),
+                origin="agent",
                 conversation_id="mcp",
                 question=record.get("question") or "Proposed via MCP",
-                source=str(record.get("source") or ""),
-                claim_json=(
-                    json.dumps(record["claim"]) if record.get("claim") else None
-                ),
-                serve_json=json.dumps(
-                    {
-                        "format": record.get("format") or "table",
-                        "deps": list(record.get("deps") or []),
-                    }
-                ),
                 verdict=record.get("verdict"),
                 rendered=str(record.get("rendered") or ""),
-                attestation_json=json.dumps(attestation) if attestation else None,
+                attestation=attestation,
                 data_hash=(
                     attestation.get("data_hash")
                     or (attestation.get("contract") or {}).get("data_hash")
@@ -915,13 +905,14 @@ def build(
         """A dataset's columns and row count, read from the warehouse table."""
         return warehouse_service.table_shape(name)
 
-    def register_external_derivation(name: str, source_id: str, sql: str) -> None:
+    def register_external_derivation(name: str, source_id: str, sql: str) -> Derivation:
         """Register a trusted in-process derivation reading a source or the warehouse.
 
         The ``source_id`` is a registered external data source or the synthetic
         :data:`WAREHOUSE_SOURCE`. The read reaches state the sandbox cannot, so it is
         human-origin, in-process, and cache-disabled; served as a table. Re-registering
-        replaces any earlier derivation of the same name.
+        replaces any earlier derivation of the same name. Returns the registered
+        derivation.
         """
 
         def compute(ctx: Context) -> Artifact:
@@ -962,6 +953,7 @@ def build(
         if name in project.registry:
             project.registry.remove(name)
         project.registry.register(derivation)
+        return derivation
 
     def promote_external(name: str, sql: str, source_id: str) -> dict[str, Any]:
         """Promote an external-source or warehouse query to a trusted derivation.
@@ -978,7 +970,7 @@ def build(
             if source is None:
                 return {"ok": False, "error": f"data source {source_id!r} not found"}
             source_label = f"data source {source.name!r}"
-        register_external_derivation(name, source_id, sql)
+        derivation = register_external_derivation(name, source_id, sql)
         try:
             rendered = make_runner().serve(name)
         except ElbiError as exc:
@@ -990,17 +982,16 @@ def build(
             PromotedQuery(name=name, source_id=source_id, sql=sql)
         )
         store.save_derivation(
-            DerivationRow(
-                name=name,
-                conversation_id="explore",
-                question=f"Promoted from Explore ({source_label})",
+            derivation_row(
+                derivation,
                 source=(
                     f"# Trusted in-process derivation reading {source_label}.\n\n"
                     f"{sql}\n"
                 ),
-                serve_json=json.dumps({"format": "table"}),
-                rendered=rendered,
                 origin="human",
+                conversation_id="explore",
+                question=f"Promoted from Explore ({source_label})",
+                rendered=rendered,
             )
         )
         return {
