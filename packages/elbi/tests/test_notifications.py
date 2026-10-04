@@ -241,3 +241,22 @@ def test_notification_email_subject_strips_newlines() -> None:
         title="line\r\nBcc: evil@x.com", body="", event_type="run.failed"
     )
     assert "\n" not in subject and "\r" not in subject
+
+
+def test_a_failed_monitor_source_notifies_with_its_reason(store: Store) -> None:
+    notifications.create_notifications(
+        store,
+        "metric.source_failed",
+        {
+            "event": "metric.source_failed",
+            "monitor_id": "m1",
+            "monitor": "p95",
+            "reason": "could not read 'p95': warehouse unreachable",
+        },
+    )
+    [row] = store.list_notifications()
+    assert row.title == "Monitor 'p95' could not read its source"
+    assert row.body == "could not read 'p95': warehouse unreachable"
+    assert (row.target_type, row.target_id) == ("metric_monitor", "m1")
+    # Emailed by default, as an anomaly is: a monitor that cannot read is not watching.
+    assert notifications.effective_prefs(store)["metric.source_failed"] == (True, True)

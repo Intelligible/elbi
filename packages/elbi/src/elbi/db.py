@@ -1058,7 +1058,9 @@ class MonitorIncident(SQLModel, table=True):
     """An open (or resolved) run of anomalies for a monitor, so one alert fires per run.
 
     Consecutive anomalous snapshots fold into one incident rather than one alert each;
-    ``closed_at`` is set when values return to normal.
+    ``closed_at`` is set when values return to normal. ``cause`` is
+    ``"source_failed"`` for a run of checks that could not read the source at all, and
+    ``None`` for anomalies.
     """
 
     __tablename__ = "monitor_incident"
@@ -1072,6 +1074,7 @@ class MonitorIncident(SQLModel, table=True):
     peak_score: float | None = Field(default=None)
     reason: str = ""
     snapshots: int = 1
+    cause: str | None = Field(default=None)
 
 
 class AuditEvent(SQLModel, table=True):
@@ -4930,6 +4933,7 @@ def migrate(engine: Engine) -> None:
         _migrate_add_column(conn, "dashboard", "copied_from", "VARCHAR")
         _migrate_add_column(conn, "saved_query", "copied_from", "VARCHAR")
         _migrate_add_column(conn, "metric", "copied_from", "VARCHAR")
+        _migrate_add_column(conn, "monitor_incident", "cause", "VARCHAR")
         for _trash_table in (
             "notebook",
             "notebook_folder",

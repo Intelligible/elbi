@@ -43,6 +43,12 @@ normal, which fires a recovery alert. Alerts are delivered through the configure
 recorded in the audit log; each payload carries the value, the expected band, the reason,
 and the source's oracle verdict.
 
+A check that cannot read its source at all (the metric query fails, or the derivation
+raises) opens an incident too and alerts as `metric.source_failed`, whose payload names
+the monitor, its target and the error. A run of failures raises one alert, and the next
+readable value closes it: as a `metric.recovered` alert when the value is normal, or as a
+new anomaly when it is not. Failure alerts are emailed by default, like anomalies.
+
 ## In-app notifications
 
 Every alert also lands as an **in-app notification**: anomalies and recoveries from a

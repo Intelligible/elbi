@@ -7,6 +7,11 @@ run of bad values raises one alert, not one per check; the incident closes when 
 return to normal. Because a monitor only watches a certified metric or derivation, an
 alert carries the source's oracle verdict -- the moved number was a verified one.
 
+A source that cannot be read at all is an incident too, raised through the same alert
+path: a monitor whose metric query or derivation stops evaluating would otherwise go
+quiet, which reads exactly like a healthy value. Consecutive failures fold into one
+incident, and the next readable value closes it, as a recovery or as a fresh anomaly.
+
 The value source, the certified gate, and alert delivery are injected by the app; this
 service owns the snapshot, detection, and incident bookkeeping.
 """
@@ -19,7 +24,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from elbi_core import detect_anomaly
-from elbi_core.errors import ElbiError
 
 from .db import MetricMonitor, MetricSnapshot, MonitorIncident, Store
 from .wire import Monitor as WireMonitor
@@ -30,6 +34,11 @@ from .wire import MonitorSnapshot as WireMonitorSnapshot
 #: Alert payloads carry one of these events.
 ANOMALY_DETECTED = "metric.anomaly_detected"
 RECOVERED = "metric.recovered"
+SOURCE_FAILED = "metric.source_failed"
+
+#: The ``cause`` of an incident opened because the source could not be read. An anomaly
+#: incident carries ``None``, which is also what rows predating the column hold.
+_SOURCE_FAILED_CAUSE = "source_failed"
 
 _KINDS = ("metric", "derivation")
 
@@ -200,11 +209,22 @@ class MonitorService:
         return self.run(monitor)
 
     def run(self, monitor: MetricMonitor) -> dict[str, Any]:
-        """Run one check of ``monitor`` (used by the scheduler and by ``check``)."""
+        """Run one check of ``monitor`` (used by the scheduler and by ``check``).
+
+        Raises:
+            MonitorError: if the source could not be read, after alerting on it.
+        """
         try:
             value = float(self._read_value(monitor))
-        except (ElbiError, KeyError, TypeError, ValueError) as exc:
-            raise MonitorError(f"could not read {monitor.target!r}: {exc}") from exc
+        except Exception as exc:
+            # Any failure to evaluate the source counts, not only the library's own
+            # error types: a metric query raises its service's error, and an exception
+            # escaping here would also stop the scheduler's pass over later monitors.
+            error = MonitorError(f"could not read {monitor.target!r}: {exc}")
+            failure = self._source_failed(monitor, str(error))
+            if failure is not None and self._on_alert is not None:
+                self._on_alert(failure)
+            raise error from exc
         # History oldest-to-newest, excluding the value we are about to record.
         recent = self._store.list_metric_snapshots(monitor.id, monitor.window)
         history = [s.value for s in reversed(recent)]
@@ -257,6 +277,14 @@ class MonitorService:
         source_verdict: str | None,
     ) -> dict[str, Any] | None:
         open_incident = self._store.open_incident(monitor.id)
+        if open_incident is not None and open_incident.cause == _SOURCE_FAILED_CAUSE:
+            # The source reads again, which ends the failure. A normal value is a
+            # recovery; an anomalous one opens an incident of its own below.
+            open_incident.closed_at = _now()
+            self._store.save_incident(open_incident)
+            if not verdict.anomalous:
+                return self._alert(monitor, RECOVERED, verdict, value, source_verdict)
+            open_incident = None
         if verdict.anomalous:
             if open_incident is None:
                 self._store.save_incident(
@@ -287,6 +315,38 @@ class MonitorService:
             self._store.save_incident(open_incident)
             return self._alert(monitor, RECOVERED, verdict, value, source_verdict)
         return None
+
+    def _source_failed(
+        self, monitor: MetricMonitor, reason: str
+    ) -> dict[str, Any] | None:
+        """Record a failed read as an incident; the alert to raise, if it is new.
+
+        A failure already open absorbs this one without a second alert. An open anomaly
+        is closed first: its value can no longer be judged, so the failure is now the
+        problem to report, and a later anomaly alerts afresh.
+        """
+        open_incident = self._store.open_incident(monitor.id)
+        if open_incident is not None and open_incident.cause == _SOURCE_FAILED_CAUSE:
+            open_incident.snapshots += 1
+            open_incident.reason = reason
+            self._store.save_incident(open_incident)
+            return None
+        if open_incident is not None:
+            open_incident.closed_at = _now()
+            self._store.save_incident(open_incident)
+        self._store.save_incident(
+            MonitorIncident(
+                monitor_id=monitor.id, reason=reason, cause=_SOURCE_FAILED_CAUSE
+            )
+        )
+        return {
+            "event": SOURCE_FAILED,
+            "monitor_id": monitor.id,
+            "monitor": monitor.name,
+            "target_kind": monitor.target_kind,
+            "target": monitor.target,
+            "reason": reason,
+        }
 
     def _alert(
         self,

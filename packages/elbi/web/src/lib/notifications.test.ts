@@ -58,6 +58,7 @@ describe("EVENT_TYPE_LABELS", () => {
       "training.failed",
       "metric.anomaly_detected",
       "metric.recovered",
+      "metric.source_failed",
       "run.failed",
       "run.slow",
       "drift.detected",
