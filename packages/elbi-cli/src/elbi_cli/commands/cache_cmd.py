@@ -1,16 +1,27 @@
-"""``elbi cache``: inspect and clear the local derivation cache."""
+"""``elbi cache``: inspect and clear the derivation cache.
+
+Every command works on the project directory's own cache. ``clear`` can instead target
+a running app with ``--url`` or ``--target``, through the app's
+``POST /api/cache/invalidate``, so a deployment's cache can be busted without a shell
+on its host. Only a tag or a derivation can be cleared that way: emptying a whole
+deployment's cache stays a decision made on the host.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import typer
 
-from elbi_core.cache import LocalCacheStore
+from elbi_core.cache import LocalCacheStore, derivation_tag
 from elbi_core.errors import ElbiError
 
 from .._console import arrow, fail, ok
+from ..config_sync import SyncError
+from ..http import LoginRequired, client_for
 from ..project import load_project
+from .config_cmd import resolve_host
 
 cache_app = typer.Typer(
     name="cache",
@@ -50,20 +61,69 @@ def clear(
     tag: str | None = typer.Option(
         None, "--tag", help="Only invalidate entries carrying this tag."
     ),
+    derivation: str | None = typer.Option(
+        None, "--derivation", help="Only invalidate this derivation's entries."
+    ),
+    url: str | None = typer.Option(
+        None, "--url", help="Clear a running app's cache instead of the local one."
+    ),
+    token: str | None = typer.Option(None, "--token", help="API key, if required."),
+    target: str | None = typer.Option(
+        None, "--target", "-t", help="Clear this declared target's cache."
+    ),
 ) -> None:
-    """Clear the cache, or only entries with a given tag."""
+    """Clear the cache, or only entries with a given tag or derivation."""
+    if url is not None or target is not None:
+        _clear_remote(directory, tag, derivation, url, token, target)
+        return
     try:
         cache_dir, _ = _load(directory)
     except ElbiError as exc:
         fail(str(exc))
         raise typer.Exit(code=1) from exc
     store = LocalCacheStore(cache_dir)
-    if tag is not None:
-        removed = store.invalidate_tag(tag)
-        ok(f"invalidated {removed} entry(ies) tagged {tag!r}")
+    tags = [t for t in (tag, derivation_tag(derivation) if derivation else None) if t]
+    if tags:
+        for each in tags:
+            removed = store.invalidate_tag(each)
+            ok(f"invalidated {removed} entry(ies) tagged {each!r}")
     else:
         store.clear()
         ok("cleared the derivation cache")
+
+
+def _clear_remote(
+    directory: Path,
+    tag: str | None,
+    derivation: str | None,
+    url: str | None,
+    token: str | None,
+    target: str | None,
+) -> None:
+    """Ask a running app to invalidate a tag or a derivation's entries."""
+    if not tag and not derivation:
+        fail("a remote clear needs --tag or --derivation")
+        raise typer.Exit(code=2)
+    body = {
+        key: value for key, value in (("tag", tag), ("derivation", derivation)) if value
+    }
+    try:
+        host = resolve_host(directory.resolve(), target, url)
+        with client_for(host, token) as client:
+            response = client.post("/api/cache/invalidate", json=body)
+    except LoginRequired as exc:
+        fail(str(exc) or "the app refused this credential")
+        raise typer.Exit(code=1) from exc
+    except (SyncError, httpx.HTTPError) as exc:
+        fail(str(exc))
+        raise typer.Exit(code=1) from exc
+    if response.status_code != 200:
+        fail(
+            f"{host} refused the invalidation ({response.status_code}): {response.text}"
+        )
+        raise typer.Exit(code=1)
+    removed = response.json().get("removed", 0)
+    ok(f"invalidated {removed} entry(ies) on {host}")
 
 
 @cache_app.command("gc")

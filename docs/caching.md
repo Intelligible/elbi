@@ -114,12 +114,40 @@ perpetually-failing refresh from serving stale forever.
 elbi cache status     # where the cache lives + how many entries
 elbi cache clear      # clear everything
 elbi cache clear --tag <tag>   # invalidate only tagged entries
+elbi cache clear --derivation <name>   # invalidate one derivation's entries
 elbi cache gc         # reclaim orphaned blobs (mark-and-sweep)
 elbi cache gc --max-age-days 30   # also evict entries older than 30 days
 ```
 
 The cache lives on disk under `.elbi/cache` (an action cache plus a
 content-addressable blob store) and is gitignored.
+
+### Invalidating a running app's cache
+
+A served app invalidates its own cache over HTTP, so a deployment's cache can be
+busted without a shell on its host:
+
+```bash
+curl -X POST https://elbi.example.com/api/cache/invalidate \
+  -H 'Content-Type: application/json' \
+  -d '{"tag": "finance"}'          # or {"derivation": "revenue"}, or both
+# {"removed": 2}
+```
+
+With both fields, entries carrying either are removed. Each tag invalidated is written
+to the audit log as `cache.invalidate`. Clearing a deployment's whole cache is not
+offered over HTTP; that stays a decision made on the host.
+
+`elbi cache clear` does the same when pointed at the app with `--url` or `-t <target>`,
+sending `--token` or `ELBI_API_KEY` as its credential:
+
+```bash
+elbi cache clear --tag finance --url https://elbi.example.com
+```
+
+The route is no more protected than the rest of the API: the app ships
+unauthenticated, so a deployment reachable by anyone but you needs something that
+authenticates in front of it.
 
 ### Garbage collection
 
