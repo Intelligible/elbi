@@ -247,7 +247,7 @@ describe("SourceDetailPage", () => {
 
   it.each([
     ["Method", "Full refresh reads every row and replaces the table on each sync."],
-    ["Rows", "Rows recorded by this table's last successful sync"],
+    ["Rows", "Number of rows recorded by this table's last successful sync."],
     [
       "Table",
       "Each table lands in the warehouse as custom__<stream>, for example custom__activation_funnel.",
@@ -263,10 +263,10 @@ describe("SourceDetailPage", () => {
     expect(tip).toHaveTextContent(text)
   })
 
-  it("the schedule explains that it runs only while the app does", async () => {
+  it("the schedule explains what Manual only means", async () => {
     open([schema({ rowCount: 10 })])
     const tip = await tooltipOn(await screen.findByRole("combobox", { name: "Sync frequency" }))
-    expect(tip).toHaveTextContent("Scheduled syncs run only while the app is running")
+    expect(tip).toHaveTextContent("How often the app syncs this source on its own.")
     expect(tip).toHaveTextContent("Manual only means it syncs only when you click Sync now.")
   })
 

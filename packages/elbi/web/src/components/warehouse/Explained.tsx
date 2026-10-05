@@ -14,8 +14,7 @@ export const SYNC_DOCS = {
 // Plain-language help for the source page's jargon. Each line is checked against the sync
 // service: what a field holds and when it moves.
 export const SYNC_HELP = {
-  enabled:
-    "Enabled tables are the ones a sync reads; turn each on or off with its Sync switch.",
+  enabled: "Enabled tables are the ones a sync reads; turn each on or off with its Sync switch.",
   lastSynced:
     "When a sync last finished with every enabled table succeeding. A run where any table fails does not move it.",
   schedule:
