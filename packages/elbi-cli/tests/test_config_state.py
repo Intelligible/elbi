@@ -107,6 +107,23 @@ def test_an_absent_or_corrupt_baseline_is_an_empty_one(repo: Path) -> None:
     assert read_state(repo) == {}
 
 
+def test_a_baseline_digested_another_way_is_not_read_as_a_conflict(
+    app: _FakeApp, repo: Path
+) -> None:
+    """A baseline from an older digest matches nothing, on either side.
+
+    Read as-is, every edit made here would look like a change in both places and sync
+    would refuse it. Discarded, the comparison is the two-way one until the next sync.
+    """
+    app.objects["revenue"] = {"sql": "select 1"}
+    pull(None, repo, [app.surface()])  # type: ignore[arg-type]
+    (repo / STATE_PATH).write_text(
+        json.dumps({"surfaces": {"metrics": {"revenue": "0" * 64}}})
+    )
+    _write(repo, "metrics", "revenue", {"sql": "select 2"})
+    assert _actions(plan(None, repo, [app.surface()])) == {"revenue": "update"}  # type: ignore[arg-type]
+
+
 # -- the matrix ---------------------------------------------------------------
 def test_nothing_changed(app: _FakeApp, repo: Path) -> None:
     app.objects["revenue"] = {"sql": "select 1"}
