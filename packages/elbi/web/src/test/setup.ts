@@ -45,6 +45,8 @@ if (typeof window !== "undefined") {
   // one to its viewport on mount. A no-op is enough: nothing in a test has a size to observe.
   if (!globalThis.ResizeObserver) {
     globalThis.ResizeObserver = class {
+      // Takes the callback a real one does, so a caller passing it is not flagged.
+      constructor(readonly callback: ResizeObserverCallback) {}
       observe() {}
       unobserve() {}
       disconnect() {}

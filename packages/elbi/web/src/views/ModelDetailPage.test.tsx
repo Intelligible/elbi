@@ -230,10 +230,14 @@ describe("ModelDetailPage", () => {
     renderPage()
     const pane = await section("Auto-retrain")
 
-    // The heading renders before the policy loads; wait for the form, not the skeleton.
+    // The form renders once the policy loads and is then prefilled from the lineage;
+    // choosing before that lands races the prefill.
+    await waitFor(() =>
+      expect(shown(within(pane).getByRole("combobox", { name: /^Target column/ }))).toBe("amount"),
+    )
     await choose(
       user,
-      await within(pane).findByRole("combobox", { name: /^Data source/ }),
+      within(pane).getByRole("combobox", { name: /^Data source/ }),
       "churn_features",
     )
     await user.type(within(pane).getByRole("textbox", { name: "Target column" }), "label")

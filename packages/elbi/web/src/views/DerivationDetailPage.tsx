@@ -194,7 +194,12 @@ export function DerivationDetailPage() {
         <HistorySection name={d.name} />
 
         {d.claim && Object.keys(d.claim).length > 0 && (
-          <SceneSection title="Claim">
+          // A claim with no verdict has no badge beside it, so the note keeps it from reading as
+          // confirmed.
+          <SceneSection
+            title="Claim"
+            description={d.verdict ? undefined : "Not checked by the oracle."}
+          >
             <pre className="overflow-x-auto rounded-lg border border-border bg-surface-secondary p-3 font-mono text-xs text-foreground">
               {JSON.stringify(d.claim, null, 2)}
             </pre>

@@ -360,6 +360,62 @@ def _split_last_expr(tree: ast.Module) -> ast.Expression | None:
     return None
 
 
+def _derivation_result(tree: ast.Module, namespace: dict[str, Any]) -> Any:
+    """Run a derivation the cell just defined, so defining one shows what it returns.
+
+    A decorated ``def`` is a statement, so a notebook editing a derivation would
+    otherwise display nothing and an edit would show no effect. Returns ``None`` when
+    the cell did not end on a derivation, or when running it would mean inventing
+    something: a required parameter has no value here, and a dataset input needs a
+    binding.
+    """
+    defs = (ast.FunctionDef, ast.AsyncFunctionDef)
+    if not tree.body or not isinstance(tree.body[-1], defs):
+        return None
+    from elbi_core.derivation import Derivation
+
+    target = namespace.get(tree.body[-1].name)
+    if not isinstance(target, Derivation):
+        return None
+    return _compute_derivation(target, namespace)
+
+
+def _compute_derivation(target: Any, namespace: dict[str, Any]) -> Any:
+    """Resolve a derivation's inputs the way the runner does, then compute it.
+
+    A dataset input comes from the notebook's own ``data``; an upstream derivation is
+    computed first; a semantic model is handed over as itself. Parameters take their
+    declared defaults, as a run that supplies none does. The result is coerced as the
+    runner coerces it, so a raw return shows, and reaches a downstream, as the artifact
+    it would be in production. ``None`` when an input or a parameter cannot be resolved
+    without guessing, which the caller reads as "nothing to show" rather than as an
+    error.
+    """
+    from elbi_core import Context
+    from elbi_core.artifact import coerce_artifact
+    from elbi_core.data import Table
+    from elbi_core.errors import ParamError
+    from elbi_core.runner import _resolve_params
+
+    try:
+        params = _resolve_params(target, {})
+    except ParamError:
+        return None
+    data = namespace.get("data")
+    resolved: dict[str, Any] = {}
+    for key, dataset in target.dataset_inputs().items():
+        if data is None or dataset.name not in data:
+            return None
+        resolved[key] = Table(data[dataset.name])
+    for key, upstream in target.derivation_inputs().items():
+        artifact = _compute_derivation(upstream, namespace)
+        if artifact is None:
+            return None
+        resolved[key] = artifact
+    resolved.update(target.semantic_model_inputs())
+    return coerce_artifact(target.compute(Context(resolved, params)))
+
+
 def _run_cell(namespace: dict[str, Any], code: str, execution_count: int) -> str:
     """Execute one cell, streaming its outputs; return ``ok``/``error``/``interrupted``.
 
@@ -367,7 +423,9 @@ def _run_cell(namespace: dict[str, Any], code: str, execution_count: int) -> str
     ``%line-magic`` and ``!shell`` lines are rewritten to helper calls and the body runs
     in ``exec`` mode; when its final statement is a bare expression, that expression is
     evaluated separately so its value becomes the result: the REPL behavior a notebook
-    user expects (``df.head()`` on the last line shows the table). The namespace
+    user expects (``df.head()`` on the last line shows the table). A cell ending on a
+    ``@derivation`` is the one extension: it is run and its artifact shown, because a
+    statement has no value to echo and editing a derivation is the point. The namespace
     persists, so a later cell sees what this one defined.
     """
     global _CURRENT_CONTEXT
@@ -393,6 +451,8 @@ def _run_cell(namespace: dict[str, Any], code: str, execution_count: int) -> str
                 value = None
                 if last_expr is not None:
                     value = eval(compile(last_expr, "<cell>", "eval"), namespace)  # noqa: S307
+                else:
+                    value = _derivation_result(tree, namespace)
                 _capture_figures()
                 if value is not None:
                     namespace["_"] = value
@@ -471,6 +531,12 @@ def _seed_namespace(
     namespace[_magics.LINE_MAGIC_FN] = _nb_line_magic
     namespace[_magics.SYSTEM_FN] = _nb_system
     namespace[_magics.GETOUTPUT_FN] = _nb_getoutput
+    # A bare `@derivation` writes to whichever registry is active. Point it at one that
+    # lets a re-run redefine, because a cell defining a derivation would otherwise run
+    # exactly once and raise on every run after, the reactive engine's own included.
+    from elbi_core.registry import NotebookRegistry, _active_registry
+
+    _active_registry.set(NotebookRegistry())
     return namespace
 
 

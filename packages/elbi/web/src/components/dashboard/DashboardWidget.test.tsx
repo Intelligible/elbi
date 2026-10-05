@@ -157,3 +157,40 @@ describe("DashboardWidget metric", () => {
     expect(screen.getByText("no value for metric “mrr”")).toBeInTheDocument()
   })
 })
+
+describe("tile actions", () => {
+  const widget: Widget = { id: "mrr", type: "text", gridPos: pos, content: "hi" }
+
+  it("offers no menu on a dashboard that cannot be edited", () => {
+    render(<DashboardWidget widget={widget} variables={{}} />)
+
+    expect(screen.queryByLabelText(/Tile actions/)).toBeNull()
+  })
+
+  it("edits and deletes through the menu", async () => {
+    const user = userEvent.setup()
+    const onEdit = vi.fn()
+    const onDelete = vi.fn()
+    render(<DashboardWidget widget={widget} variables={{}} onEdit={onEdit} onDelete={onDelete} />)
+
+    const trigger = screen.getByLabelText(/Tile actions/)
+    // Radix menus close on a window blur, which jsdom fires at pointerdown when nothing
+    // is focused; focusing first avoids it (jsdom only).
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Edit…" }))
+    expect(onEdit).toHaveBeenCalledOnce()
+
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }))
+    expect(onDelete).toHaveBeenCalledOnce()
+  })
+
+  it("keeps the menu from starting a drag", () => {
+    render(<DashboardWidget widget={widget} variables={{}} onEdit={() => {}} />)
+
+    // react-grid-layout's draggableCancel; without it, opening the menu drags the tile.
+    expect(screen.getByLabelText(/Tile actions/).className).toContain("dash-no-drag")
+  })
+})
