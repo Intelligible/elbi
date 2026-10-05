@@ -32,6 +32,12 @@ const source = (schemas: SchemaView[], s: Partial<SourceDetail> = {}): SourceDet
   schemaCount: schemas.length,
   syncedCount: schemas.filter((x) => x.status === "synced").length,
   rows: 0,
+  enabledCount: 0,
+  enabledSyncedCount: 0,
+  enabledRows: 0,
+  failedCount: 0,
+  tableError: null,
+  emptyTables: [],
   schemas,
   ...s,
 })

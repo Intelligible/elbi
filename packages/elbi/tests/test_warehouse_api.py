@@ -380,6 +380,52 @@ def test_toggle_schema_off_excludes_it_from_sync(
     assert result["outcomes"] == []  # nothing enabled to sync
 
 
+def test_sources_list_summarizes_each_sources_last_sync(
+    client: TestClient, people_csv: str, tmp_path: Path
+) -> None:
+    """The list carries enough of each enabled table's result to show its health."""
+    empty_csv = tmp_path / "empty.csv"
+    empty_csv.write_text("id,name\n")
+    gone_csv = tmp_path / "gone.csv"
+    gone_csv.write_text("id\n1\n")
+
+    healthy = _create(client, "people", {"path": people_csv})
+    empty = _create(client, "empty", {"path": str(empty_csv)})
+    broken = _create(client, "gone", {"path": str(gone_csv)})
+    never = _create(client, "never", {"path": people_csv})
+    gone_csv.unlink()
+    for source in (healthy, empty, broken):
+        client.post(f"/api/warehouse/sources/{source['id']}/sync")
+
+    listed = {s["name"]: s for s in client.get("/api/warehouse/sources").json()}
+    keys = (
+        "enabledCount",
+        "enabledSyncedCount",
+        "enabledRows",
+        "failedCount",
+        "emptyTables",
+    )
+
+    def summary(name: str) -> tuple[Any, ...]:
+        return tuple(listed[name][k] for k in keys)
+
+    assert summary("people") == (1, 1, 3, 0, [])
+    assert listed["people"]["tableError"] is None
+    assert summary("empty") == (1, 1, 0, 0, ["csv__empty"])
+    assert summary("gone") == (1, 0, 0, 1, [])
+    assert listed["gone"]["tableError"]
+    assert summary("never") == (1, 0, 0, 0, [])
+
+    # A turned-off table counts toward none of it, even after it has synced.
+    schema = client.get(f"/api/warehouse/sources/{healthy['id']}").json()["schemas"][0]
+    client.patch(f"/api/warehouse/schemas/{schema['id']}", json={"should_sync": False})
+    off = next(
+        s for s in client.get("/api/warehouse/sources").json() if s["name"] == "people"
+    )
+    assert tuple(off[k] for k in keys) == (0, 0, 0, 0, [])
+    assert never["enabledCount"] == 1  # the detail response carries the same fields
+
+
 def test_delete_source_removes_it_and_its_table(
     client: TestClient, people_csv: str
 ) -> None:

@@ -34,6 +34,12 @@ const summary = (s: Partial<SourceSummary> & Pick<SourceSummary, "id" | "name">)
     schemaCount: 0,
     syncedCount: 0,
     rows: 0,
+    enabledCount: 0,
+    enabledSyncedCount: 0,
+    enabledRows: 0,
+    failedCount: 0,
+    tableError: null,
+    emptyTables: [],
     ...s,
   }) as SourceSummary
 
@@ -113,6 +119,73 @@ describe("WarehousePage", () => {
     expect(where()).toBe("/warehouse")
     await userEvent.click(within(row).getByText("warehouse-db"))
     expect(where()).toBe("/warehouse/sources/b")
+  })
+
+  describe("each source's status", () => {
+    const badgeIn = async (name: string) => {
+      const row = (await screen.findByText(name)).closest("tr") as HTMLElement
+      return within(row).getByText((_, el) => el?.getAttribute("data-slot") === "badge")
+    }
+    const tooltipOn = async (trigger: HTMLElement) => {
+      await userEvent.hover(trigger)
+      return screen.findByRole("tooltip")
+    }
+    const healthy = { enabledCount: 2, enabledSyncedCount: 2, enabledRows: 120, rows: 120 }
+
+    it.each([
+      [
+        "a failed table",
+        { ...healthy, failedCount: 1, enabledSyncedCount: 1, tableError: "cannot merge" },
+        "Failed",
+        "danger",
+        "The last sync failed for 1 of 2 enabled tables: cannot merge",
+      ],
+      [
+        "a failed job",
+        { ...healthy, status: "error", lastError: "auth expired" },
+        "Failed",
+        "danger",
+        "The last sync failed: auth expired",
+      ],
+      [
+        "a table that landed no rows",
+        { ...healthy, emptyTables: ["stripe__refunds"] },
+        "Synced, but no rows",
+        "warning",
+        "1 table got no rows: stripe__refunds.",
+      ],
+      [
+        "every table synced with rows",
+        healthy,
+        "Synced",
+        "success",
+        "The last sync of every enabled table succeeded. They hold 120 rows",
+      ],
+      [
+        "a running sync",
+        { ...healthy, status: "syncing", failedCount: 1 },
+        "Syncing…",
+        "info",
+        "A sync of this source is running now.",
+      ],
+      [
+        "nothing synced yet",
+        { enabledCount: 2 },
+        "Never synced",
+        "neutral",
+        "None of the enabled tables has been synced yet.",
+      ],
+    ] as [string, Partial<SourceSummary>, string, string, string][])(
+      "%s",
+      async (_, fields, label, variant, tip) => {
+        vi.mocked(listSources).mockResolvedValue([summary({ id: "a", name: "billing", ...fields })])
+        renderAt("/warehouse")
+        const badge = await badgeIn("billing")
+        expect(badge).toHaveTextContent(new RegExp(`^${label}$`))
+        expect(badge).toHaveAttribute("data-variant", variant)
+        expect(await tooltipOn(badge)).toHaveTextContent(tip)
+      },
+    )
   })
 
   it("New source goes to the catalog", async () => {

@@ -3,7 +3,7 @@
 // running), so it cannot be shown as health on its own: a source whose every sync lands
 // zero rows, or whose tables failed, would read as fine.
 
-import type { SchemaView, SourceDetail, SyncOutcome } from "@/lib/warehouse"
+import type { SchemaView, SourceDetail, SourceSummary, SyncOutcome } from "@/lib/warehouse"
 
 export type SyncHealth = "syncing" | "failed" | "empty" | "synced" | "never" | "off"
 
@@ -69,53 +69,93 @@ export function tableSyncStatus(schema: SchemaView): SyncStatus {
   return status("never", "Never synced", "This table has not been synced yet.")
 }
 
-/** The headline for a whole source: the worst state among its enabled tables. */
-export function sourceSyncStatus(source: SourceDetail): SyncStatus {
-  if (source.status === "syncing")
+// What a source's headline is derived from: the job state plus its enabled tables'
+// last-sync results, whether counted from the schemas (detail) or by the API (list).
+interface SourceFacts {
+  status: string
+  lastError: string | null
+  enabled: number
+  synced: number
+  failed: number
+  tableError: string | null
+  emptyTables: string[]
+  rows: number
+}
+
+function deriveSourceStatus(f: SourceFacts): SyncStatus {
+  if (f.status === "syncing")
     return status("syncing", "Syncing…", "A sync of this source is running now.")
 
-  const enabled = source.schemas.filter((s) => s.shouldSync)
-  const failed = enabled.filter((s) => s.status === "error")
-  if (source.status === "error" || failed.length > 0) {
-    const error = source.lastError ?? failed[0]?.lastError ?? null
+  if (f.status === "error" || f.failed > 0) {
+    const error = f.lastError ?? f.tableError
     const which =
-      failed.length > 0
-        ? `The last sync failed for ${failed.length} of ${plural(enabled.length, "enabled table")}`
+      f.failed > 0
+        ? `The last sync failed for ${f.failed} of ${plural(f.enabled, "enabled table")}`
         : "The last sync failed"
     return status("failed", "Failed", `${which}${error ? `: ${error}` : "."}`)
   }
 
-  if (enabled.length === 0)
+  if (f.enabled === 0)
     return status(
       "off",
       "No tables enabled",
       "Every table is turned off, so a sync has nothing to read. Turn one on with its Sync switch.",
     )
 
-  const synced = enabled.filter((s) => s.status === "synced")
-  if (synced.length === 0)
+  if (f.synced === 0)
     return status(
       "never",
       "Never synced",
       "None of the enabled tables has been synced yet. Click Sync now, or wait for the schedule.",
     )
 
-  const empty = synced.filter((s) => s.rowCount === 0)
-  if (empty.length > 0)
+  if (f.emptyTables.length > 0)
     return status(
       "empty",
       "Synced, but no rows",
-      `The last sync succeeded, but ${plural(empty.length, "table")} got no rows: ${empty
-        .map((s) => s.table)
-        .join(", ")}. ${NO_ROWS}`,
+      `The last sync succeeded, but ${plural(f.emptyTables.length, "table")} got no rows: ${f.emptyTables.join(", ")}. ${NO_ROWS}`,
     )
 
-  const rows = synced.reduce((n, s) => n + (s.rowCount ?? 0), 0)
   return status(
     "synced",
-    `Synced · ${plural(rows, "row")}`,
-    `The last sync of every enabled table succeeded. They hold ${plural(rows, "row")} as of their last syncs.`,
+    `Synced · ${plural(f.rows, "row")}`,
+    `The last sync of every enabled table succeeded. They hold ${plural(f.rows, "row")} as of their last syncs.`,
   )
+}
+
+/** The headline for a whole source: the worst state among its enabled tables. */
+export function sourceSyncStatus(source: SourceDetail): SyncStatus {
+  const enabled = source.schemas.filter((s) => s.shouldSync)
+  const failed = enabled.filter((s) => s.status === "error")
+  const synced = enabled.filter((s) => s.status === "synced")
+  return deriveSourceStatus({
+    status: source.status,
+    lastError: source.lastError,
+    enabled: enabled.length,
+    synced: synced.length,
+    failed: failed.length,
+    tableError: failed.find((s) => s.lastError)?.lastError ?? null,
+    emptyTables: synced.filter((s) => s.rowCount === 0).map((s) => s.table),
+    rows: synced.reduce((n, s) => n + (s.rowCount ?? 0), 0),
+  })
+}
+
+/**
+ * The same headline for a row of the sources list, from the API's per-source summary.
+ * A healthy row reads just "Synced": the list has its own rows column beside it.
+ */
+export function summarySyncStatus(source: SourceSummary): SyncStatus {
+  const st = deriveSourceStatus({
+    status: source.status,
+    lastError: source.lastError,
+    enabled: source.enabledCount,
+    synced: source.enabledSyncedCount,
+    failed: source.failedCount,
+    tableError: source.tableError,
+    emptyTables: source.emptyTables,
+    rows: source.enabledRows,
+  })
+  return st.health === "synced" ? { ...st, label: "Synced" } : st
 }
 
 /** One line of a just-finished sync's result. */

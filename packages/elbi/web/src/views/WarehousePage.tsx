@@ -50,6 +50,7 @@ import {
   outcomeStatus,
   type SyncStatus,
   sourceSyncStatus,
+  summarySyncStatus,
   tableSyncStatus,
 } from "@/lib/sync-status"
 import { EMPTY } from "@/lib/utils"
@@ -100,13 +101,6 @@ function fmtRun(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return "Never"
   const p = (n: number) => String(n).padStart(2, "0")
   return `${MONTHS[d.getMonth()]} ${p(d.getDate())}, ${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
-function StatusTag({ source }: { source: SourceSummary }) {
-  if (source.status === "error") return <Badge variant="danger">Error</Badge>
-  if (source.status === "syncing") return <Badge variant="info">Running</Badge>
-  if (source.syncedCount > 0) return <Badge variant="success">{source.syncedCount} synced</Badge>
-  return <Badge variant="neutral">Not syncing</Badge>
 }
 
 // GET /warehouse: the Data warehouse: bound datasets (declared in elbi.yaml) and managed
@@ -288,7 +282,7 @@ export function WarehousePage() {
                         <TableCell>{fmtRun(s.lastSyncedAt)}</TableCell>
                         <TableCell className="text-right">{s.rows.toLocaleString()}</TableCell>
                         <TableCell>
-                          <StatusTag source={s} />
+                          <SyncStatusBadge status={summarySyncStatus(s)} />
                         </TableCell>
                         <TableCell>
                           <IconButton
