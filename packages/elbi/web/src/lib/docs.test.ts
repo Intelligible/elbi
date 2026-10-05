@@ -14,7 +14,8 @@ describe("docsUrl", () => {
     )
   })
 
-  it("an empty page is the docs home", () => {
+  it("no page is the docs home", () => {
     expect(docsUrl("")).toBe(DOCS_URL)
+    expect(docsUrl()).toBe(DOCS_URL)
   })
 })
