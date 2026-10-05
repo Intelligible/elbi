@@ -248,10 +248,6 @@ describe("SourceDetailPage", () => {
   it.each([
     ["Method", "Full refresh reads every row and replaces the table on each sync."],
     ["Rows", "Number of rows recorded by this table's last successful sync."],
-    [
-      "Table",
-      "Each table lands in the warehouse as custom__<stream>, for example custom__activation_funnel.",
-    ],
     ["1 of 1 tables enabled", "Enabled tables are the ones a sync reads"],
     [
       "last synced 2026-10-01 09:00",

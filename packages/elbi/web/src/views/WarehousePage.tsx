@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { Explained, SYNC_DOCS, SYNC_HELP, tableNameHelp } from "@/components/warehouse/Explained"
+import { Explained, SYNC_DOCS, SYNC_HELP } from "@/components/warehouse/Explained"
 import { SourceIcon } from "@/components/warehouse/SourceIcon"
 import { type Dataset, getDatasets } from "@/lib/chat"
 import {
@@ -841,14 +841,7 @@ function SourceDetailView({
           <TableHeader>
             <TableRow>
               <TableHead className="px-4">Sync</TableHead>
-              <TableHead className="px-4">
-                <Explained
-                  tip={tableNameHelp(detail.prefix, detail.schemas[0]?.table)}
-                  docs={SYNC_DOCS.tables}
-                >
-                  Table
-                </Explained>
-              </TableHead>
+              <TableHead className="px-4">Table</TableHead>
               <TableHead className="px-4">
                 <Explained tip={SYNC_HELP.method} docs={SYNC_DOCS.method}>
                   Method

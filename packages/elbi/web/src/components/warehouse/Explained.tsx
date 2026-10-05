@@ -8,7 +8,6 @@ export const SYNC_DOCS = {
   status: docsUrl("data-sources", "sync-status"),
   method: docsUrl("data-sources", "incremental-sync"),
   schedule: docsUrl("data-sources", "sync-schedule"),
-  tables: docsUrl("data-sources", "table-names"),
 } as const
 
 // Plain-language help for the source page's jargon. Each line is checked against the sync
@@ -23,14 +22,6 @@ export const SYNC_HELP = {
     "There are two variants of sync. Full refresh reads every row and replaces the table on each sync. Incremental appends only rows past the cursor column's value from the last sync.",
   rows: "Number of rows recorded by this table's last successful sync.",
 } as const
-
-// `example` is one of this source's own table names, so the pattern is shown on real data.
-export function tableNameHelp(prefix: string, example?: string): string {
-  const named = prefix
-    ? `Each table lands in the warehouse as ${prefix}__<stream>${example ? `, for example ${example}` : ""}.`
-    : "Each table lands in the warehouse under its own stream name."
-  return `${named} Query it by that name in Explore, notebooks and chat.`
-}
 
 /**
  * Hover help on a piece of jargon: the trigger keeps its own look and gains a dotted
