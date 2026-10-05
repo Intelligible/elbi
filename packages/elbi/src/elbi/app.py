@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager, suppress
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, Literal, get_args
 from uuid import uuid4
 
 from fastapi import (
@@ -87,6 +87,7 @@ from .metrics import MetricService, MetricServiceError
 from .ml import INLINE_TRAIN_BUDGET, ModelService, mount_mlflow_ui
 from .monitoring import MonitorError, MonitorService
 from .nl2sql import draft_query, generate_sql
+from .notebook_html import render as render_notebook_html
 from .notebooks import BASE_ENV_SETTING, NotebookService
 from .notifications import (
     EVENT_TYPES,
@@ -2823,9 +2824,16 @@ def create_app(
 
     @app.get("/api/notebooks/{notebook_id}/export")
     async def export_notebook(
-        request: Request, notebook_id: str, outputs: bool = False
+        request: Request,
+        notebook_id: str,
+        outputs: bool = False,
+        format: Literal["ipynb", "html"] = "ipynb",
     ) -> Response:
-        """Download the notebook as a nbformat 4.5 ``.ipynb`` file.
+        """Download the notebook as a nbformat 4.5 ``.ipynb`` file, or as HTML.
+
+        ``format=html`` renders the same payload as a self-contained, read-only page
+        for someone without access to the app, so the outputs rule below holds for it
+        unchanged.
 
         Outputs are stripped unless asked for *and* permitted. A cell's output is a
         rendering of warehouse rows, and this is the route ``elbi pull`` reads,
@@ -2842,6 +2850,21 @@ def create_app(
         payload = service.export_ipynb(notebook_id, include_outputs=outputs and allowed)
         if payload is None:
             raise HTTPException(status_code=404, detail="notebook not found")
+        if format == "html":
+            row = store.get_notebook(notebook_id) if store else None
+            name = row.name if row else notebook_id
+            page = render_notebook_html(
+                payload, title=name, exported_at=_iso_utc(datetime.now(timezone.utc))
+            )
+            return Response(
+                content=page,
+                media_type="text/html; charset=utf-8",
+                headers={
+                    "Content-Disposition": (
+                        f'attachment; filename="{_safe_filename_part(name)}.html"'
+                    )
+                },
+            )
         return Response(
             content=json.dumps(payload, indent=1),
             media_type="application/x-ipynb+json",

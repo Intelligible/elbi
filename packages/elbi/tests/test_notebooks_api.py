@@ -384,6 +384,39 @@ def test_a_deployment_can_permit_outputs(
     assert _outputs_in(default) == []
 
 
+def test_html_export_is_a_named_read_only_page(
+    client: tuple[TestClient, dict[str, str]],
+) -> None:
+    http, _ = client
+    notebook_id, _ = _notebook_with_a_real_output(http)
+    http.put(f"/api/notebooks/{notebook_id}", json={"name": "Revenue check"})
+    resp = http.get(
+        f"/api/notebooks/{notebook_id}/export",
+        params={"format": "html", "outputs": "true"},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert 'filename="Revenue_check.html"' in resp.headers["content-disposition"]
+    assert "secret_revenue" in resp.text
+    # the outputs rule is the .ipynb export's, not loosened for HTML
+    assert "1234321" not in resp.text
+    assert "Code only" in resp.text
+
+
+def test_html_export_carries_outputs_where_permitted(
+    client: tuple[TestClient, dict[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    http, _ = client
+    notebook_id, _ = _notebook_with_a_real_output(http)
+    monkeypatch.setenv("NOTEBOOK_EXPORT_OUTPUTS", "1")
+    page = http.get(
+        f"/api/notebooks/{notebook_id}/export",
+        params={"format": "html", "outputs": "true"},
+    ).text
+    assert "1234321" in page
+    assert "Code only" not in page
+
+
 def test_a_stripped_export_still_round_trips(
     client: tuple[TestClient, dict[str, str]],
 ) -> None:

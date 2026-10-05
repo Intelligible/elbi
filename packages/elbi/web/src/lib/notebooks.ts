@@ -372,6 +372,12 @@ export function exportNotebookUrl(id: string): string {
   return `/api/notebooks/${id}/export`
 }
 
+// A read-only page for someone without app access. Asks for outputs; the server
+// includes them only where the deployment permits it (NOTEBOOK_EXPORT_OUTPUTS).
+export function exportNotebookHtmlUrl(id: string): string {
+  return `/api/notebooks/${id}/export?format=html&outputs=true`
+}
+
 // Run cells (or everything) and invoke `onEvent` for each streamed event. Returns a
 // promise that resolves when the stream ends and an `abort` to cancel the run's stream.
 export function runNotebook(

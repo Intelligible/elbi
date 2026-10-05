@@ -6,6 +6,7 @@ import {
   CirclePlay,
   Cpu,
   Download,
+  FileCode2,
   Loader2,
   Lock,
   MoreHorizontal,
@@ -84,6 +85,7 @@ import {
   completeCell,
   deleteCell,
   type EnvironmentResult,
+  exportNotebookHtmlUrl,
   exportNotebookUrl,
   getNotebook,
   getNotebookVariables,
@@ -752,6 +754,11 @@ function Toolbar({
                 <DropdownMenuItem asChild>
                   <a href={exportNotebookUrl(view.id)} download>
                     <Download className="size-4" /> Download .ipynb
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href={exportNotebookHtmlUrl(view.id)} download>
+                    <FileCode2 className="size-4" /> Download .html
                   </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
