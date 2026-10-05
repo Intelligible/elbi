@@ -15,11 +15,11 @@ export const SYNC_DOCS = {
 // service: what a field holds and when it moves.
 export const SYNC_HELP = {
   enabled:
-    "Enabled tables are the ones a sync reads; turn each on or off with its Sync switch. A turned-off table stays queryable with whatever the last sync left.",
+    "Enabled tables are the ones a sync reads; turn each on or off with its Sync switch.",
   lastSynced:
     "When a sync last finished with every enabled table succeeding. A run where any table fails does not move it.",
   schedule:
-    "How often the app syncs this source on its own. Scheduled syncs run only while the app is running; one that fell due while it was off runs soon after it starts. After a failure it waits a full interval before retrying. Manual only means it syncs only when you click Sync now.",
+    "How often the app syncs this source on its own. Manual only means it syncs only when you click Sync now.",
   method:
     "Full refresh reads every row and replaces the table on each sync. Incremental appends only rows past the cursor column's value from the last sync; it is offered only where the source has a usable cursor.",
   rows: "Rows recorded by this table's last successful sync: the rows written on a full refresh, or the running total appended on incremental. A failed sync does not update it, and can leave the table partly rewritten, so check Status before trusting it.",
