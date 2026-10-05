@@ -3669,6 +3669,28 @@ class Store:
                     due.append(row)
         return due
 
+    def fail_stale_external_syncs(self, cutoff: datetime, error: str) -> list[str]:
+        """Mark ``syncing`` sources not heard from since ``cutoff`` as failed.
+
+        A run keeps ``updated_at`` fresh while it works, so one this quiet is not
+        running: its process died, and nothing else will ever take it off ``syncing``.
+        ``updated_at`` is left as the run's last sign of life, which is when it was
+        last attempted for :meth:`due_external_sources`. Returns the ids recovered.
+        """
+        recovered: list[str] = []
+        with self._write() as session:
+            for row in session.exec(
+                select(ExternalDataSource).where(ExternalDataSource.status == "syncing")
+            ):
+                if _as_utc(row.updated_at) >= cutoff:
+                    continue
+                row.status = "error"
+                row.last_error = error
+                session.add(row)
+                recovered.append(row.id)
+            session.commit()
+        return recovered
+
     def update_external_source(self, source_id: str, **fields: Any) -> None:
         """Update a warehouse source's scalar fields in place."""
         with self._write() as session:

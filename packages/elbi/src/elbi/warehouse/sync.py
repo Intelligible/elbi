@@ -2,13 +2,14 @@
 
 Full-refresh overwrites the table; incremental appends rows past the stored cursor and
 returns the new high-water mark to persist for next time. Either way the rows land in a
-Delta Lake table written via delta-rs.
+Delta Lake table written via delta-rs, in one commit per run.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,11 +69,13 @@ def run_sync(
     incremental_field: str | None = None,
     since: Any = None,
     logger: Any = None,
+    heartbeat: Callable[[], None] | None = None,
 ) -> SyncResult:
     """Extract one table from ``source`` and write it to warehouse table ``table``.
 
     ``table`` is the destination (the schema's persisted table name), so the write
     target matches the catalog row and honors the prefix chosen at source creation.
+    ``heartbeat`` is called after each batch, so a long run can show it is alive.
     """
     incremental = sync_type == "incremental" and incremental_field is not None
     inputs = SourceInputs(
@@ -82,30 +85,31 @@ def run_sync(
         incremental_since=since if incremental else None,
         logger=logger,
     )
-    mode = "append" if incremental else "overwrite"
-
     rows = 0
     cursor = since
-    location: str | None = None
-    first = True
-    for batch in source.extract(inputs):
-        if batch.num_rows == 0:
-            continue
-        location = storage.write_arrow(table, batch, mode=(mode if first else "append"))
-        rows += batch.num_rows
-        first = False
-        if (
-            incremental
-            and incremental_field is not None
-            and incremental_field in batch.column_names
-        ):
-            col_max = _column_max(batch, incremental_field)
-            if col_max is not None and (cursor is None or col_max > cursor):
-                cursor = col_max
-
-    if first:
-        # Extraction produced nothing; leave any existing table untouched.
-        location = storage.table_location(table)
+    # Staged, then published in one commit: a run that fails part way leaves the
+    # table as it was, and an incremental one leaves its cursor where it was too, so
+    # the retry re-extracts exactly the rows that never landed.
+    with storage.StagedWrite(
+        table, mode="append" if incremental else "overwrite"
+    ) as staged:
+        for batch in source.extract(inputs):
+            if batch.num_rows == 0:
+                continue
+            staged.write(batch)
+            rows += batch.num_rows
+            if (
+                incremental
+                and incremental_field is not None
+                and incremental_field in batch.column_names
+            ):
+                col_max = _column_max(batch, incremental_field)
+                if col_max is not None and (cursor is None or col_max > cursor):
+                    cursor = col_max
+            if heartbeat is not None:
+                heartbeat()
+        # Nothing extracted means nothing staged, and the table is left as it was.
+        location = staged.commit() or storage.table_location(table)
     return SyncResult(
         table=table,
         rows=rows,

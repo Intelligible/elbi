@@ -16,8 +16,10 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from elbi_core.errors import ElbiError
@@ -38,6 +40,13 @@ from .sources.registry import SourceRegistry
 from .sync import ColumnSpec
 
 logger = logging.getLogger(__name__)
+
+#: How long a ``syncing`` source may go without a heartbeat before its run is taken
+#: for dead. A live run beats every :data:`HEARTBEAT_SECONDS` while batches arrive, so
+#: this only has to outlast the slowest single batch.
+STALE_SYNC_AFTER = timedelta(minutes=30)
+HEARTBEAT_SECONDS = 60.0
+SYNC_INTERRUPTED = "Sync interrupted: the run stopped before it finished."
 
 
 class WarehouseError(ElbiError):
@@ -357,7 +366,10 @@ class WarehouseService:
         ]
 
         self._mark_source(source_id, status="syncing", last_error=None)
-        outcomes = [self._sync_schema(connector, config, sid) for sid in schema_ids]
+        heartbeat = self._heartbeat(source_id)
+        outcomes = [
+            self._sync_schema(connector, config, sid, heartbeat) for sid in schema_ids
+        ]
         had_error = any(not o.ok for o in outcomes)
         self._mark_source(
             source_id,
@@ -373,6 +385,7 @@ class WarehouseService:
         Called by the maintenance scheduler. Each source is isolated: one that fails
         logs and records its error without stopping the others.
         """
+        self.recover_interrupted_syncs(now)
         synced: list[str] = []
         for source in self._store.due_external_sources(now):
             try:
@@ -382,8 +395,40 @@ class WarehouseService:
                 logger.exception("scheduled warehouse sync failed for %s", source.id)
         return synced
 
+    def recover_interrupted_syncs(self, now: datetime) -> list[str]:
+        """Fail every source left ``syncing`` by a run that is no longer alive.
+
+        A process that dies mid-sync (a crash, a kill, a redeploy) never writes the
+        run's outcome, and the scheduler skips a source that reads as ``syncing``, so
+        without this it would never sync again. Judged by heartbeat age rather than by
+        which process started the run, because another replica may own a live one.
+        Returns the ids recovered, then due on the usual failed-source cadence.
+        """
+        recovered = self._store.fail_stale_external_syncs(
+            now - STALE_SYNC_AFTER, SYNC_INTERRUPTED
+        )
+        for source_id in recovered:
+            logger.warning("warehouse sync of %s was interrupted", source_id)
+        return recovered
+
+    def _heartbeat(self, source_id: str) -> Callable[[], None]:
+        """A callback that marks the source's run alive, at most once a minute."""
+        last = time.monotonic()
+
+        def beat() -> None:
+            nonlocal last
+            if time.monotonic() - last >= HEARTBEAT_SECONDS:
+                last = time.monotonic()
+                self._store.update_external_source(source_id, status="syncing")
+
+        return beat
+
     def _sync_schema(
-        self, connector: Source, config: dict[str, Any], schema_id: str
+        self,
+        connector: Source,
+        config: dict[str, Any],
+        schema_id: str,
+        heartbeat: Callable[[], None],
     ) -> SyncOutcome:
         # Re-fetch fresh so this is the single mutate-and-save of the instance.
         schema = self._store.get_external_schema(schema_id)
@@ -399,6 +444,7 @@ class WarehouseService:
                 incremental_field=schema.incremental_field,
                 since=_parse_cursor(schema.cursor),
                 logger=logger,
+                heartbeat=heartbeat,
             )
         except Exception as exc:  # surface on the schema, keep the other tables going
             logger.exception("Warehouse sync failed for %s", schema.name)

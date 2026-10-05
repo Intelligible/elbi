@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -396,34 +397,129 @@ def _existing_schema(uri: str) -> pa.Schema | None:
 
 
 def write_arrow(table: str, data: pa.Table, *, mode: str = "append") -> str:
-    """Write an Arrow table to its Delta table; return the table URI.
+    """Write an Arrow table to its Delta table in one commit; return the table URI.
 
     ``mode="overwrite"`` replaces all rows and lets the schema change (full-refresh);
     ``mode="append"`` adds rows and merges new columns into the schema (incremental).
-    The returned URI locates
-    the table, so a freshly-synced table is immediately queryable.
+    The returned URI locates the table, so a freshly-synced table is immediately
+    queryable. A single-batch :class:`StagedWrite`, so it coerces as a sync does.
     """
-    from deltalake import write_deltalake
+    with StagedWrite(table, mode=mode) as staged:
+        staged.write(data)
+        return staged.commit() or table_uri(table)
 
-    uri = table_uri(table)
-    if _is_local():
-        Path(uri).parent.mkdir(parents=True, exist_ok=True)
-    overwrite = mode == "overwrite"
-    # Only a nested column's stored form matters to the write, so a flat batch skips
-    # reading the table's schema.
-    existing = (
-        None
-        if overwrite or not any(pa.types.is_nested(field.type) for field in data.schema)
-        else _existing_schema(uri)
-    )
-    write_deltalake(
-        uri,
-        _coerce_for_delta(data, existing),
-        mode="overwrite" if overwrite else "append",
-        schema_mode="overwrite" if overwrite else "merge",
-        storage_options=storage_options() or None,
-    )
-    return uri
+
+#: Where a sync stages its batches before publishing them, beside the tables.
+_STAGING_PREFIX = "_staging"
+
+
+class StagedWrite:
+    """One sync's writes to ``table``, published to it in a single Delta commit.
+
+    A sync extracts in batches and any batch can fail: a network error, an API error,
+    a page whose shape cannot merge. Written straight to the table, a full refresh
+    that overwrites with its first batch and then fails would leave a table holding
+    only that batch, which reads as complete. So every batch lands in a private
+    staging table first, and :meth:`commit` copies the staged rows into the real table
+    as one overwrite (``mode="overwrite"``) or one append (``mode="append"``). Readers
+    see the previous table or the new one, never a part of a run; a run that fails
+    before the commit leaves the table exactly as it was.
+
+    The copy streams from the staging table, so a large table is never held in memory,
+    and it goes through the same delta-rs and storage options as every other write, so
+    it works on a local path and on an object store alike. Use it as a context manager:
+    the staging table is deleted on the way out, committed or not.
+    """
+
+    def __init__(self, table: str, *, mode: str = "overwrite") -> None:
+        self.table = table
+        self._append = mode == "append"
+        key = f"{_STAGING_PREFIX}/{table}-{uuid.uuid4().hex}"
+        self._filesystem, self._path, self._uri = warehouse_object(key)
+        # Touched on the first attempt, staged once a write lands: a first write that
+        # fails part way can still leave files behind to delete.
+        self._touched = False
+        self._staged = False
+        self._target_schema: pa.Schema | None = None
+        self._target_read = False
+
+    def __enter__(self) -> StagedWrite:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.discard()
+
+    def write(self, data: pa.Table) -> None:
+        """Stage one batch; nothing reaches the table until :meth:`commit`."""
+        from deltalake import write_deltalake
+
+        self._touched = True
+        if _is_local():
+            Path(self._uri).parent.mkdir(parents=True, exist_ok=True)
+        existing = (
+            self._known_schema()
+            if any(pa.types.is_nested(field.type) for field in data.schema)
+            else None
+        )
+        write_deltalake(
+            self._uri,
+            _coerce_for_delta(data, existing),
+            mode="append",
+            schema_mode="merge",
+            storage_options=storage_options() or None,
+        )
+        self._staged = True
+
+    def _known_schema(self) -> pa.Schema | None:
+        """The stored form of each column so far: the table's, then this run's.
+
+        An append keeps a column the table already has in the form it was stored in
+        (see :func:`_columns_to_encode`), so the table's schema counts as well as what
+        has been staged. An overwrite replaces the table, so only the run's own counts.
+        """
+        staged = _existing_schema(self._uri) if self._staged else None
+        if not self._append:
+            return staged
+        if not self._target_read:
+            self._target_schema = _existing_schema(table_uri(self.table))
+            self._target_read = True
+        fields = {field.name: field for field in self._target_schema or []}
+        fields.update({field.name: field for field in staged or []})
+        return pa.schema(list(fields.values())) if fields else None
+
+    def commit(self) -> str | None:
+        """Publish the staged rows in one commit; the table URI, or None if none."""
+        from deltalake import DeltaTable, write_deltalake
+
+        if not self._staged:
+            return None
+        opts = storage_options() or None
+        uri = table_uri(self.table)
+        if _is_local():
+            Path(uri).parent.mkdir(parents=True, exist_ok=True)
+        staged = DeltaTable(self._uri, storage_options=opts).to_pyarrow_dataset()
+        write_deltalake(
+            uri,
+            staged.scanner().to_reader(),
+            mode="append" if self._append else "overwrite",
+            schema_mode="merge" if self._append else "overwrite",
+            storage_options=opts,
+        )
+        return uri
+
+    def discard(self) -> None:
+        """Delete the staging table; a failure to is logged, never raised."""
+        if not self._touched:
+            return
+        try:
+            self._filesystem.delete_dir(self._path)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.warning(
+                "could not remove staging table %s", self._uri, exc_info=True
+            )
+        self._touched = self._staged = False
 
 
 def table_location(table: str) -> str | None:
