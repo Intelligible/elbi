@@ -63,14 +63,17 @@ jobs:
             code:
               - "packages/**"
               - "spec/**"
+              - "tests/**"
               - "pyproject.toml"
               - "uv.lock"
               - ".github/workflows/ci.yml"
             docs:
               - "docs/**"
+              - "README.md"
               - "mkdocs.yml"
               - "packages/**"
               - "pyproject.toml"
+              - "tests/test_docs_imports.py"
               - ".github/workflows/ci.yml"
 
   # The workflows themselves, checked like any other source. Both tools caught real things
@@ -471,6 +474,10 @@ jobs:
       - run: uv sync --locked --all-extras --dev
       - name: Build docs (strict)
         run: uv run mkdocs build --strict
+      # Here as well as in `test`, because `test` never starts on a docs-only change, which
+      # is the change most likely to break a documented import.
+      - name: Documented imports resolve
+        run: uv run pytest tests/test_docs_imports.py -q
 
   # One check to require, reporting for all of them. A branch rule naming the jobs above
   # directly would block any pull request that legitimately skipped one, because a skipped
