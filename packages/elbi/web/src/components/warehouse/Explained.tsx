@@ -21,8 +21,8 @@ export const SYNC_HELP = {
   schedule:
     "How often the app syncs this source on its own. Manual only means it syncs only when you click Sync now.",
   method:
-    "Full refresh reads every row and replaces the table on each sync. Incremental appends only rows past the cursor column's value from the last sync; it is offered only where the source has a usable cursor.",
-  rows: "Rows recorded by this table's last successful sync: the rows written on a full refresh, or the running total appended on incremental. A failed sync does not update it, and can leave the table partly rewritten, so check Status before trusting it.",
+    "There are two variants of sync. Full refresh reads every row and replaces the table on each sync. Incremental appends only rows past the cursor column's value from the last sync.",
+  rows: "Number of rows recorded by this table's last successful sync.",
 } as const
 
 // `example` is one of this source's own table names, so the pattern is shown on real data.
