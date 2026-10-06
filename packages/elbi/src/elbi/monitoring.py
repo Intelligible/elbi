@@ -12,6 +12,13 @@ path: a monitor whose metric query or derivation stops evaluating would otherwis
 quiet, which reads exactly like a healthy value. Consecutive failures fold into one
 incident, and the next readable value closes it, as a recovery or as a fresh anomaly.
 
+A derivation monitor can also name a ``key`` column next to its measure. The reading
+then carries the keys of the rows that breach (a positive measure value), every alert
+lists them, and a breach that widens while its incident is open raises
+``metric.breach_widened``. Without it, an incident opened by one failing row absorbs
+every later one in silence: the sum moves from 1 to 2 and folds into the open incident,
+so the second failure is never announced for as long as the first one stays broken.
+
 The value source, the certified gate, and alert delivery are injected by the app; this
 service owns the snapshot, detection, and incident bookkeeping.
 """
@@ -35,6 +42,7 @@ from .wire import MonitorSnapshot as WireMonitorSnapshot
 ANOMALY_DETECTED = "metric.anomaly_detected"
 RECOVERED = "metric.recovered"
 SOURCE_FAILED = "metric.source_failed"
+BREACH_WIDENED = "metric.breach_widened"
 
 #: The ``cause`` of an incident opened because the source could not be read. An anomaly
 #: incident carries ``None``, which is also what rows predating the column hold.
@@ -47,13 +55,23 @@ class MonitorError(Exception):
     """A monitor operation failed for a reason worth showing the caller."""
 
 
+class Reading:
+    """A monitor value plus the keys of its breaching rows (``None`` when unkeyed)."""
+
+    __slots__ = ("keys", "value")
+
+    def __init__(self, value: float, keys: tuple[str, ...] | None = None) -> None:
+        self.value = float(value)
+        self.keys = keys
+
+
 class MonitorService:
     """Create, run, and inspect anomaly monitors over metrics and derivations."""
 
     def __init__(
         self,
         store: Store,
-        read_value: Callable[[MetricMonitor], float],
+        read_value: Callable[[MetricMonitor], float | Reading],
         source_certified: Callable[[str, str], bool],
         on_alert: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
@@ -63,6 +81,10 @@ class MonitorService:
         self._read_value = read_value
         self._source_certified = source_certified
         self._on_alert = on_alert
+        # The breaching keys each keyed monitor last read, to tell a widened breach from
+        # one already reported. In memory: after a restart the first reading inside an
+        # open incident only re-seeds it, so a restart never re-alerts on old keys.
+        self._last_keys: dict[str, frozenset[str]] = {}
 
     def create(
         self,
@@ -215,7 +237,11 @@ class MonitorService:
             MonitorError: if the source could not be read, after alerting on it.
         """
         try:
-            value = float(self._read_value(monitor))
+            raw = self._read_value(monitor)
+            if isinstance(raw, Reading):
+                value, keys = raw.value, raw.keys
+            else:
+                value, keys = float(raw), None
         except Exception as exc:
             # Any failure to evaluate the source counts, not only the library's own
             # error types: a metric query raises its service's error, and an exception
@@ -255,6 +281,10 @@ class MonitorService:
             )
         )
         alert = self._manage_incident(monitor, verdict, value, source_verdict)
+        if keys is not None:
+            alert = self._track_keys(
+                monitor, verdict, value, source_verdict, keys, alert
+            )
         self._store.touch_metric_monitor(monitor.id, _now())
         if alert is not None and self._on_alert is not None:
             self._on_alert(alert)
@@ -315,6 +345,32 @@ class MonitorService:
             self._store.save_incident(open_incident)
             return self._alert(monitor, RECOVERED, verdict, value, source_verdict)
         return None
+
+    def _track_keys(
+        self,
+        monitor: MetricMonitor,
+        verdict: Any,
+        value: float,
+        source_verdict: str | None,
+        keys: tuple[str, ...],
+        alert: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Attach the breaching keys to ``alert``, or raise one for a widened breach."""
+        current = frozenset(keys)
+        previous = self._last_keys.get(monitor.id)
+        self._last_keys[monitor.id] = current
+        if alert is not None:
+            alert["breach_keys"] = sorted(current)
+            return alert
+        if not verdict.anomalous or previous is None:
+            return None
+        added = current - previous
+        if not added:
+            return None
+        widened = self._alert(monitor, BREACH_WIDENED, verdict, value, source_verdict)
+        widened["breach_keys"] = sorted(current)
+        widened["new_keys"] = sorted(added)
+        return widened
 
     def _source_failed(
         self, monitor: MetricMonitor, reason: str

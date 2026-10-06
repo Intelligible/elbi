@@ -33,6 +33,7 @@ EVENT_TYPES: dict[str, bool] = {
     "metric.anomaly_detected": True,
     "metric.recovered": False,
     "metric.source_failed": True,
+    "metric.breach_widened": True,
     "run.failed": True,
     "run.slow": False,
     "drift.detected": False,
@@ -60,9 +61,11 @@ def _render(action: str, data: Mapping[str, Any]) -> tuple[str, str, str, str]:
     notification, not an exception in the operation that produced the event.
     """
     if action == "metric.anomaly_detected":
+        reason = str(data.get("reason") or "")
+        keys = ", ".join(str(k) for k in (data.get("breach_keys") or []))
         return (
             f"Monitor {data.get('monitor', '')!r} detected an anomaly",
-            str(data.get("reason") or ""),
+            (f"{reason}. Breaching: {keys}" if keys else reason)[:_ERROR_CAP],
             "metric_monitor",
             str(data.get("monitor_id") or ""),
         )
@@ -70,6 +73,14 @@ def _render(action: str, data: Mapping[str, Any]) -> tuple[str, str, str, str]:
         return (
             f"Monitor {data.get('monitor', '')!r} recovered",
             str(data.get("reason") or ""),
+            "metric_monitor",
+            str(data.get("monitor_id") or ""),
+        )
+    if action == "metric.breach_widened":
+        added = ", ".join(str(k) for k in (data.get("new_keys") or []))
+        return (
+            f"Monitor {data.get('monitor', '')!r} has new breaching rows",
+            f"Newly breaching: {added}"[:_ERROR_CAP],
             "metric_monitor",
             str(data.get("monitor_id") or ""),
         )

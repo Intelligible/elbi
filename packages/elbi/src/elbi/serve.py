@@ -71,7 +71,7 @@ from .features import FeatureStoreService
 from .lineage import LineageService
 from .metrics import MetricService
 from .ml import kernel_tracking_env, make_model_service
-from .monitoring import MonitorService
+from .monitoring import MonitorService, Reading
 from .notebooks import NotebookService
 from .notifications import monitor_alert_handler, orchestration_alert_handler
 from .orchestration import OrchestrationService
@@ -1036,7 +1036,7 @@ def build(
         )
         return list(result["rows"])
 
-    def read_monitor_value(monitor: Any) -> float:
+    def read_monitor_value(monitor: Any) -> float | Reading:
         """The scalar a monitor watches: a metric's total or a derivation stat."""
         config = json.loads(monitor.config_json or "{}")
         if monitor.target_kind == "metric":
@@ -1061,7 +1061,21 @@ def build(
             for r in rows
             if column in r and isinstance(r[column], (int, float))
         ]
-        return _aggregate_values(agg, values)
+        value = _aggregate_values(agg, values)
+        key = measure.get("key") if isinstance(measure, dict) else None
+        if not key or not column:
+            return value
+        # The rows whose measure is positive are the breach; name them by `key`.
+        breaching = tuple(
+            sorted(
+                str(r[key])
+                for r in rows
+                if key in r
+                and isinstance(r.get(column), (int, float))
+                and float(r[column]) > 0
+            )
+        )
+        return Reading(value, breaching)
 
     def monitor_source_certified(kind: str, target: str) -> bool:
         """Whether a monitor's target is a certified metric or derivation."""
