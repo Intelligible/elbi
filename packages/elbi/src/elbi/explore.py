@@ -79,7 +79,7 @@ class ExploreService:
         self._resolve_source = resolve_source
         self._read_schema = read_schema
         self._derive_factory = derive_factory
-        # Verify-only: reports the oracle's verdict for review, certifying nothing.
+        # Verify-only: reports whether the draft verified, certifying nothing.
         self._draft_factory = draft_factory
         # Authors an external-source query as a trusted in-process derivation (the
         # sandbox has no database access), when the app wires the capability.

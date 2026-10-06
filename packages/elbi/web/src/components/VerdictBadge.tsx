@@ -11,9 +11,9 @@ type VerdictStyle = {
   icon: LucideIcon
 }
 
-// The oracle's verdict, rendered from one vocabulary so the same word means the same thing (and
-// wears the same color) everywhere it appears. Only a certified- sound run gets the shield and
-// the verified tint: the UI never dresses an unproven run as verified.
+// A verification verdict, rendered from one vocabulary so the same word means the same thing
+// (and wears the same color) everywhere it appears. Only a certified-sound run gets the shield
+// and the verified tint: the UI never dresses an unproven run as verified.
 const VERDICTS: Record<string, VerdictStyle> = {
   sound: { label: "Verified", variant: "verified", icon: ShieldCheck },
   verified: { label: "Verified", variant: "verified", icon: ShieldCheck },

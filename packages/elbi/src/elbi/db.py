@@ -1049,8 +1049,8 @@ class MetricSnapshot(SQLModel, table=True):
     upper: float | None = Field(default=None)
     score: float | None = Field(default=None)
     reason: str = ""
-    # The source's oracle verdict at snapshot time: a monitored number rides on a
-    # certified metric/derivation, so an alert can say the moved number was verified.
+    # The source's verification verdict at snapshot time. A monitor only watches a
+    # certified metric or derivation, so an alert can say the moved number was verified.
     source_verdict: str | None = Field(default=None)
 
 
@@ -1108,7 +1108,7 @@ class Notification(SQLModel, table=True):
     body: str = ""
     target_type: str = ""  # "metric_monitor" | "orchestration_run" | "model_version"
     target_id: str = ""
-    verdict: str | None = None  # the source's oracle verdict, where the event has one
+    verdict: str | None = None  # the source's verification verdict, if any
     payload_json: str = "{}"  # full event payload, for a detail view
     read_at: datetime | None = Field(default=None, index=True)
     emailed_at: datetime | None = None

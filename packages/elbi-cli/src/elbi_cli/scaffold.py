@@ -139,7 +139,7 @@ _AGENTS_MD = """\
 # __PROJECT__: agent guide
 
 An [elbi](https://github.com/Intelligible/elbi) data-context project:
-versioned, cached, oracle-certified derivations served to agents over MCP. This is the
+versioned, cached, verified derivations served to agents over MCP. This is the
 source of truth for AI coding agents (AGENTS.md standard); `CLAUDE.md` imports it.
 
 ## Layout

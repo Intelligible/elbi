@@ -126,8 +126,8 @@ ships installed; in the SDK it needs the `ml` extra (`pip install 'elbi[ml]'`).
 Drift asks whether values *moved*; a **data contract** asks whether they meet a declared
 bar at all: types, ranges, non-null, uniqueness. A view can carry one contract (the
 platform's own [DataContract](spec.md), the same quality bar derivations use), and its
-feature values are checked against it with the same three-valued verdict the oracle
-speaks:
+feature values are checked against it. The result is `sound`, `unsound`, or
+`inconclusive`, the same three verdicts a derivation's claim can get:
 
 ```
 POST /api/features/views/user_stats/contract/suggest   # profile → proposed contract

@@ -138,7 +138,7 @@ def registry_models(context: Sources) -> Iterator[SearchDoc]:
 
 
 def _champion_verdict(service: ModelService, model: Any) -> str | None:
-    """The oracle's verdict on the champion version, or ``None`` without a champion.
+    """The champion version's verification verdict, or ``None`` without a champion.
 
     A read failure raises rather than returning ``None``, because ``None`` is a real
     value here and the digest covers the verdict: returning it on error would rewrite

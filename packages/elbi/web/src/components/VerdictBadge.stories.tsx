@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 
 import { VerdictBadge } from "./VerdictBadge"
 
-// The oracle's verdict vocabulary, rendered from one source of truth. Only a
+// The verification verdict vocabulary, rendered from one source of truth. Only a
 // certified-sound run wears the verified tint.
 const meta: Meta<typeof VerdictBadge> = {
   title: "Verdict/VerdictBadge",

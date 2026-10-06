@@ -149,7 +149,7 @@ On top of certified derivations you can build:
   same sound number.
 
 [Monitor](./docs/monitoring.md) any metric or derivation against a learned baseline and
-get alerted when a verified number moves, with the oracle's verdict attached.
+get alerted when a verified number moves, with the source's verification verdict in the alert.
 [Lineage and the catalog](./docs/lineage.md) cover provenance, impact analysis and
 search across every artifact. [Orchestration](./docs/orchestration.md) materializes
 assets that have gone stale, on a cron schedule or a data-change sensor, and keeps

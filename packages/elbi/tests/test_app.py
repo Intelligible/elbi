@@ -679,7 +679,7 @@ def test_chat_launches_a_background_run_code_job(tmp_path: object) -> None:
 def test_background_completion_posts_a_verified_followup(tmp_path: object) -> None:
     # When a background derivation job certifies, the agent is re-pinged: an off-request
     # turn narrates the certified result and a verified follow-up answer is posted back
-    # to the conversation (no re-derive, and it carries the oracle's verdict).
+    # to the conversation (no re-derive, and it includes the verification verdict).
     import time
     from pathlib import Path
 

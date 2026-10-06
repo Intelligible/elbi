@@ -1078,7 +1078,7 @@ def build(
     )
 
     def model_edges() -> list[dict[str, Any]]:
-        """Each registered model's oracle verdict and training source.
+        """Each registered model's verification verdict and training source.
 
         ``source_kind`` and ``dataset`` name the training source (a derivation, a
         bound dataset, or a feature-store training set) so lineage links the model to
@@ -1288,7 +1288,7 @@ def build(
         # exports the OSI standard. A simple metric's source must be certified.
         metric_service=metric_service,
         # Monitoring: watch a metric or derivation over time, detect anomalies against a
-        # learned baseline, and alert (webhook + audit) with the oracle verdict.
+        # learned baseline, and alert (webhook + audit) with the source's verdict.
         monitor_service=monitor_service,
         # Data warehouse: sync external sources (SQL DBs, files, SaaS APIs) into a
         # portable Delta Lake lakehouse (local file:// or the user's own S3/GCS/Azure),
