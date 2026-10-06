@@ -24,11 +24,14 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
+    env:
+      ANTHROPIC_PROXY_PORT: 8787
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/scripts/anthropic-oidc-proxy.mjs
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       # The review's own checkout rewrites the workspace, so run the proxy from outside it.
       - name: Start the Anthropic token proxy
@@ -41,7 +44,7 @@ jobs:
           node "$RUNNER_TEMP/anthropic-oidc-proxy.mjs" 2> "$RUNNER_TEMP/anthropic-oidc-proxy.log" &
           proxy=$!
           for _ in $(seq 30); do
-            if curl -sf http://127.0.0.1:8787/healthz > /dev/null; then exit 0; fi
+            if curl -sf "http://127.0.0.1:$ANTHROPIC_PROXY_PORT/healthz" > /dev/null; then exit 0; fi
             if ! kill -0 "$proxy" 2> /dev/null; then break; fi
             sleep 1
           done
@@ -51,7 +54,7 @@ jobs:
       - uses: alibaba/open-code-review@182898cf522da3d04157b422752d028417974e19 # v1.12.12
         with:
           ocr_version: '1.12.12'
-          llm_url: http://127.0.0.1:8787/v1/messages
+          llm_url: http://127.0.0.1:${{ env.ANTHROPIC_PROXY_PORT }}/v1/messages
           # The action requires a token; the proxy replaces it with the federated one.
           llm_auth_token: federated-by-proxy
           llm_auth_header: authorization

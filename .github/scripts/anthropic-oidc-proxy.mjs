@@ -4,12 +4,15 @@
 // review would otherwise start failing partway through.
 import http from 'node:http';
 import https from 'node:https';
+import { pipeline } from 'node:stream';
 
 const UPSTREAM_HOST = 'api.anthropic.com';
 const AUDIENCE = 'https://api.anthropic.com';
-const PORT = Number(process.env.ANTHROPIC_PROXY_PORT ?? '8787');
 // Same advisory window the Anthropic SDKs use before expiry.
 const REFRESH_MARGIN_MS = 120_000;
+// A cached token this close to expiry is not worth sending when a refresh fails.
+const MIN_REMAINING_MS = 10_000;
+const TOKEN_FETCH_TIMEOUT_MS = 30_000;
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -18,6 +21,7 @@ function requireEnv(name) {
 }
 
 const config = {
+  port: Number(requireEnv('ANTHROPIC_PROXY_PORT')),
   idTokenUrl: requireEnv('ACTIONS_ID_TOKEN_REQUEST_URL'),
   idTokenRequestToken: requireEnv('ACTIONS_ID_TOKEN_REQUEST_TOKEN'),
   federationRuleId: requireEnv('ANTHROPIC_FEDERATION_RULE_ID'),
@@ -37,9 +41,11 @@ async function fetchGithubIdToken() {
   const url = `${config.idTokenUrl}&audience=${encodeURIComponent(AUDIENCE)}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${config.idTokenRequestToken}` },
+    signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`GitHub OIDC token request failed: ${res.status} ${await res.text()}`);
   const { value } = await res.json();
+  if (typeof value !== 'string' || !value) throw new Error('GitHub OIDC response has no token value');
   return value;
 }
 
@@ -56,10 +62,14 @@ async function exchange() {
       organization_id: config.organizationId,
       service_account_id: config.serviceAccountId,
     }),
+    signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
   });
   const body = await res.text();
   if (!res.ok) throw new Error(`Anthropic token exchange failed: ${res.status} ${body}`);
   const { access_token: token, expires_in: expiresIn } = JSON.parse(body);
+  if (typeof token !== 'string' || !token || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+    throw new Error('Anthropic token exchange response has no access_token or expires_in');
+  }
   log(`minted a token that expires in ${expiresIn}s`);
   return { token, expiresAt: Date.now() + expiresIn * 1000 };
 }
@@ -68,9 +78,9 @@ let cached = null;
 let pending = null;
 
 function getToken() {
-  if (cached && cached.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
-    return Promise.resolve(cached.token);
-  }
+  const remaining = cached ? cached.expiresAt - Date.now() : 0;
+  if (remaining > REFRESH_MARGIN_MS) return Promise.resolve(cached.token);
+
   pending ??= exchange()
     .then((fresh) => {
       cached = fresh;
@@ -79,12 +89,25 @@ function getToken() {
     .finally(() => {
       pending = null;
     });
-  return pending;
+  if (remaining <= MIN_REMAINING_MS) return pending;
+
+  // The current token is still good for a while, so a failed refresh should
+  // not fail the request. The next request past the margin tries again.
+  const stillValid = cached.token;
+  return pending.catch((err) => {
+    log(`refresh failed, using the cached token: ${describe(err)}`);
+    return stillValid;
+  });
 }
 
-function sendError(res, status, message) {
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ type: 'error', error: { type: 'api_error', message } }));
+function fail(res, err) {
+  log(describe(err));
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
+  res.writeHead(502, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ type: 'error', error: { type: 'api_error', message: describe(err) } }));
 }
 
 const server = http.createServer(async (req, res) => {
@@ -97,8 +120,7 @@ const server = http.createServer(async (req, res) => {
   try {
     token = await getToken();
   } catch (err) {
-    log(describe(err));
-    sendError(res, 502, describe(err));
+    fail(res, err);
     return;
   }
 
@@ -107,17 +129,18 @@ const server = http.createServer(async (req, res) => {
 
   const upstream = https.request({ host: UPSTREAM_HOST, method: req.method, path: req.url, headers }, (upstreamRes) => {
     res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
-    upstreamRes.pipe(res);
+    pipeline(upstreamRes, res, (err) => {
+      if (err) log(`response stream failed: ${describe(err)}`);
+    });
   });
-  upstream.on('error', (err) => {
-    log(`upstream request failed: ${err.message}`);
-    if (res.headersSent) {
-      res.destroy(err);
-      return;
-    }
-    sendError(res, 502, err.message);
+  upstream.on('error', (err) => fail(res, err));
+  // Stop generation upstream (and its billing) when the client goes away first.
+  res.on('close', () => {
+    if (!res.writableFinished) upstream.destroy();
   });
-  req.pipe(upstream);
+  pipeline(req, upstream, (err) => {
+    if (err) fail(res, err);
+  });
 });
 
 try {
@@ -126,4 +149,4 @@ try {
   log(describe(err));
   process.exit(1);
 }
-server.listen(PORT, '127.0.0.1', () => log(`listening on 127.0.0.1:${PORT}`));
+server.listen(config.port, '127.0.0.1', () => log(`listening on 127.0.0.1:${config.port}`));
