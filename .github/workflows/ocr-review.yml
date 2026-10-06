@@ -16,16 +16,18 @@ permissions:
 
 jobs:
   review:
-    # Maintainers' PRs are reviewed on every push. Anyone else's are reviewed
-    # once each time a maintainer adds the ocr-review label; later pushes need
-    # the label removed and added again.
+    # PRs from branches in this repo are reviewed on every push: only people with
+    # write access can push here. Fork PRs are reviewed once each time a
+    # maintainer adds the ocr-review label; later pushes need the label removed
+    # and added again. author_association can't tell maintainers apart, because
+    # the event reports private org members as CONTRIBUTOR.
     if: >-
       !github.event.pull_request.draft
       && github.event.pull_request.user.login != 'dependabot[bot]'
       && (github.event.action == 'labeled'
         && github.event.label.name == 'ocr-review'
         || github.event.action != 'labeled'
-        && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association))
+        && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
