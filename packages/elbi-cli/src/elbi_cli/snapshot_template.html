@@ -1,8 +1,10 @@
+<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
+<!-- The page loads nothing: a shared file that fetched would tell a third party who opened it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>__TITLE__</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <style>
   /* Elbi's own tokens (packages/elbi/web/src/index.css), so a snapshot reads as the app. */
   :root {
@@ -64,6 +66,7 @@
   .meta b { font-weight: 500; color: var(--text-2); }
   .notice { font-size: 12px; color: var(--text-3); }
 
+  [hidden] { display: none !important; }
   .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--tab-bg); border: 1px solid var(--border); border-radius: 8px; width: fit-content; max-width: 100%; margin-bottom: 18px; }
   .tabs button { font: 500 13px/1 var(--sans); color: var(--text-2); background: none; border: 0; border-radius: 5px; padding: 9px 12px; cursor: pointer; }
   .tabs button:hover { color: var(--fg); }
@@ -127,9 +130,9 @@
     <div class="meta" id="meta"></div>
     <div class="notice" id="notice" hidden></div>
   </header>
-  <nav class="tabs" role="tablist" id="tabs"></nav>
-  <main class="grid" id="grid"></main>
-  <footer>Frozen at the time above: these figures do not update. Each tile names the derivation that produced it and a short fingerprint of the data it read, so any figure can be traced back to the governed source.</footer>
+  <div class="tabs" role="tablist" aria-label="Pages" id="tabs"></div>
+  <main><div class="grid" id="grid"></div></main>
+  <footer>Frozen at the time above: these figures do not update. Each tile names the derivation or shared metric behind it, and a derivation's tile a short fingerprint of the data it read, so any figure can be traced back to the governed source.</footer>
 </div>
 
 <script id="snapshot-data" type="application/json">__DATA__</script>
@@ -158,24 +161,33 @@
     n.hidden = false;
   }
 
-  // -- formatting (mirrors DashboardWidget.tsx) -------------------------------------
+  // -- formatting (mirrors formatMetricValue in web/src/lib/metrics.ts) ---------------
   // Only called with a value: metricBody renders the empty state itself.
-  function formatValue(value, format) {
-    const num = typeof value === "number" ? value : Number(value);
-    if (Number.isNaN(num)) return String(value);
-    if (format === "currency") return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-    if (format === "percent") return num.toLocaleString(undefined, { style: "percent", maximumFractionDigits: 1 });
-    return num.toLocaleString(undefined, { maximumFractionDigits: Number.isInteger(num) ? 0 : 1 });
-  }
-  function aggregate(rows, field, agg) {
-    const nums = rows.map((r) => Number(r[field])).filter((n) => Number.isFinite(n));
-    if (!nums.length) return undefined;
-    switch (agg) {
-      case "sum": return nums.reduce((a, b) => a + b, 0);
-      case "mean": return nums.reduce((a, b) => a + b, 0) / nums.length;
-      case "min": return Math.min(...nums);
-      case "max": return Math.max(...nums);
+  function formatMetricValue(value, format) {
+    if (typeof value !== "number") return String(value);
+    if (!format || format.kind === "duration") {
+      if (format?.kind === "duration") return formatDuration(value);
+      return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
     }
+    const opts = { notation: format.notation ?? "standard" };
+    if (typeof format.precision === "number") {
+      opts.minimumFractionDigits = format.precision;
+      opts.maximumFractionDigits = format.precision;
+    }
+    if (format.kind === "currency") {
+      opts.style = "currency";
+      opts.currency = format.currency || "USD";
+    } else if (format.kind === "percent") {
+      opts.style = "percent"; // Intl multiplies by 100; a percent metric stores the fraction
+    }
+    return new Intl.NumberFormat(undefined, opts).format(value);
+  }
+  // Seconds as a compact "1h 23m 4s" (Intl has no duration style).
+  function formatDuration(seconds) {
+    const s = Math.floor(Math.abs(seconds));
+    const parts = [[Math.floor(s / 3600), "h"], [Math.floor((s % 3600) / 60), "m"], [s % 60, "s"]];
+    const shown = parts.filter(([n]) => n > 0).map(([n, u]) => `${n}${u}`);
+    return (seconds < 0 ? "-" : "") + (shown.join(" ") || "0s");
   }
   const fmtCell = (v) => {
     if (v === null || v === undefined || v === "") return EMPTY;
@@ -193,7 +205,7 @@
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   }
   function markdown(text) {
     const out = [];
@@ -213,19 +225,16 @@
   // -- widget bodies ----------------------------------------------------------------
   const rowsOf = (data) => Array.isArray(data?.value) ? data.value : [];
 
+  // A metric tile shows its shared metric's single value: the one row, keyed by the
+  // metric's name (mirrors MetricBody in DashboardWidget.tsx).
   function metricBody(w) {
-    const viz = w.viz || {};
-    const rows = rowsOf(w.data);
-    let raw;
-    if (viz.agg === "count") raw = rows.length;
-    else if (viz.agg && viz.field) raw = aggregate(rows, viz.field, viz.agg);
-    else if (viz.field && rows.length) raw = rows[0][viz.field];
-    else if (typeof w.data?.value === "number" || typeof w.data?.value === "string") raw = w.data.value;
+    const name = w.bind?.metric;
+    const raw = name ? rowsOf(w.data)[0]?.[name] : undefined;
     const box = $("div");
     if (raw === null || raw === undefined) {
-      box.append($("div", "metric-empty", EMPTY), $("div", "hint", viz.field ? `No column “${viz.field}” in the result.` : "No value."));
+      box.append($("div", "metric-empty", EMPTY), $("div", "hint", name ? `No value for metric “${name}”.` : "Bind a metric to this tile."));
     } else {
-      box.append($("div", "metric-value", formatValue(raw, viz.format)));
+      box.append($("div", "metric-value", formatMetricValue(raw, w.data?.format)));
     }
     return box;
   }
@@ -489,7 +498,9 @@
     else body.append(tableBody(w, rowsOf(w.data)));
     card.append(body);
     if (bound && w.data.derivation) {
-      const src = $("div", "source", `from ${w.data.derivation}` + (w.data.data_version ? ` · data ${String(w.data.data_version).slice(0, 8)}` : ""));
+      // A metric-bound tile resolves through the metric, whose name rides in `derivation`.
+      const via = w.bind?.metric ? "metric" : "from";
+      const src = $("div", "source", `${via} ${w.data.derivation}` + (w.data.data_version ? ` · data ${String(w.data.data_version).slice(0, 8)}` : ""));
       src.title = w.data.data_version ? `data version ${w.data.data_version}` : "";
       card.append(src);
     }
@@ -500,7 +511,7 @@
   const grid = document.getElementById("grid");
   function renderPage(page) {
     const ws = page.widgets.slice().sort((a, b) => ((a.gridPos?.y ?? 0) - (b.gridPos?.y ?? 0)) || ((a.gridPos?.x ?? 0) - (b.gridPos?.x ?? 0)));
-    const cols = page.columns || Math.max(12, ...ws.map((w) => (w.gridPos?.x ?? 0) + (w.gridPos?.w ?? 12)));
+    const cols = page.columns || Math.max(24, ...ws.map((w) => (w.gridPos?.x ?? 0) + (w.gridPos?.w ?? 12)));
     const starts = [...new Set(ws.map((w) => w.gridPos?.y ?? 0))].sort((a, b) => a - b);
     grid.style.setProperty("--cols", cols);
     grid.replaceChildren(...ws.map((w) => {
@@ -518,18 +529,32 @@
   const buttons = S.pages.map((p) => {
     const b = $("button", null, p.title);
     b.type = "button"; b.role = "tab"; b.id = "tab-" + p.name;
+    b.setAttribute("aria-controls", "grid");
     b.addEventListener("click", () => select(p.name, true));
     tabs.append(b);
     return b;
   });
-  if (S.pages.length < 2) tabs.hidden = true;
+  // The tabs pattern: arrow keys, Home and End move between pages; Tab leaves the list.
+  tabs.addEventListener("keydown", (e) => {
+    const i = buttons.indexOf(document.activeElement), n = buttons.length;
+    const j = { ArrowRight: i + 1, ArrowLeft: i - 1 + n, Home: 0, End: n - 1 }[e.key];
+    if (i < 0 || j === undefined) return;
+    e.preventDefault();
+    select(S.pages[j % n].name, true);
+    buttons[j % n].focus();
+  });
+  const tabbed = S.pages.length > 1;
+  if (tabbed) grid.setAttribute("role", "tabpanel"); else tabs.hidden = true;
   function select(name, push) {
     const i = Math.max(0, S.pages.findIndex((p) => p.name === name));
-    buttons.forEach((b, j) => b.setAttribute("aria-selected", String(i === j)));
+    buttons.forEach((b, j) => { b.setAttribute("aria-selected", String(i === j)); b.tabIndex = i === j ? 0 : -1; });
+    if (tabbed) grid.setAttribute("aria-labelledby", buttons[i].id);
     renderPage(S.pages[i]);
     if (push) try { history.replaceState(null, "", "#" + S.pages[i].name); } catch (_) { location.hash = S.pages[i].name; }
   }
-  if (S.pages.length) select(decodeURIComponent(location.hash.slice(1)), false);
+  // A hand-edited hash can fail to decode; select() then falls back to the first page.
+  const wanted = (() => { try { return decodeURIComponent(location.hash.slice(1)); } catch (_) { return ""; } })();
+  if (S.pages.length) select(wanted, false);
   else grid.append($("div", "hint", "This dashboard has no pages."));
 })();
 </script>

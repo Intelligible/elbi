@@ -3,10 +3,9 @@
 // metric, table, and text are light renderers. A widget whose derivation failed shows
 // its error in place rather than blanking.
 
-import { AlertCircle, Download, GripVertical, MoreHorizontal } from "lucide-react"
+import { AlertCircle, GripVertical, MoreHorizontal } from "lucide-react"
 import type { ReactNode } from "react"
 
-import { IconButton } from "@/components/app/IconButton"
 import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { Button } from "@/components/ui/button"
 import {
@@ -189,6 +188,8 @@ export function DashboardWidget({
   onDelete?: () => void
 }) {
   const crossFilter = widget.interactions?.crossFilter
+  // The rows a data tile already holds, offered as a CSV from the tile menu.
+  const csvRows = widget.type !== "text" && !data?.error ? asRows(data?.value) : []
   const drillThrough = widget.interactions?.drillThrough
 
   // A clicked table row emits its fields into the mapped variables (cross-filter),
@@ -256,19 +257,6 @@ export function DashboardWidget({
           {widget.title ?? ""}
         </div>
         <div className="flex items-center gap-1.5">
-          {widget.type !== "text" && !data?.error && asRows(data?.value).length > 0 ? (
-            <IconButton
-              label={`Download ${widget.title ?? widget.id} data as CSV`}
-              size="icon-xs"
-              className="dash-no-drag text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100"
-              onClick={() => {
-                const rows = asRows(data?.value)
-                downloadText(`${widget.id}.csv`, toCsv(Object.keys(rows[0]), rows), "text/csv")
-              }}
-            >
-              <Download className="size-3.5" />
-            </IconButton>
-          ) : null}
           {drillThrough && onDrillThrough ? (
             <Button
               variant="link"
@@ -278,7 +266,7 @@ export function DashboardWidget({
               Details →
             </Button>
           ) : null}
-          {onEdit || onDelete ? (
+          {csvRows.length > 0 || onEdit || onDelete ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -291,6 +279,19 @@ export function DashboardWidget({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="dash-no-drag">
+                {csvRows.length > 0 ? (
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      downloadText(
+                        `${widget.id}.csv`,
+                        toCsv(Object.keys(csvRows[0]), csvRows),
+                        "text/csv",
+                      )
+                    }
+                  >
+                    Download CSV
+                  </DropdownMenuItem>
+                ) : null}
                 {onEdit ? <DropdownMenuItem onSelect={onEdit}>Edit…</DropdownMenuItem> : null}
                 {onDelete ? (
                   <DropdownMenuItem variant="destructive" onSelect={onDelete}>

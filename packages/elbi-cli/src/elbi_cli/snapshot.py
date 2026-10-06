@@ -15,14 +15,37 @@ from __future__ import annotations
 
 import html
 import json
+import math
+import re
 from importlib import resources
 from typing import Any
 
 #: The fields of a resolved widget that describe what was shown and where it came from.
-_VALUE_FIELDS = ("value", "error", "kind", "derivation", "data_version")
+#: ``format`` is the bound metric's own display format, which a metric tile renders in.
+_VALUE_FIELDS = ("value", "error", "kind", "derivation", "data_version", "format")
 
-#: The fields of a widget spec the page needs to draw it.
-_WIDGET_FIELDS = ("id", "type", "title", "content", "gridPos", "viz")
+#: The fields of a widget spec the page needs to draw it. A metric tile reads its value
+#: by ``bind.metric``.
+_WIDGET_FIELDS = ("id", "type", "title", "content", "gridPos", "viz", "bind")
+
+#: What JSON inside a <script> must not hold raw: "<", since "</script" ends the
+#: element, and the rest of the set Rails' json_escape uses (">", "&", U+2028, U+2029).
+_SCRIPT_ESCAPES = {ord(c): f"\\u{ord(c):04x}" for c in "<>&\u2028\u2029"}
+
+
+def _finite(value: Any) -> Any:
+    """``value`` with every NaN and infinity as ``None``, which the page shows as empty.
+
+    JSON has neither, so the bare ``NaN`` that ``json.dumps`` writes by default would
+    make the page's ``JSON.parse`` reject the whole payload and leave the page blank.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite(v) for v in value]
+    return value
 
 
 def build(document: dict[str, Any]) -> dict[str, Any]:
@@ -73,9 +96,10 @@ def render(document: dict[str, Any]) -> str:
         .joinpath("snapshot_template.html")
         .read_text("utf-8")
     )
-    # JSON inside a <script> ends at the first "</script"; escaping every "<" closes
-    # that off without changing what the parser reads back.
-    data = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
-    return template.replace("__TITLE__", html.escape(str(payload["title"]))).replace(
-        "__DATA__", data
+    # Each escape is a JSON string escape, so JSON.parse reads back the same text.
+    data = json.dumps(_finite(payload), ensure_ascii=False, allow_nan=False).translate(
+        _SCRIPT_ESCAPES
     )
+    # One pass, so a title that happens to read "__DATA__" is not itself substituted.
+    fields = {"__TITLE__": html.escape(str(payload["title"])), "__DATA__": data}
+    return re.sub("__TITLE__|__DATA__", lambda m: fields[m.group()], template)

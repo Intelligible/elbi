@@ -5,10 +5,23 @@ export function cellText(v: unknown): string {
   return typeof v === "object" ? JSON.stringify(v) : String(v)
 }
 
+// RFC 4180: a field holding a quote, comma, CR or LF is quoted, its quotes doubled.
+function csvField(s: string): string {
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+// A spreadsheet runs a text cell that starts with = + - @ tab or CR as a formula (CSV
+// injection), so such a cell gets a leading ' and opens as the text it is. A number,
+// or text that is one ("-5"), is left alone: it opens as that number either way.
+function csvText(s: string): string {
+  const formula = /^[=+\-@\t\r]/.test(s) && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(s)
+  return csvField(formula ? `'${s}` : s)
+}
+
 export function toCsv(columns: string[], rows: Record<string, unknown>[]): string {
-  const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
-  const head = columns.map(esc).join(",")
-  const body = rows.map((r) => columns.map((c) => esc(cellText(r[c]))).join(",")).join("\n")
+  const cell = (v: unknown) => (typeof v === "string" ? csvText(v) : csvField(cellText(v)))
+  const head = columns.map(csvText).join(",")
+  const body = rows.map((r) => columns.map((c) => cell(r[c])).join(",")).join("\n")
   return `${head}\n${body}`
 }
 
