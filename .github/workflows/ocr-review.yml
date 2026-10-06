@@ -81,6 +81,8 @@ jobs:
   # from the job above that runs PR code and a third-party action. This job runs neither.
   resolve-outdated:
     needs: review
+    # Threads go outdated because of the push, so clean up even when the review itself failed.
+    if: ${{ !cancelled() && needs.review.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -95,18 +97,25 @@ jobs:
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
                     reviewThreads(first: 100) {
-                      nodes { id isResolved isOutdated comments(first: 50) { nodes { author { login } body } } }
+                      totalCount
+                      nodes { id isResolved isOutdated comments(first: 50) { totalCount nodes { author { login } body } } }
                     }
                   }
                 }
               }`,
               { owner: context.repo.owner, repo: context.repo.repo, number: context.issue.number },
             );
-            // Only the review bot's own outdated threads, and none a person has replied to.
-            const stale = repository.pullRequest.reviewThreads.nodes.filter(
+            const threads = repository.pullRequest.reviewThreads;
+            if (threads.totalCount > threads.nodes.length) {
+              core.warning(`Checked the first ${threads.nodes.length} of ${threads.totalCount} review threads`);
+            }
+            // Only the review bot's own outdated threads, and none a person has replied to. A thread
+            // with comments we did not fetch is skipped, since an unseen reply could be a person's.
+            const stale = threads.nodes.filter(
               (t) =>
                 !t.isResolved &&
                 t.isOutdated &&
+                t.comments.totalCount === t.comments.nodes.length &&
                 t.comments.nodes[0]?.body.startsWith('<!-- ocr-') &&
                 t.comments.nodes.every((c) => c.author?.login === 'github-actions'),
             );
