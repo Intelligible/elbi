@@ -21,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      # write, not read: GitHub only lets a token with repository write access resolve review threads.
+      contents: write
       pull-requests: write
       id-token: write
     env:
@@ -64,6 +65,8 @@ jobs:
           # Replaces the action's default {"thinking": {"type": "disabled"}}, which Opus 5.5 rejects.
           llm_extra_body: '{"output_config": {"effort": "high"}}'
           checkpoint_range: 'true'
+          # Resolve the bot's own threads once GitHub marks them outdated. Threads a person replied to are left open.
+          resolve_outdated: 'true'
 
       - name: Show the token proxy log
         if: always()
