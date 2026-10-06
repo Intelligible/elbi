@@ -21,8 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      # write, not read: GitHub only lets a token with repository write access resolve review threads.
-      contents: write
+      contents: read
       pull-requests: write
       id-token: write
     env:
@@ -65,9 +64,47 @@ jobs:
           # Replaces the action's default {"thinking": {"type": "disabled"}}, which Opus 5.5 rejects.
           llm_extra_body: '{"output_config": {"effort": "high"}}'
           checkpoint_range: 'true'
-          # Resolve the bot's own threads once GitHub marks them outdated. Threads a person replied to are left open.
-          resolve_outdated: 'true'
 
       - name: Show the token proxy log
         if: always()
         run: cat "$RUNNER_TEMP/anthropic-oidc-proxy.log" 2> /dev/null || true
+
+  # Resolving a review thread needs repository write access, so it runs here, apart
+  # from the job above that runs PR code and a third-party action. This job runs neither.
+  resolve-outdated:
+    needs: review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { repository } = await github.graphql(
+              `query ($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: 100) {
+                      nodes { id isResolved isOutdated comments(first: 50) { nodes { author { login } body } } }
+                    }
+                  }
+                }
+              }`,
+              { owner: context.repo.owner, repo: context.repo.repo, number: context.issue.number },
+            );
+            // Only the review bot's own outdated threads, and none a person has replied to.
+            const stale = repository.pullRequest.reviewThreads.nodes.filter(
+              (t) =>
+                !t.isResolved &&
+                t.isOutdated &&
+                t.comments.nodes[0]?.body.startsWith('<!-- ocr-') &&
+                t.comments.nodes.every((c) => c.author?.login === 'github-actions'),
+            );
+            for (const t of stale) {
+              await github.graphql('mutation ($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id } } }', {
+                id: t.id,
+              });
+            }
+            core.info(`Resolved ${stale.length} outdated review thread(s)`);
