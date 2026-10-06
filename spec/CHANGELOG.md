@@ -7,7 +7,7 @@ CLI changelog at the repository root.
 
 - A `text` widget MAY now `bind` a derivation that returns markdown, in place of its
   own `content`; it MUST have exactly one of the two. This makes a governed derivation
-  the escape hatch for a bespoke visual. Backward compatible: a `text` widget with
+  the escape hatch for a bespoke visual. Backwards compatible: a `text` widget with
   `content` is unaffected.
 
 ## 1.1 (unreleased)
