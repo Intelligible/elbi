@@ -107,9 +107,6 @@ function getToken() {
 }
 
 function fail(res, err) {
-  // The upstream error listener and the request pipeline both report the same
-  // upstream error; the first one has already replied.
-  if (res.writableEnded) return;
   log(describe(err));
   // A client that already left needs no reply.
   if (res.destroyed) return;
@@ -138,19 +135,34 @@ const server = http.createServer(async (req, res) => {
   const headers = { ...req.headers, host: UPSTREAM_HOST, authorization: `Bearer ${token}` };
   delete headers['x-api-key'];
 
-  const upstream = https.request({ host: UPSTREAM_HOST, method: req.method, path: req.url, headers }, (upstreamRes) => {
+  // Several listeners see the same failure, so only the first one reports it.
+  let reported = false;
+  const report = (err) => {
+    if (reported) return;
+    reported = true;
+    fail(res, err);
+  };
+
+  let upstreamRes = null;
+  const upstream = https.request({ host: UPSTREAM_HOST, method: req.method, path: req.url, headers }, (response) => {
+    upstreamRes = response;
     res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
     pipeline(upstreamRes, res, (err) => {
-      if (err) log(`response stream failed: ${describe(err)}`);
+      if (err) report(err);
     });
   });
-  upstream.on('error', (err) => fail(res, err));
-  // Stop generation upstream (and its billing) when the client goes away first.
+  upstream.on('error', report);
+  // Stop generation upstream (and its billing) when the client goes away
+  // first. The errors that teardown causes are ours, so they are not reported.
+  // A response that closed because the upstream stream failed is reported by
+  // the response pipeline instead.
   res.on('close', () => {
-    if (!res.writableFinished) upstream.destroy();
+    if (res.writableFinished || upstreamRes?.errored) return;
+    reported = true;
+    upstream.destroy();
   });
   pipeline(req, upstream, (err) => {
-    if (err) fail(res, err);
+    if (err) report(err);
   });
 });
 
