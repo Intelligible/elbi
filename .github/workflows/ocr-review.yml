@@ -1,8 +1,11 @@
 name: Open Code Review
 
+# pull_request_target so labeled fork PRs get an OIDC token. Nothing from the
+# PR head runs: this checkout is the base branch, and the review action reads
+# the head only as git objects.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
   group: ocr-${{ github.event.pull_request.number }}
@@ -13,11 +16,16 @@ permissions:
 
 jobs:
   review:
-    # Fork and Dependabot runs get no OIDC token, so there is nothing to review with.
+    # Maintainers' PRs are reviewed on every push. Anyone else's are reviewed
+    # once each time a maintainer adds the ocr-review label; later pushes need
+    # the label removed and added again.
     if: >-
       !github.event.pull_request.draft
-      && github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.user.login != 'dependabot[bot]'
+      && (github.event.action == 'labeled'
+        && github.event.label.name == 'ocr-review'
+        || github.event.action != 'labeled'
+        && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
