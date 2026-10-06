@@ -1,4 +1,12 @@
-import { AlertTriangle, FileCheck2, NotebookPen } from "lucide-react"
+import {
+  AlertTriangle,
+  ChevronDown,
+  Download,
+  FileCheck2,
+  FileCode2,
+  FileJson,
+  NotebookPen,
+} from "lucide-react"
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Streamdown } from "streamdown"
@@ -11,6 +19,12 @@ import {
   SceneSkeleton,
 } from "@/components/Scene"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { estimateText, VerdictBadge } from "@/components/VerdictBadge"
 
 import {
@@ -19,6 +33,7 @@ import {
   certificateUrl,
   type DerivationDetail,
   derivationExportUrl,
+  derivationHtmlExportUrl,
   getDerivation,
   getDerivationHistory,
 } from "@/lib/chat"
@@ -111,18 +126,51 @@ export function DerivationDetailPage() {
             {/* Not gated on an attestation, unlike the certificate above: an
                 uncertified derivation still exports, with a null certificate. */}
             <ScenePanelLabel label="Evidence">
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href={derivationExportUrl(d.name)}
-                  download
-                  aria-label="Export this derivation's record: source, claim, verdict, result history, and certificate"
-                >
-                  Export record
-                </a>
-              </Button>
-              <p className="mt-1.5 text-xs text-text-tertiary">
-                Source, claim, verdict, result history, and certificate, as one file.
-              </p>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="size-4" />
+                    Export
+                    <ChevronDown className="size-3.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-72">
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={derivationExportUrl(d.name)}
+                      download
+                      aria-label="Export this derivation's record: source, claim, verdict, result history, and certificate"
+                      className="items-start"
+                    >
+                      <FileJson className="mt-0.5 size-4" />
+                      <span className="flex flex-col">
+                        <span>Record (.json)</span>
+                        <span className="text-xs text-text-tertiary">
+                          Source, claim, verdict, result history, and certificate
+                        </span>
+                      </span>
+                    </a>
+                  </DropdownMenuItem>
+                  {d.rendered ? (
+                    <DropdownMenuItem asChild>
+                      <a
+                        href={derivationHtmlExportUrl(d.name)}
+                        download
+                        aria-label="Export this derivation's output as an HTML page"
+                        className="items-start"
+                      >
+                        <FileCode2 className="mt-0.5 size-4" />
+                        <span className="flex flex-col">
+                          <span>Output (.html)</span>
+                          <span className="text-xs text-text-tertiary">
+                            The output as shown here, as a page anyone can open
+                          </span>
+                        </span>
+                      </a>
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </ScenePanelLabel>
           </>
         }

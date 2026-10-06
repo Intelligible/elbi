@@ -76,6 +76,7 @@ from .certificate_pdf import render_certificate_pdf
 from .compute import over_budget, spend_limit
 from .dashboards import DashboardError, DashboardService
 from .db import Conversation, DataSource, Derivation, LlmProfile, Message, Secret, Store
+from .derivation_html import render as render_derivation_html
 from .derivation_jobs import derivation_job_key, submit_derivation_job
 from .explore import ExploreService
 from .features import (
@@ -5541,18 +5542,23 @@ def create_app(
         if row is None:
             raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
         detail = _derivation_detail(row)
-        # A stored rendering is rows already computed, so it cannot be narrowed after
-        # the fact. It is dropped for a caller an extension says to withhold it from,
-        # and the on-demand path below withholds too. The rest of the detail serves:
-        # what is withheld is rows, not the derivation's existence.
-        if _withholds(name):
-            detail.rendered = None
-        # A repo derivation stores no rendering; produce its output on demand.
-        if not detail.rendered and render_derivation is not None:
-            rendered = await run_in_threadpool(render_derivation, name)
-            if rendered:
-                detail.rendered = rendered
+        detail.rendered = await _rendered_output(name, detail.rendered)
         return detail
+
+    async def _rendered_output(name: str, stored: str | None) -> str | None:
+        """The output the detail view shows: stored, or produced on demand.
+
+        A stored rendering is rows already computed, so it cannot be narrowed after
+        the fact. It is dropped for a caller an extension says to withhold it from,
+        and the on-demand path withholds too. What is withheld is rows, not the
+        derivation's existence.
+        """
+        if _withholds(name):
+            stored = None
+        # A repo derivation stores no rendering; produce its output on demand.
+        if not stored and render_derivation is not None:
+            stored = await run_in_threadpool(render_derivation, name) or stored
+        return stored
 
     @app.get("/api/derivations/{name}/history")
     async def derivation_history(name: str, request: Request) -> list[dict[str, Any]]:
@@ -5774,6 +5780,40 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
         document = await _derivation_export_document(row)
         return _download_json(document, f"{name}-record")
+
+    @app.get("/api/exports/derivations/{name}/html")
+    async def export_derivation_html(name: str, request: Request) -> Response:
+        """A derivation's finding and output as one self-contained, read-only page.
+
+        Unlike the record above, this runs a repo derivation when nothing is stored:
+        the page is the output as the detail view shows it, not evidence of a run.
+        """
+        row = store.get_derivation(name) if store else None
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
+        detail = _derivation_detail(row)
+        output = await _rendered_output(name, detail.rendered)
+        if not output:
+            raise HTTPException(
+                status_code=404, detail=f"{name!r} has no output to export"
+            )
+        page = render_derivation_html(
+            name=name,
+            title=str((detail.serve or {}).get("title") or name),
+            output=output,
+            finding=detail.narrative or "",
+            verdict=detail.verdict,
+            exported_at=_iso_utc(datetime.now(timezone.utc)),
+        )
+        return Response(
+            content=page,
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{_safe_filename_part(name)}.html"'
+                )
+            },
+        )
 
     def _dashboard_record_document(dashboard_id: str) -> dict[str, Any]:
         """One dashboard's definition and saved versions -- nothing resolved.

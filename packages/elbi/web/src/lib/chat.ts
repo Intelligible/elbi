@@ -444,6 +444,11 @@ export function derivationExportUrl(name: string): string {
   return `/api/exports/derivations/${encodeURIComponent(name)}`
 }
 
+// The finding and output as the detail page shows them, as a self-contained HTML page.
+export function derivationHtmlExportUrl(name: string): string {
+  return `/api/exports/derivations/${encodeURIComponent(name)}/html`
+}
+
 // The slow one: a dashboard has no run history, so its export resolves every page to
 // capture what it actually shows. Expect seconds, not milliseconds.
 export function dashboardExportUrl(id: string): string {

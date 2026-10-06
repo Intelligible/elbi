@@ -173,6 +173,55 @@ def test_uncertified_derivation_exports_with_a_null_certificate(
     assert resp.json()["certificate"] is None
 
 
+# -- derivation output as HTML ----------------------------------------------------
+
+
+def test_derivation_output_exports_as_an_html_page(parts: tuple[Any, Any]) -> None:
+    store, app = parts
+    store.save_derivation(
+        Derivation(
+            name="posture",
+            question="why it costs what it does",
+            source="def posture(ctx): ...",
+            verdict="sound",
+            serve_json=json.dumps({"format": "markdown", "title": "Posture cost"}),
+            narrative="Most of it was a **one-off** scan.",
+            rendered="# Posture\n\n| a | b |\n|---|---|\n| 1 | 2 |\n",
+        )
+    )
+    with TestClient(app) as http:
+        resp = http.get("/api/exports/derivations/posture/html")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/html")
+    assert 'filename="posture.html"' in resp.headers["content-disposition"]
+    page = resp.text
+    assert "<title>Posture cost</title>" in page
+    assert "<h1>Posture</h1>" in page
+    assert "<td>1</td>" in page, "GFM tables render, as they do in the app"
+    assert "<strong>one-off</strong>" in page
+    assert "Verified output" in page
+    assert "default-src 'none'" in page
+    assert "script-src" not in page
+
+
+def test_derivation_html_export_needs_an_output(parts: tuple[Any, Any]) -> None:
+    store, app = parts
+    _save_derivation(store, name="bare", certified=False)
+    with TestClient(app) as http:
+        assert http.get("/api/exports/derivations/bare/html").status_code == 404
+        assert http.get("/api/exports/derivations/nope/html").status_code == 404
+
+
+def test_derivation_html_export_honours_withholding(parts: tuple[Any, Any]) -> None:
+    store, app = parts
+    store.save_derivation(
+        Derivation(name="secret", source="def secret(ctx): ...", rendered="rows")
+    )
+    app.state.withhold_rendering = lambda name: name == "secret"
+    with TestClient(app) as http:
+        assert http.get("/api/exports/derivations/secret/html").status_code == 404
+
+
 # -- AC-2: dashboard + metric export --------------------------------------------------
 
 _DASHBOARD = {

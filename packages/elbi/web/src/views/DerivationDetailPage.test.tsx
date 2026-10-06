@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 
@@ -78,5 +79,29 @@ describe("DerivationDetailPage claim panel", () => {
     renderPage()
     await screen.findByRole("heading", { name: "Claim" })
     expect(screen.queryByText("Not checked by the oracle.")).toBeNull()
+  })
+})
+
+describe("DerivationDetailPage evidence export", () => {
+  it("offers the record and, when there is output, the output as HTML", async () => {
+    vi.mocked(getDerivation).mockResolvedValue({ ...DETAIL, rendered: "# Result" })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole("button", { name: /Export/ }))
+    expect(
+      (await screen.findByRole("menuitem", { name: /record/ })).getAttribute("href"),
+    ).toBe("/api/exports/derivations/eff")
+    expect(
+      screen.getByRole("menuitem", { name: /as an HTML page/ }).getAttribute("href"),
+    ).toBe("/api/exports/derivations/eff/html")
+  })
+
+  it("offers no HTML export for a derivation with no output", async () => {
+    vi.mocked(getDerivation).mockResolvedValue(DETAIL)
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole("button", { name: /Export/ }))
+    await screen.findByRole("menuitem", { name: /record/ })
+    expect(screen.queryByRole("menuitem", { name: /as an HTML page/ })).toBeNull()
   })
 })
