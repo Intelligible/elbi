@@ -40,3 +40,26 @@ def rest_api_source(config: RESTAPIConfig | dict[str, Any]) -> Any:
     from dlt.sources.rest_api import rest_api_source as _rest_api_source
 
     return _rest_api_source(config)
+
+
+def rest_api_session() -> Any:
+    """The session ``rest_api`` builds when handed none: retries, timeouts, no raise.
+
+    A caller that needs to see each response passes this back as ``client.session``
+    rather than a bare ``requests`` session, which would lose the retry policy.
+    """
+    os.environ["RUNTIME__DLTHUB_TELEMETRY"] = "false"
+
+    from dlt.sources.helpers.requests.retry import Client
+
+    return Client(raise_for_status=False).session
+
+
+def detect_records_path(payload: Any) -> tuple[str, ...]:
+    """Where ``rest_api`` finds the records in a response when no selector is given."""
+    os.environ["RUNTIME__DLTHUB_TELEMETRY"] = "false"
+
+    from dlt.sources.helpers.rest_client.detector import find_response_page_data
+
+    path, _data = find_response_page_data(payload)
+    return tuple(path)
