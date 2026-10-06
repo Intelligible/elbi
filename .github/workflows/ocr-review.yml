@@ -25,38 +25,40 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - name: Exchange the GitHub OIDC token for an Anthropic token
-        id: anthropic
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts/anthropic-oidc-proxy.mjs
+          sparse-checkout-cone-mode: false
+
+      # The review's own checkout rewrites the workspace, so run the proxy from outside it.
+      - name: Start the Anthropic token proxy
         env:
-          FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
-          ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
-          SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
         run: |
-          jwt=$(curl -sS --fail-with-body \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" | jq -er .value)
-          echo "::add-mask::$jwt"
-          if ! resp=$(jq -n \
-            --arg jwt "$jwt" --arg rule "$FEDERATION_RULE_ID" \
-            --arg org "$ORGANIZATION_ID" --arg sa "$SERVICE_ACCOUNT_ID" \
-            '{grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: $jwt,
-              federation_rule_id: $rule, organization_id: $org, service_account_id: $sa}' \
-            | curl -sS --fail-with-body https://api.anthropic.com/v1/oauth/token \
-                -H "content-type: application/json" -d @-); then
-            echo "::error::Anthropic token exchange failed: $resp"
-            exit 1
-          fi
-          token=$(jq -er .access_token <<<"$resp")
-          echo "::add-mask::$token"
-          echo "Anthropic token expires in $(jq -r .expires_in <<<"$resp")s"
-          echo "token=$token" >> "$GITHUB_OUTPUT"
+          cp .github/scripts/anthropic-oidc-proxy.mjs "$RUNNER_TEMP/"
+          node "$RUNNER_TEMP/anthropic-oidc-proxy.mjs" 2> "$RUNNER_TEMP/anthropic-oidc-proxy.log" &
+          proxy=$!
+          for _ in $(seq 30); do
+            if curl -sf http://127.0.0.1:8787/healthz > /dev/null; then exit 0; fi
+            if ! kill -0 "$proxy" 2> /dev/null; then break; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/anthropic-oidc-proxy.log"
+          exit 1
 
       - uses: alibaba/open-code-review@182898cf522da3d04157b422752d028417974e19 # v1.12.12
         with:
           ocr_version: '1.12.12'
-          llm_url: https://api.anthropic.com/v1/messages
-          llm_auth_token: ${{ steps.anthropic.outputs.token }}
+          llm_url: http://127.0.0.1:8787/v1/messages
+          # The action requires a token; the proxy replaces it with the federated one.
+          llm_auth_token: federated-by-proxy
           llm_auth_header: authorization
           llm_model: claude-opus-5-5
           llm_use_anthropic: 'true'
           checkpoint_range: 'true'
+
+      - name: Show the token proxy log
+        if: always()
+        run: cat "$RUNNER_TEMP/anthropic-oidc-proxy.log" 2> /dev/null || true
