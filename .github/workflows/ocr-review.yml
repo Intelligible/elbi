@@ -4,7 +4,7 @@ name: Open Code Review
 # PR head runs: this checkout is the base branch, and the review action reads
 # the head only as git objects.
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
