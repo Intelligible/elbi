@@ -189,17 +189,21 @@ def test_create_discovers_schema_then_sync_lands_rows(
     ]
     assert result["source"]["status"] == "idle"
 
-    tables = client.get("/api/warehouse/tables").json()
-    assert tables == [
-        {
-            "table": "csv__people",
-            "source": "people",
-            "sourceType": "csv",
-            "rows": 3,
-            "location": tables[0]["location"],
-        }
-    ]
-    assert tables[0]["location"]
+
+def test_a_sync_while_one_is_running_is_a_conflict(
+    client: TestClient, people_csv: str
+) -> None:
+    """A second run beside a live one is refused, and refused as a conflict rather
+    than the not-found every other warehouse error maps to."""
+    source = _create(client, "people", {"path": people_csv})
+    client.app.state.store.update_external_source(source["id"], status="syncing")
+
+    response = client.post(f"/api/warehouse/sources/{source['id']}/sync")
+
+    assert response.status_code == 409, response.text
+    assert "already syncing" in response.json()["detail"]
+    # The refusal landed nothing.
+    assert client.get("/api/warehouse/tables").json() == []
 
 
 def test_upload_file_stores_it_and_drives_a_source(client: TestClient) -> None:

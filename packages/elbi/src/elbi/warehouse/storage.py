@@ -149,13 +149,16 @@ def _warehouse_filesystem() -> tuple[Any, str]:
         # Application Default Credentials -- workload identity on GKE, or
         # GOOGLE_APPLICATION_CREDENTIALS pointing at a key file.
         return pafs.GcsFileSystem(), rest
-    if scheme == "abfss":
-        # abfss://container@account.dfs.core.windows.net/prefix
-        container = rest.split("@", 1)[0]
-        prefix = rest.split("/", 1)[1] if "/" in rest else ""
+    if scheme in ("az", "abfs", "abfss"):
+        # az://container/prefix, the account in STORAGE_AZURE_ACCOUNT, or
+        # abfss://container@account.dfs.core.windows.net/prefix, which names it. The
+        # host wins when both are given, as it does in delta-rs.
+        container, _, prefix = rest.partition("/")
+        container, _, host = container.partition("@")
+        account = host.partition(".")[0] or opts.get("AZURE_STORAGE_ACCOUNT_NAME", "")
         return (
             pafs.AzureFileSystem(
-                account_name=opts.get("AZURE_STORAGE_ACCOUNT_NAME", ""),
+                account_name=account,
                 account_key=opts.get("AZURE_STORAGE_ACCOUNT_KEY") or None,
             ),
             f"{container}/{prefix}".rstrip("/"),
@@ -434,8 +437,10 @@ class StagedWrite:
     def __init__(self, table: str, *, mode: str = "overwrite") -> None:
         self.table = table
         self._append = mode == "append"
-        key = f"{_STAGING_PREFIX}/{table}-{uuid.uuid4().hex}"
-        self._filesystem, self._path, self._uri = warehouse_object(key)
+        # Only delta-rs touches the staging table until it is discarded: it reaches
+        # every store the warehouse root can name, where the upload filesystem does not.
+        self._key = f"{_STAGING_PREFIX}/{table}-{uuid.uuid4().hex}"
+        self._uri = table_uri(self._key)
         # Touched on the first attempt, staged once a write lands: a first write that
         # fails part way can still leave files behind to delete.
         self._touched = False
@@ -500,7 +505,7 @@ class StagedWrite:
         staged = DeltaTable(self._uri, storage_options=opts).to_pyarrow_dataset()
         write_deltalake(
             uri,
-            staged.scanner().to_reader(),
+            staged.scanner(use_threads=False).to_reader(),
             mode="append" if self._append else "overwrite",
             schema_mode="merge" if self._append else "overwrite",
             storage_options=opts,
@@ -511,15 +516,39 @@ class StagedWrite:
         """Delete the staging table; a failure to is logged, never raised."""
         if not self._touched:
             return
-        try:
-            self._filesystem.delete_dir(self._path)
-        except FileNotFoundError:
-            pass
-        except Exception:
-            logger.warning(
-                "could not remove staging table %s", self._uri, exc_info=True
-            )
+        delete_staging(self._key)
         self._touched = self._staged = False
+
+
+def list_staging() -> list[tuple[str, str]]:
+    """Every staging table present, as ``(table, key)``: what runs that died left.
+
+    A run that reached its cleanup has none, so anything here belongs to a run still
+    going or to one that died; the caller tells them apart by the source's status.
+    """
+    import pyarrow.fs as pafs
+
+    filesystem, base = _warehouse_filesystem()
+    root = f"{base}/{_STAGING_PREFIX}" if base else _STAGING_PREFIX
+    selector = pafs.FileSelector(root, allow_not_found=True)
+    return [
+        (info.base_name.rsplit("-", 1)[0], f"{_STAGING_PREFIX}/{info.base_name}")
+        for info in filesystem.get_file_info(selector)
+        if info.type == pafs.FileType.Directory
+    ]
+
+
+def delete_staging(key: str) -> None:
+    """Remove one staging table; a failure to is logged, never raised."""
+    try:
+        # The filesystem is resolved here, inside the guard, so a store it cannot
+        # reach costs a leftover staging table and a warning, never the sync.
+        filesystem, path, _ = warehouse_object(key)
+        filesystem.delete_dir(path)
+    except FileNotFoundError:
+        pass  # a write that failed before creating anything left nothing to delete
+    except Exception:
+        logger.warning("could not remove staging table %s", key, exc_info=True)
 
 
 def table_location(table: str) -> str | None:

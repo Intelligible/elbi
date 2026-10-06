@@ -38,6 +38,8 @@ def local(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> str:
             pafs.AzureFileSystem,
             "container/prefix",
         ),
+        # The form the Docker guide gives; the account comes from the environment.
+        ("az://container/prefix", pafs.AzureFileSystem, "container/prefix"),
     ],
 )
 def test_the_filesystem_matches_the_storage_scheme(
@@ -54,6 +56,19 @@ def test_the_filesystem_matches_the_storage_scheme(
     filesystem, base = storage._warehouse_filesystem()
     assert isinstance(filesystem, expected_fs)
     assert base == expected_base
+
+
+def test_an_abfss_root_names_its_own_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``abfss://container@acct.dfs.core.windows.net`` carries the account in its host,
+    and delta-rs writes to it with no further configuration. The filesystem has to read
+    it from the same place, or a root delta-rs accepts fails here."""
+    monkeypatch.setenv(
+        "STORAGE_URI", "abfss://container@acct.dfs.core.windows.net/prefix"
+    )
+    monkeypatch.delenv("STORAGE_AZURE_ACCOUNT", raising=False)
+    filesystem, base = storage._warehouse_filesystem()
+    assert isinstance(filesystem, pafs.AzureFileSystem)
+    assert base == "container/prefix"
 
 
 def test_a_minio_endpoint_and_key_reach_the_s3_filesystem(

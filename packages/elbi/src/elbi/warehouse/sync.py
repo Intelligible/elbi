@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,13 +68,11 @@ def run_sync(
     incremental_field: str | None = None,
     since: Any = None,
     logger: Any = None,
-    heartbeat: Callable[[], None] | None = None,
 ) -> SyncResult:
     """Extract one table from ``source`` and write it to warehouse table ``table``.
 
     ``table`` is the destination (the schema's persisted table name), so the write
     target matches the catalog row and honors the prefix chosen at source creation.
-    ``heartbeat`` is called after each batch, so a long run can show it is alive.
     """
     incremental = sync_type == "incremental" and incremental_field is not None
     inputs = SourceInputs(
@@ -106,8 +103,6 @@ def run_sync(
                 col_max = _column_max(batch, incremental_field)
                 if col_max is not None and (cursor is None or col_max > cursor):
                     cursor = col_max
-            if heartbeat is not None:
-                heartbeat()
         # Nothing extracted means nothing staged, and the table is left as it was.
         location = staged.commit() or storage.table_location(table)
     return SyncResult(

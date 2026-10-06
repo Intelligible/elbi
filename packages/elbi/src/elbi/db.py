@@ -33,6 +33,7 @@ from sqlalchemy import (
     insert,
     inspect,
     text,
+    update,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Field, Session, SQLModel, col, create_engine, select
@@ -3668,6 +3669,20 @@ class Store:
                 if elapsed >= interval.total_seconds():
                     due.append(row)
         return due
+
+    def claim_external_sync(self, source_id: str) -> bool:
+        """Move a source to ``syncing`` unless it already is; whether this call won."""
+        with self._write() as session:
+            result = session.connection().execute(
+                update(ExternalDataSource)
+                .where(
+                    col(ExternalDataSource.id) == source_id,
+                    col(ExternalDataSource.status) != "syncing",
+                )
+                .values(status="syncing", last_error=None, updated_at=_now())
+            )
+            session.commit()
+            return result.rowcount == 1
 
     def fail_stale_external_syncs(self, cutoff: datetime, error: str) -> list[str]:
         """Mark ``syncing`` sources not heard from since ``cutoff`` as failed.

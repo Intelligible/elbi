@@ -8,6 +8,8 @@ process dies would leave its source ``syncing`` for good, which the scheduler sk
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,7 +27,7 @@ from elbi.db import Store, open_store
 from elbi.warehouse import service as service_module
 from elbi.warehouse import storage
 from elbi.warehouse.config import SourceConfig, SourceSchema
-from elbi.warehouse.service import WarehouseService
+from elbi.warehouse.service import SyncInProgress, WarehouseService
 from elbi.warehouse.sources.base import Source, SourceInputs
 
 #: A page of the run, or the error it fails with when the run reaches it.
@@ -244,18 +246,25 @@ def test_a_run_that_is_still_going_is_left_alone(
 def test_a_long_run_keeps_itself_alive(
     service: tuple[WarehouseService, Store], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A run older than the stale threshold is not taken for dead while it works."""
+    """A run older than the stale threshold is not taken for dead while it works,
+    even while a slow page has yielded nothing yet."""
     svc, _store = service
     source_id = _source(svc)
     clock = [datetime.now(timezone.utc)]
     monkeypatch.setattr(elbi.db, "_now", lambda: clock[0])
-    monkeypatch.setattr(service_module, "HEARTBEAT_SECONDS", 0.0)
+    monkeypatch.setattr(service_module, "HEARTBEAT_SECONDS", 0.01)
     seen: list[str] = []
 
     def an_hour_passes() -> None:
         clock[0] += timedelta(hours=1)
 
     def check_from_another_tick() -> None:
+        # No batch has arrived, so only a beat of the run's own can keep it alive.
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            if elbi.db._as_utc(svc.get_source(source_id).updated_at) >= clock[0]:
+                break
+            time.sleep(0.01)
         svc.recover_interrupted_syncs(clock[0] + timedelta(minutes=5))
         seen.append(svc.get_source(source_id).status)
 
@@ -263,11 +272,100 @@ def test_a_long_run_keeps_itself_alive(
         svc,
         source_id,
         an_hour_passes,
-        _invoices(1),
         check_from_another_tick,
+        _invoices(1),
         _invoices(2),
     )
 
     assert seen == ["syncing"]
     assert svc.get_source(source_id).status == "idle"
     assert [row["id"] for row in _rows()] == [1, 2]
+
+
+# --- One run at a time -------------------------------------------------------------
+
+
+def test_a_source_already_syncing_refuses_a_second_run(
+    service: tuple[WarehouseService, Store],
+) -> None:
+    """Two runs side by side would append the same incremental rows twice. The
+    scheduler already skips a syncing source; a manual sync must be refused too."""
+    svc, store = service
+    source_id = _left_syncing(svc, store, frequency="manual")
+    PagedConnector.pages = [_invoices(1)]
+
+    with pytest.raises(SyncInProgress):
+        svc.sync_source(source_id)
+
+    assert svc.get_source(source_id).status == "syncing"
+    assert storage.table_location("stripe__invoices") is None
+
+
+# --- What a dead run left behind ---------------------------------------------------
+
+
+def _run_dies_mid_sync(
+    svc: WarehouseService, source_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A process killed between batches never reaches the cleanup."""
+    monkeypatch.setattr(storage.StagedWrite, "discard", lambda self: None)
+    _sync(svc, source_id, _invoices(1), RuntimeError("killed"))
+
+
+def test_staging_of_a_dead_run_is_removed_by_recovery(
+    service: tuple[WarehouseService, Store],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc, _store = service
+    source_id = _source(svc)
+    _run_dies_mid_sync(svc, source_id, monkeypatch)
+    assert len(_staging_leftovers(tmp_path)) == 1
+
+    svc.recover_interrupted_syncs(datetime.now(timezone.utc))
+
+    assert _staging_leftovers(tmp_path) == []
+
+
+def test_staging_of_a_live_run_is_left_alone(
+    service: tuple[WarehouseService, Store],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Judged by the source's status, which every replica shares, not by file age:
+    a long batch or a long publish writes nothing for a while and is still alive."""
+    svc, store = service
+    source_id = _source(svc)
+    _run_dies_mid_sync(svc, source_id, monkeypatch)
+    store.update_external_source(source_id, status="syncing")
+
+    svc.recover_interrupted_syncs(datetime.now(timezone.utc))
+
+    assert len(_staging_leftovers(tmp_path)) == 1
+
+
+# --- Staging lives wherever the tables do ------------------------------------------
+
+
+def test_a_store_only_delta_rs_can_reach_still_syncs(
+    service: tuple[WarehouseService, Store],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """delta-rs writes to every store the warehouse supports; the pyarrow filesystem
+    behind uploads reaches fewer (it refused ``az://``). Staging goes through delta-rs,
+    so a sync must not need the filesystem: only the cleanup may, and a cleanup it
+    cannot do is a warning, not a failed sync."""
+    svc, _store = service
+    source_id = _source(svc)
+
+    def no_filesystem() -> tuple[Any, str]:
+        raise ValueError("unsupported storage scheme for upload: az://")
+
+    monkeypatch.setattr(storage, "_warehouse_filesystem", no_filesystem)
+    with caplog.at_level(logging.WARNING):
+        _sync(svc, source_id, _invoices(1), _invoices(2))
+
+    assert [row["id"] for row in _rows()] == [1, 2]
+    assert svc.get_source(source_id).status == "idle"
+    assert "could not remove staging table" in caplog.text

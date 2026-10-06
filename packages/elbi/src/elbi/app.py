@@ -101,7 +101,7 @@ from .search.index import DEFAULT_CANDIDATES, MAX_SEARCH_CANDIDATES, SearchIndex
 from .search.snippet import snippet
 from .search.sql import filter_sql
 from .telemetry import setup_tracing
-from .warehouse.service import WarehouseError, WarehouseService
+from .warehouse.service import SyncInProgress, WarehouseError, WarehouseService
 from .webhooks import fire_model_event, webhook_config
 from .wire import AuditEvent as WireAuditEvent
 from .wire import Budget as WireBudget
@@ -2021,6 +2021,8 @@ def create_app(
         service = _warehouse()
         try:
             outcomes = await run_in_threadpool(service.sync_source, source_id)
+        except SyncInProgress as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except WarehouseError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return {

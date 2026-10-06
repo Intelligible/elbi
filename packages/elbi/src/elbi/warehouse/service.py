@@ -16,8 +16,9 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
-from collections.abc import Callable
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -42,8 +43,8 @@ from .sync import ColumnSpec
 logger = logging.getLogger(__name__)
 
 #: How long a ``syncing`` source may go without a heartbeat before its run is taken
-#: for dead. A live run beats every :data:`HEARTBEAT_SECONDS` while batches arrive, so
-#: this only has to outlast the slowest single batch.
+#: for dead. A live run beats every :data:`HEARTBEAT_SECONDS` whatever its connector
+#: is doing, so this only has to outlast a database the beat cannot reach.
 STALE_SYNC_AFTER = timedelta(minutes=30)
 HEARTBEAT_SECONDS = 60.0
 SYNC_INTERRUPTED = "Sync interrupted: the run stopped before it finished."
@@ -56,6 +57,10 @@ class WarehouseError(ElbiError):
     missing or just-deleted warehouse table as a domain error -- skipped in a catalog
     listing, a clean refusal in a draft -- never an unhandled 500.
     """
+
+
+class SyncInProgress(WarehouseError):
+    """A sync was asked for while one is running: wait for it rather than retry."""
 
 
 @dataclass
@@ -365,11 +370,10 @@ class WarehouseService:
             s.id for s in self._store.list_external_schemas(source_id) if s.should_sync
         ]
 
-        self._mark_source(source_id, status="syncing", last_error=None)
-        heartbeat = self._heartbeat(source_id)
-        outcomes = [
-            self._sync_schema(connector, config, sid, heartbeat) for sid in schema_ids
-        ]
+        if not self._store.claim_external_sync(source_id):
+            raise SyncInProgress("This source is already syncing.")
+        with self._heartbeat(source_id):
+            outcomes = [self._sync_schema(connector, config, sid) for sid in schema_ids]
         had_error = any(not o.ok for o in outcomes)
         self._mark_source(
             source_id,
@@ -396,7 +400,7 @@ class WarehouseService:
         return synced
 
     def recover_interrupted_syncs(self, now: datetime) -> list[str]:
-        """Fail every source left ``syncing`` by a run that is no longer alive.
+        """Fail every source left ``syncing`` by a dead run and remove its staging.
 
         A process that dies mid-sync (a crash, a kill, a redeploy) never writes the
         run's outcome, and the scheduler skips a source that reads as ``syncing``, so
@@ -409,26 +413,65 @@ class WarehouseService:
         )
         for source_id in recovered:
             logger.warning("warehouse sync of %s was interrupted", source_id)
+        self._sweep_staging()
         return recovered
 
-    def _heartbeat(self, source_id: str) -> Callable[[], None]:
-        """A callback that marks the source's run alive, at most once a minute."""
-        last = time.monotonic()
+    def _sweep_staging(self) -> None:
+        """Delete the staging tables no live run owns.
+
+        A run that died never reached its cleanup. Staging is listed first and the
+        owners read second: a table that appears after the listing belongs to a run
+        that started after it, and a listed one whose source is ``syncing`` belongs
+        to a live run, here or on another replica. Read the other way round, a run
+        that started in between would be judged by a status taken before it began.
+        """
+        try:
+            staged = storage.list_staging()
+        except Exception:  # a store the filesystem cannot reach; every tick, by design
+            logger.warning("could not list staging tables", exc_info=True)
+            return
+        if not staged:
+            return
+        busy = {
+            schema.table
+            for source in self._store.list_external_sources()
+            if source.status == "syncing"
+            for schema in self._store.list_external_schemas(source.id)
+        }
+        for table, key in staged:
+            if table not in busy:
+                storage.delete_staging(key)
+
+    @contextmanager
+    def _heartbeat(self, source_id: str) -> Iterator[None]:
+        """Touch the source's ``updated_at`` every :data:`HEARTBEAT_SECONDS` until exit.
+
+        A thread of its own rather than a callback from the batch loop: a slow first
+        query, a long publish and the gap between tables all yield nothing for a
+        while, and a run that looked dead through any of them would be recovered and
+        started again beside itself. Only ``updated_at`` is written, so a beat can
+        never overwrite a status; and the thread is joined before the caller writes
+        the run's outcome, so no beat lands after it.
+        """
+        stop = threading.Event()
 
         def beat() -> None:
-            nonlocal last
-            if time.monotonic() - last >= HEARTBEAT_SECONDS:
-                last = time.monotonic()
-                self._store.update_external_source(source_id, status="syncing")
+            while not stop.wait(HEARTBEAT_SECONDS):
+                try:
+                    self._store.update_external_source(source_id)
+                except Exception:  # a blip must not end the run; recovery has 30 min
+                    logger.warning("heartbeat for %s failed", source_id, exc_info=True)
 
-        return beat
+        thread = threading.Thread(target=beat, name=f"sync-{source_id}", daemon=True)
+        thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            thread.join()
 
     def _sync_schema(
-        self,
-        connector: Source,
-        config: dict[str, Any],
-        schema_id: str,
-        heartbeat: Callable[[], None],
+        self, connector: Source, config: dict[str, Any], schema_id: str
     ) -> SyncOutcome:
         # Re-fetch fresh so this is the single mutate-and-save of the instance.
         schema = self._store.get_external_schema(schema_id)
@@ -444,7 +487,6 @@ class WarehouseService:
                 incremental_field=schema.incremental_field,
                 since=_parse_cursor(schema.cursor),
                 logger=logger,
-                heartbeat=heartbeat,
             )
         except Exception as exc:  # surface on the schema, keep the other tables going
             logger.exception("Warehouse sync failed for %s", schema.name)
