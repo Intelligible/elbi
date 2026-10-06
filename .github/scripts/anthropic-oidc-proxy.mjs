@@ -10,7 +10,7 @@ const UPSTREAM_HOST = 'api.anthropic.com';
 const AUDIENCE = 'https://api.anthropic.com';
 // Same advisory window the Anthropic SDKs use before expiry.
 const REFRESH_MARGIN_MS = 120_000;
-// A cached token this close to expiry is not worth sending when a refresh fails.
+// Below this, a request waits for the refresh instead of using the cached token.
 const MIN_REMAINING_MS = 10_000;
 const TOKEN_FETCH_TIMEOUT_MS = 30_000;
 
@@ -20,8 +20,14 @@ function requireEnv(name) {
   return value;
 }
 
+function requirePort(name) {
+  const port = Number(requireEnv(name));
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`${name} is not a valid port`);
+  return port;
+}
+
 const config = {
-  port: Number(requireEnv('ANTHROPIC_PROXY_PORT')),
+  port: requirePort('ANTHROPIC_PROXY_PORT'),
   idTokenUrl: requireEnv('ACTIONS_ID_TOKEN_REQUEST_URL'),
   idTokenRequestToken: requireEnv('ACTIONS_ID_TOKEN_REQUEST_TOKEN'),
   federationRuleId: requireEnv('ANTHROPIC_FEDERATION_RULE_ID'),
@@ -77,10 +83,7 @@ async function exchange() {
 let cached = null;
 let pending = null;
 
-function getToken() {
-  const remaining = cached ? cached.expiresAt - Date.now() : 0;
-  if (remaining > REFRESH_MARGIN_MS) return Promise.resolve(cached.token);
-
+function refresh() {
   pending ??= exchange()
     .then((fresh) => {
       cached = fresh;
@@ -89,18 +92,24 @@ function getToken() {
     .finally(() => {
       pending = null;
     });
-  if (remaining <= MIN_REMAINING_MS) return pending;
+  return pending;
+}
 
-  // The current token is still good for a while, so a failed refresh should
-  // not fail the request. The next request past the margin tries again.
-  const stillValid = cached.token;
-  return pending.catch((err) => {
-    log(`refresh failed, using the cached token: ${describe(err)}`);
-    return stillValid;
-  });
+function getToken() {
+  const remaining = cached ? cached.expiresAt - Date.now() : 0;
+  if (remaining > REFRESH_MARGIN_MS) return Promise.resolve(cached.token);
+  if (remaining <= MIN_REMAINING_MS) return refresh();
+
+  // The cached token is still good, so serve it now and refresh in the
+  // background. A failed refresh is retried by the next request.
+  refresh().catch((err) => log(`background refresh failed: ${describe(err)}`));
+  return Promise.resolve(cached.token);
 }
 
 function fail(res, err) {
+  // The upstream error listener and the request pipeline both see the same
+  // upstream error, and a client that already left needs no reply.
+  if (res.writableEnded || res.destroyed) return;
   log(describe(err));
   if (res.headersSent) {
     res.destroy();
