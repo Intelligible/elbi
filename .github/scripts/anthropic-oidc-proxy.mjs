@@ -107,10 +107,12 @@ function getToken() {
 }
 
 function fail(res, err) {
-  // The upstream error listener and the request pipeline both see the same
-  // upstream error, and a client that already left needs no reply.
-  if (res.writableEnded || res.destroyed) return;
+  // The upstream error listener and the request pipeline both report the same
+  // upstream error; the first one has already replied.
+  if (res.writableEnded) return;
   log(describe(err));
+  // A client that already left needs no reply.
+  if (res.destroyed) return;
   if (res.headersSent) {
     res.destroy();
     return;
