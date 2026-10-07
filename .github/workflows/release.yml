@@ -48,7 +48,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 22
+          node-version: 24
           # No npm cache, for the same reason as uv's below: a cache entry is writable by
           # whatever ran before it, and this workflow signs and publishes what it builds.
           # `cache-dependency-path` is absent too -- naming it is enough to turn caching
