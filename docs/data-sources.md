@@ -138,6 +138,16 @@ Klaviyo, SendGrid, Braze, Pipedrive, Front, Vercel, Airtable, Mixpanel, PostHog,
 GitHub, Jira, Notion, Slack, Sentry, Typeform and Intercom. If yours is not there, the
 **Custom REST source** takes a manifest describing any JSON API.
 
+Some APIs answer **columnar** data, with the field names given once and each row a bare
+array: PostHog's query API returns `{"columns": ["day", "event"], "results": [["2026-09-01",
+"pageview"], ...]}`. Custom REST names each row from the `columns` list beside the
+records, so these land as ordinary rows; a row whose width differs from `columns` fails
+the sync. Records that are neither objects nor nameable rows also fail it, rather than
+being skipped. A response that says `hasMore: true` (or `has_more: true`) fails when no
+paginator is declared to fetch the rest; for PostHog, declare
+`"paginator": {"type": "single_page"}` and give the HogQL query an explicit `LIMIT`
+above its row count, since without one PostHog stops at 100 rows.
+
 ### Deeply nested collections
 
 A connector infers each batch's schema from the JSON it just received, and most APIs

@@ -5,8 +5,8 @@ A **monitor** watches a [metric](metrics.md) or a [derivation](derivations.md) o
 learns what the value normally looks like, and raises an alert when a new value departs
 from that baseline. Because a monitor only watches a *certified* target, an alert is never
 about a suspect figure; it is about a **verified** one that moved. Data-observability
-tools tell you a number changed; here the alert also carries the oracle's verdict, so you
-know the change is real and sound to act on.
+tools tell you a number changed; here the alert also includes the source's verification
+verdict, so you know the change is real and sound to act on.
 
 ## What a monitor watches
 
@@ -41,14 +41,14 @@ raises **one** alert, not one per check. The incident closes when the value retu
 normal, which fires a recovery alert. Alerts are delivered through the configured
 [webhook](models.md) (`metric.anomaly_detected` and `metric.recovered`, HMAC-signed) and
 recorded in the audit log; each payload carries the value, the expected band, the reason,
-and the source's oracle verdict.
+and the source's verification verdict.
 
 ## In-app notifications
 
 Every alert also lands as an **in-app notification**: anomalies and recoveries from a
 monitor, failed or slow orchestration runs, finished or failed trainings, and scheduled
 model drift. The sidebar's **Inbox** shows the unread count; the Notifications page lists events newest
-first, carries the oracle's verdict where the event has one, and deep-links to the
+first, shows the source's verification verdict where the event has one, and deep-links to the
 monitor, run, or model in question.
 
 Delivery is governed per user and per event type in **Settings → Notifications**: each
@@ -71,7 +71,7 @@ incidents, and creates monitors over your metrics and derivations. The same surf
 The detection itself is a small, pure SDK primitive:
 
 ```python
-from elbi import detect_anomaly
+from elbi_core import detect_anomaly
 
 verdict = detect_anomaly([100, 101, 99, 100, 102], value=500, sensitivity=3)
 verdict.anomalous  # True

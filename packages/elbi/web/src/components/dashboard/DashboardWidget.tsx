@@ -3,10 +3,17 @@
 // metric, table, and text are light renderers. A widget whose derivation failed shows
 // its error in place rather than blanking.
 
-import { AlertCircle, GripVertical } from "lucide-react"
+import { AlertCircle, GripVertical, MoreHorizontal } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Table,
   TableBody,
@@ -121,7 +128,9 @@ function RowsTable({
   const columns = Array.isArray(viz.columns) ? (viz.columns as string[]) : Object.keys(rows[0])
   const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50
   return (
-    <div className="overflow-auto">
+    // Fills the tile rather than sizing to the rows: a taller tile shows more of them,
+    // and a shorter one scrolls, instead of leaving the extra height as padding.
+    <div className="h-full overflow-auto">
       <Table className="text-sm">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -157,7 +166,7 @@ function TextBody({ widget, variables }: { widget: Widget; variables: Record<str
   const content = (widget.content ?? "").replace(/\$([a-z][a-z0-9_]*)/g, (m, name) =>
     name in variables ? String(variables[name]) : m,
   )
-  return <div className="whitespace-pre-wrap text-sm leading-relaxed">{content}</div>
+  return <NotebookMarkdown>{content}</NotebookMarkdown>
 }
 
 export function DashboardWidget({
@@ -166,12 +175,16 @@ export function DashboardWidget({
   variables,
   onCrossFilter,
   onDrillThrough,
+  onEdit,
+  onDelete,
 }: {
   widget: Widget
   data?: WidgetData
   variables: Record<string, unknown>
   onCrossFilter?: (emit: Record<string, unknown>) => void
   onDrillThrough?: () => void
+  onEdit?: () => void
+  onDelete?: () => void
 }) {
   const crossFilter = widget.interactions?.crossFilter
   const drillThrough = widget.interactions?.drillThrough
@@ -190,8 +203,10 @@ export function DashboardWidget({
       : undefined
 
   const body = () => {
-    // Text carries its own content and never waits on data.
-    if (widget.type === "text") return <TextBody widget={widget} variables={variables} />
+    // Text usually carries its own content and never waits on data. Naming a
+    // derivation instead makes it a tile like any other, resolved below.
+    if (widget.type === "text" && !widget.bind)
+      return <TextBody widget={widget} variables={variables} />
     if (data?.error)
       return (
         <div className="flex items-start gap-2 text-sm text-destructive">
@@ -205,6 +220,12 @@ export function DashboardWidget({
     if (!data) return <CenterNote>Loading…</CenterNote>
     const rows = asRows(data.value)
     switch (widget.type) {
+      // A derivation returning markdown: the governed way to put a bespoke visual on
+      // a dashboard, so the prose carries live figures instead of copied ones.
+      case "text":
+        return (
+          <NotebookMarkdown>{typeof data.value === "string" ? data.value : ""}</NotebookMarkdown>
+        )
       case "metric":
         return <MetricBody widget={widget} data={data} />
       case "table":
@@ -241,6 +262,28 @@ export function DashboardWidget({
             >
               Details →
             </Button>
+          ) : null}
+          {onEdit || onDelete ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Tile actions: ${widget.title ?? widget.id}`}
+                  className="dash-no-drag text-text-tertiary opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="dash-no-drag">
+                {onEdit ? <DropdownMenuItem onSelect={onEdit}>Edit…</DropdownMenuItem> : null}
+                {onDelete ? (
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                    Delete
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-tertiary/30 opacity-0 transition group-hover:opacity-100" />
         </div>

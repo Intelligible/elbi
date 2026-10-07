@@ -3,8 +3,8 @@
 A :class:`~elbi.quality.contract.DataContract` declares the quality bar a
 table of rows must satisfy (per-field types and constraints, table keys, referential
 integrity, and shape). :func:`~elbi.quality.verify.verify_contract` checks it
-and returns a three-valued verdict with typed, located violations, the same shape the
-verification oracle speaks. The check catalog runs over an engine-agnostic backend, so
+and returns a three-valued verdict with typed, located violations, the same shape a
+verified claim gets. The check catalog runs over an engine-agnostic backend, so
 one contract verifies ``list[dict]`` rows today and a dataframe/SQL engine later without
 changing the contract. :func:`~elbi.quality.suggest.suggest_contract` profiles a
 table and proposes a contract, using confidence bounds rather than sample rates so a

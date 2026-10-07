@@ -116,6 +116,19 @@ describe("Sidebar controls", () => {
     expect(screen.getByRole("link", { name: "Explore" })).not.toHaveAttribute("aria-current")
   })
 
+  it("links to the docs in a new tab, below the Operations section", () => {
+    renderAt("/monitors")
+    const docs = screen.getByRole("link", { name: "Docs" })
+    expect(docs).toHaveAttribute("href", "https://docs.elbi.ai/")
+    expect(docs).toHaveAttribute("target", "_blank")
+    expect(docs).toHaveAttribute("rel", "noopener noreferrer")
+    expect(docs).not.toHaveAttribute("aria-current")
+    const lastOperationsItem = screen.getByRole("link", { name: "Catalog & lineage" })
+    expect(
+      lastOperationsItem.compareDocumentPosition(docs) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it("switches to Chat from a browse page and opens the composer", async () => {
     const user = userEvent.setup()
     const onNew = vi.fn()

@@ -326,7 +326,7 @@ def build_server(
     image: str | None = None,
     instructions: str | None = None,
     operations: Operations | None = None,
-    on_author: Callable[[str, dict[str, Any]], object] | None = None,
+    on_author: Callable[[Derivation, dict[str, Any]], object] | None = None,
     on_delete: Callable[[str], object] | None = None,
 ) -> MCPServer:
     """Construct an :class:`MCPServer` exposing certified, served derivations.
@@ -798,7 +798,7 @@ def _register_operate(server: MCPServer, operations: Operations) -> None:
         )
 
     async def asset_status() -> str:
-        """List every asset with its freshness and oracle verdict (read-only)."""
+        """List every asset with its freshness and verification verdict (read-only)."""
         rows = await asyncio.to_thread(operations.asset_status)
         if not rows:
             return "No assets."
@@ -1832,7 +1832,7 @@ def _register_propose(
     issuer: CertificateIssuer | None,
     run_log: RunLog | None,
     load_dataset: Callable[[str], Table] | None,
-    on_author: Callable[[str, dict[str, Any]], object] | None = None,
+    on_author: Callable[[Derivation, dict[str, Any]], object] | None = None,
 ) -> None:
     """Register the agent-authoring loop.
 
@@ -1941,7 +1941,7 @@ def _register_propose(
             # proposals stay sidecar-only, exactly like the chat path.
             if on_author is not None:
                 on_author(
-                    name,
+                    outcome.derivation,
                     {
                         "source": source,
                         "question": (
@@ -1949,9 +1949,6 @@ def _register_propose(
                             if title
                             else "Proposed via MCP"
                         ),
-                        "format": format,
-                        "deps": list(deps or []),
-                        "claim": claim,
                         "verdict": result.oracle_verdict or result.contract_verdict,
                         "rendered": result.rendered or "",
                         "attestation": attestation,

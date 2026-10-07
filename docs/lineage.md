@@ -3,7 +3,7 @@
 Every artifact on the platform depends on others: a derivation reads datasets and
 upstream derivations; a model trains on a feature derivation; a dashboard tile and a
 feature view bind to a derivation. Lineage makes that graph explicit, and the catalog
-makes it searchable, with each node carrying its oracle verdict, so you see not only
+makes it searchable. Each node shows its verification verdict, so you see not only
 where a number comes from but whether each step was certified sound.
 
 ## The graph
@@ -19,7 +19,7 @@ already records, so it needs no separate instrumentation:
 - `derivation → feature_view` (and `entity → feature_view`) from the feature view.
 
 This mirrors the [OpenLineage](https://openlineage.io/) model, in which a derivation is a job
-that produces a dataset, with the oracle verdict as a data-quality facet on each node.
+that produces a dataset, with the verification verdict as a data-quality facet on each node.
 
 ## The two questions
 
@@ -33,7 +33,7 @@ that produces a dataset, with the oracle verdict as a data-quality facet on each
 ## The catalog
 
 The catalog lists every artifact as a searchable record (name, type, description,
-oracle verdict, and how many inputs it has) across all types at once, which the
+verification verdict, and how many inputs it has) across all types at once, which the
 per-type pages can't give you. Search is a plain substring match over name, type, and
 description.
 
