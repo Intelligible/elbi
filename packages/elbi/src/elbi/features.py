@@ -427,8 +427,8 @@ class FeatureStoreService:
         """Check a view's current feature values against its attached data contract.
 
         Reuses the platform's contract engine (the same three-valued verdict and located
-        violations the verification oracle speaks), so a feature view's data quality is
-        held to the same bar as everything else.
+        violations derivations get), so a feature view's data quality is held to the
+        same bar as everything else.
         """
         store = self._spec()
         view = self._require_view(store, view_name)

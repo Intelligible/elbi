@@ -1024,7 +1024,7 @@ function WatchDialog({
           <DialogTitle>Watch {metric.label || metric.name}</DialogTitle>
           <DialogDescription>
             Create a monitor that snapshots this metric on a schedule and alerts on an anomaly
-            against a learned baseline; the alert carries the oracle verdict.
+            against a learned baseline; the alert includes its source's verification verdict.
           </DialogDescription>
         </DialogHeader>
         {done ? (

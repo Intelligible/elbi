@@ -4,8 +4,8 @@ Stitches the core dataset→derivation graph together with the downstream artifa
 app stores: models (via the ``elbi.feature_derivation`` tag), dashboards (via their
 bound derivations), feature views (via their source derivation and entities), metrics
 (via the certified derivation they aggregate), and monitors (via the metric or
-derivation they watch). Every node carries its oracle verdict (a metric inherits its
-source derivation's, a monitor inherits its target's), so an impact query reaches the
+derivation they watch). Every node has a verification verdict (a metric takes its
+source derivation's, a monitor takes its target's), so an impact query reaches the
 metrics and monitors a derivation feeds, and each carries the verified status of the
 number behind it. On top of the graph it answers impact analysis (what a change to a
 node would affect) and a unified, searchable catalog.
@@ -29,7 +29,7 @@ from elbi_core.lineage import from_registry, node_id
 
 from .db import Store
 
-#: One model's lineage: its name, oracle verdict, and source feature derivation.
+#: One model's lineage: its name, verification verdict, and source feature derivation.
 ModelEdge = dict[str, Any]
 
 
@@ -251,9 +251,10 @@ class LineageService:
     ) -> dict[str, str | None]:
         """Add each metric downstream of the certified derivation it aggregates.
 
-        A metric inherits its source derivation's oracle verdict (the verified number it
-        aggregates). Returns each metric's source derivation by name, so a monitor
-        watching a metric can inherit that same verdict.
+        A metric shows its source derivation's verification verdict, since that
+        derivation is the number it aggregates. Returns each metric's source
+        derivation by name, so a monitor watching a metric can inherit that same
+        verdict.
         """
         sources: dict[str, str | None] = {}
         for row in self._store.list_metrics():
@@ -284,7 +285,7 @@ class LineageService:
     ) -> None:
         """Add each monitor downstream of the certified metric or derivation it watches.
 
-        The monitor inherits the oracle verdict of what it watches (a derivation
+        The monitor shows the verification verdict of what it watches (a derivation
         directly, or a metric via that metric's source derivation), so the monitor node
         carries the verified status of the number whose movement it alerts on.
         """

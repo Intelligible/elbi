@@ -1,4 +1,4 @@
-# Oracle verdict rubric
+# Verdict rubric
 
 The ground-truth guide reviewers use to label each trap's `expected_verdict`.
 It also doubles as the spec for how the oracle itself should behave.

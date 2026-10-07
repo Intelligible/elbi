@@ -348,7 +348,7 @@ function VersionsSection({
                     <TableCell className="px-4 py-2.5">
                       {v.aliases.length === 0 ? (
                         // No alias is a question ("why is this not deployed?"), and the
-                        // oracle's verdict is the answer, with its reason on hover.
+                        // verification verdict is the answer, with its reason on hover.
                         v.verdict ? (
                           <span title={v.verdictDetail ?? undefined}>
                             <VerdictBadge verdict={v.verdict} />

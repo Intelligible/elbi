@@ -221,7 +221,7 @@ def status(
     url: str = typer.Option(None, help="App base URL."),
     token: str = typer.Option(None, help="API key, if required."),
 ) -> None:
-    """List every asset's freshness and oracle verdict (read-only)."""
+    """List every asset's freshness and verification verdict (read-only)."""
     with _client(url, token) as client:
         rows = client.get("/api/orchestration/status").json()
     if not rows:

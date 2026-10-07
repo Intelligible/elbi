@@ -17,6 +17,13 @@ Makes the shared metric the one definition of a dashboard number. Breaking.
   becomes its `column`), then bind the tile as `{"metric": name}`. A derivation
   `param` a tile passed becomes a metric `filter` or a dimension.
 
+## Dashboard 1.0 (unreleased)
+
+- A `text` widget MAY now `bind` a derivation that returns markdown, in place of its
+  own `content`; it MUST have exactly one of the two. This makes a governed derivation
+  the escape hatch for a bespoke visual. Backwards compatible: a `text` widget with
+  `content` is unaffected.
+
 ## 1.1 (unreleased)
 
 Adds provenance and lifecycle, supporting agent-authored derivations.
@@ -40,9 +47,6 @@ Adds provenance and lifecycle, supporting agent-authored derivations.
   definitions rather than only over rows. Such an input implies no `dependsOn`
   edge, and runners SHOULD version the derivation by the document's content.
   Backward compatible: existing `dataset` and `derivation` inputs are unaffected.
-- A dashboard `text` widget MAY carry a `bind` in place of `content`, naming a
-  derivation that returns markdown; it MUST NOT carry both. Backward
-  compatible: a text widget with `content` is unaffected.
 
 ## 1.0 (unreleased)
 

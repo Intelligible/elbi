@@ -83,7 +83,7 @@ export function CatalogPage() {
       <SceneHeader
         icon={<Network className="size-5" />}
         title="Catalog & lineage"
-        description="Every artifact and how it connects, with its oracle verdict."
+        description="Every artifact, how it connects, and whether it passed verification."
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Catalog list */}

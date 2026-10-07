@@ -421,7 +421,7 @@ def test_glass_box_artifacts_and_model_card(trained: dict[str, Any]) -> None:
     version = client.get_model_version("churn", "1")
     assert version.description.startswith("# Model card: churn v1")
     assert "Held-out metrics" in version.description
-    assert "sound" in version.description  # the oracle verdict is in the card
+    assert "sound" in version.description  # the signal check's verdict is in the card
 
 
 def test_ts_forecast_trains_and_serves_future_periods(tmp_path: Path) -> None:

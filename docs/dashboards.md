@@ -6,7 +6,7 @@ parameters, and declares how that derivation's already-verified, already-cached 
 is rendered. The derivation is the semantic layer; the dashboard is the layout.
 
 That separation is what you trust. A published dashboard can only
-bind derivations the oracle has certified, so every number a viewer sees has been
+bind certified derivations, so every number a viewer sees has been
 verified, not merely rendered from whatever SQL happened to sit behind a tile.
 
 ## The shape of a dashboard
