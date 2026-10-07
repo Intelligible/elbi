@@ -1,4 +1,4 @@
-"""Ten token/key REST SaaS connectors, declared over the shared dlt ``rest_api`` base.
+"""Eleven token/key REST SaaS connectors, declared over the dlt ``rest_api`` base.
 
 Each connector declares its base URL, auth, resource paths, data selectors, and
 paginator, and dlt's ``rest_api`` engine does the fetching; these classes write no
@@ -357,4 +357,82 @@ class MixpanelSource(RestApiConnector):
                 "data_selector": "results",
                 "params": {"project_id": config["project_id"]},
             }
+        ]
+
+
+_POSTHOG_HOST = "https://us.posthog.com"
+#: Persons, cohorts, flags, insights, experiments, actions, annotations, surveys. Raw
+#: events are left out: PostHog tells connectors not to export them through ``/query``
+#: and offers batch exports instead; a capped HogQL pull fits the Custom REST source.
+_POSTHOG_OBJECTS = (
+    "persons",
+    "cohorts",
+    "feature_flags",
+    "insights",
+    "experiments",
+    "actions",
+    "annotations",
+    "surveys",
+)
+
+
+@SourceRegistry.register
+class PostHogSource(RestApiConnector):
+    """PostHog: a project's objects, on Cloud (US or EU) or a self-hosted deployment."""
+
+    key, label, category = "posthog", "PostHog", "Analytics"
+    release_status = "beta"  # nothing has synced against a live PostHog yet
+    caption = (
+        "Sync persons, cohorts, feature flags, insights, experiments, actions, "
+        "annotations and surveys from PostHog Cloud or a self-hosted deployment."
+    )
+    docs_url = "https://posthog.com/docs/api"
+    fields_ = (
+        SourceField(
+            name="host",
+            label="Host",
+            default=_POSTHOG_HOST,
+            placeholder=_POSTHOG_HOST,
+            caption=(
+                "https://us.posthog.com or https://eu.posthog.com for Cloud, your own "
+                "URL if you self-host. A key is valid only against the deployment "
+                "that issued it."
+            ),
+        ),
+        SourceField(
+            name="api_key",
+            label="Personal API key",
+            type="password",
+            placeholder="phx_...",
+            caption=(
+                "Settings → Personal API keys. Scope it to this project, with read on "
+                "the resources you sync."
+            ),
+        ),
+        SourceField(
+            name="project_id",
+            label="Project ID",
+            placeholder="12345",
+            caption="The number in the project's URL, and in project settings.",
+        ),
+    )
+
+    def _base_url(self, config: dict[str, Any]) -> str:
+        # A host pasted from the browser arrives with a trailing slash or spaces.
+        host = str(config.get("host") or _POSTHOG_HOST).strip().rstrip("/")
+        return f"{host}/api/projects/{config['project_id']}"
+
+    def _auth(self, config: dict[str, Any]) -> dict[str, Any]:
+        return {"type": "bearer", "token": config["api_key"]}
+
+    def _paginator(self, config: dict[str, Any]) -> Any:
+        # Lists answer {count, next, previous, results}; ``next`` is absolute and
+        # carries its own limit and offset.
+        return {"type": "json_link", "next_url_path": "next"}
+
+    def _resources(self, config: dict[str, Any]) -> list[dict[str, Any]]:
+        # 100 is PostHog's documented default page size; it declares no maximum.
+        return [
+            {**_res(name, f"{name}/", "results"), "params": {"limit": 100}}
+            for name in _POSTHOG_OBJECTS
         ]
