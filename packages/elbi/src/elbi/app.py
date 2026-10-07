@@ -5803,7 +5803,7 @@ def create_app(
             output=output,
             finding=detail.narrative or "",
             verdict=detail.verdict,
-            exported_at=_iso_utc(datetime.now(timezone.utc)),
+            exported_at=datetime.now(timezone.utc),
         )
         return Response(
             content=page,

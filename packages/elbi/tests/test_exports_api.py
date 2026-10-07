@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 from elbi import create_app
 from elbi.dashboards import DashboardService
 from elbi.db import Derivation, Secret, open_store
+from elbi.derivation_html import render as render_derivation_html
 from elbi.metrics import MetricService
 from elbi.monitoring import MonitorService
 from elbi.notebooks import NotebookService
@@ -220,6 +221,64 @@ def test_derivation_html_export_honours_withholding(parts: tuple[Any, Any]) -> N
     app.state.withhold_rendering = lambda name: name == "secret"
     with TestClient(app) as http:
         assert http.get("/api/exports/derivations/secret/html").status_code == 404
+
+
+def test_derivation_html_export_sanitizes_raw_html(parts: tuple[Any, Any]) -> None:
+    store, app = parts
+    meta = '<meta http-equiv="refresh" content="0;url=https://example.com">'
+    store.save_derivation(
+        Derivation(
+            name="notes",
+            source="def notes(ctx): ...",
+            serve_json=json.dumps({"format": "table"}),
+            rendered=(
+                "| note | n |\n|---|---:|\n"
+                f"| {meta} | 1 |\n| <style>.meta{{x:y}}</style> | 2 |\n"
+                "| due <b>soon</b> | 3 |"
+            ),
+        )
+    )
+    with TestClient(app) as http:
+        page = http.get("/api/exports/derivations/notes/html").text
+    assert 'http-equiv="refresh"' not in page, "a synced cell must not navigate"
+    assert ".meta{x:y}" not in page, "output must not restyle the verdict line"
+    assert "due <b>soon</b>" in page, "safe markup renders, as it does in the app"
+    assert '<td style="text-align:right">3</td>' in page, "column alignment survives"
+
+
+def test_derivation_html_dates_the_export_for_people() -> None:
+    central = timezone(timedelta(hours=-5))
+    page = render_derivation_html(
+        name="d",
+        title="T",
+        output="x",
+        exported_at=datetime(2026, 10, 7, 14, 17, 44, 849144, tzinfo=central),
+    )
+    want = '<time datetime="2026-10-07T19:17:44+00:00">7 Oct 2026, 19:17 UTC</time>'
+    assert want in page
+
+
+@pytest.mark.parametrize(
+    ("verdict", "status"),
+    [
+        ("unsound", '<p class="meta">Not sound. Exported'),
+        ("INCONCLUSIVE", '<p class="meta">Inconclusive. Exported'),
+        ("sound", '<p class="meta">Verified. Exported'),
+        ("<odd>", '<p class="meta">&lt;odd&gt;. Exported'),
+        (None, '<p class="meta">Exported'),
+    ],
+)
+def test_derivation_html_names_the_verdict_as_the_app_badge(
+    verdict: str | None, status: str
+) -> None:
+    page = render_derivation_html(
+        name="d",
+        title="T",
+        output="x",
+        verdict=verdict,
+        exported_at=datetime(2026, 10, 7, tzinfo=timezone.utc),
+    )
+    assert status in page
 
 
 # -- AC-2: dashboard + metric export --------------------------------------------------

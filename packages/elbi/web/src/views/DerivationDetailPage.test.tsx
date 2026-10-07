@@ -88,12 +88,12 @@ describe("DerivationDetailPage evidence export", () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole("button", { name: /Export/ }))
-    expect(
-      (await screen.findByRole("menuitem", { name: /record/ })).getAttribute("href"),
-    ).toBe("/api/exports/derivations/eff")
-    expect(
-      screen.getByRole("menuitem", { name: /as an HTML page/ }).getAttribute("href"),
-    ).toBe("/api/exports/derivations/eff/html")
+    expect((await screen.findByRole("menuitem", { name: /record/ })).getAttribute("href")).toBe(
+      "/api/exports/derivations/eff",
+    )
+    expect(screen.getByRole("menuitem", { name: /as an HTML page/ }).getAttribute("href")).toBe(
+      "/api/exports/derivations/eff/html",
+    )
   })
 
   it("offers no HTML export for a derivation with no output", async () => {

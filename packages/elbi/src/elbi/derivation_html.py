@@ -1,15 +1,17 @@
 """Render a derivation's output as one self-contained, read-only HTML page.
 
 The derivation page shows its finding and output as markdown; this is that same
-markdown as a file someone without access to the app can open. The page carries no
-script and its Content-Security-Policy forbids every request, so raw HTML inside the
-markdown renders but cannot run or fetch anything.
+markdown as a file someone without access to the app can open. Raw HTML inside the
+markdown is sanitized the way the app's renderer does it, and behind that the page
+carries no script and its Content-Security-Policy forbids every request.
 """
 
 from __future__ import annotations
 
 import html
+from datetime import datetime, timezone
 
+import nh3
 from markdown_it import MarkdownIt
 
 _CSP = (
@@ -20,6 +22,35 @@ _CSP = (
 # GFM tables and strikethrough, which is what the app's own renderer (Streamdown) reads.
 _md = MarkdownIt("commonmark").enable("table").enable("strikethrough")
 
+# Table cells carry synced data verbatim, so raw HTML in an output is untrusted. nh3's
+# allowlist keeps safe markup (<b>, links) and drops anything that could run, navigate
+# or restyle the page (<script>, <meta>, <style> and its contents), as the app does.
+# The one addition: markdown-it aligns a GFM table column with an inline text-align.
+_ATTRIBUTES = {
+    **nh3.ALLOWED_ATTRIBUTES,
+    "th": nh3.ALLOWED_ATTRIBUTES["th"] | {"style"},
+    "td": nh3.ALLOWED_ATTRIBUTES["td"] | {"style"},
+}
+
+
+# The app's verdict badge labels (web/src/components/VerdictBadge.tsx), so the page
+# names a verdict as the derivation page does. An unknown verdict shows as-is, as there.
+_VERDICT_LABELS = {
+    "sound": "Verified",
+    "verified": "Verified",
+    "computed": "Computed",
+    "inconclusive": "Inconclusive",
+    "unsound": "Not sound",
+    "invalid": "Invalid",
+    "unverified": "Unverified",
+}
+
+
+def _markdown(text: str) -> str:
+    return nh3.clean(
+        _md.render(text), attributes=_ATTRIBUTES, filter_style_properties={"text-align"}
+    )
+
 
 def render(
     *,
@@ -28,10 +59,14 @@ def render(
     output: str,
     finding: str = "",
     verdict: str | None = None,
-    exported_at: str,
+    exported_at: datetime,
 ) -> str:
     """The page for a derivation's rendered output, as HTML text."""
+    # In UTC and said so: the page runs no script, so it cannot localize for a reader.
+    at = exported_at.astimezone(timezone.utc)
     verified = verdict == "sound"
+    # No verdict, no label: the app shows no badge then either.
+    label = _VERDICT_LABELS.get(verdict.lower(), verdict) if verdict else ""
     sections = []
     if finding:
         sections.append(_section("Finding", finding))
@@ -40,8 +75,10 @@ def render(
         csp=_CSP,
         title=html.escape(title),
         name=html.escape(name),
-        status="Verified" if verified else "Not verified",
-        exported_at=html.escape(exported_at),
+        status=f"{html.escape(label)}. " if label else "",
+        # at.day, not %-d: the unpadded-day directive does not exist on Windows.
+        exported_at=f"{at.day} {at:%b %Y, %H:%M} UTC",
+        exported_iso=at.isoformat(timespec="seconds"),
         body="".join(sections),
     )
 
@@ -49,7 +86,7 @@ def render(
 def _section(heading: str, markdown: str) -> str:
     return (
         f'<section><h2 class="label">{heading}</h2>'
-        f'<div class="card md">{_md.render(markdown)}</div></section>'
+        f'<div class="card md">{_markdown(markdown)}</div></section>'
     )
 
 
@@ -111,7 +148,9 @@ _TEMPLATE = """<!doctype html>
 <header>
   <p class="eyebrow">Elbi derivation · {name}</p>
   <h1 class="title">{title}</h1>
-  <p class="meta">{status}. Exported {exported_at}. A read-only copy of the output.</p>
+  <p class="meta">{status}Exported
+    <time datetime="{exported_iso}">{exported_at}</time>.
+    A read-only copy of the output.</p>
 </header>
 {body}
 </div>
