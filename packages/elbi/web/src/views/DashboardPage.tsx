@@ -80,6 +80,7 @@ function DashboardBoard({ id }: { id: string }) {
   const [loading, setLoading] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [resolveError, setResolveError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -111,9 +112,13 @@ function DashboardBoard({ id }: { id: string }) {
   const resolve = useCallback(async () => {
     if (!spec || !pageName) return
     setLoading(true)
+    setResolveError(null)
     try {
       const data = await resolvePage(id, pageName, variables)
       setWidgets(Object.fromEntries(data.map((d) => [d.widgetId, d])))
+    } catch (err) {
+      // Callers fire and forget (`void resolve()`), so a refused page must surface here.
+      setResolveError(`Tiles not loaded: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setLoading(false)
     }
@@ -418,6 +423,15 @@ function DashboardBoard({ id }: { id: string }) {
       {publishError ? (
         <div className="shrink-0 border-b border-danger/30 bg-danger-tint px-6 py-2 text-sm text-danger">
           {publishError}
+        </div>
+      ) : null}
+
+      {resolveError ? (
+        <div
+          role="alert"
+          className="shrink-0 border-b border-danger/30 bg-danger-tint px-6 py-2 text-sm text-danger"
+        >
+          {resolveError}
         </div>
       ) : null}
 

@@ -142,7 +142,7 @@ class DashboardService:
         either way, since that is a broken manifest rather than a trust decision.
         """
         row = self._require(dashboard_id)
-        spec = DashboardSpec.from_manifest(_load(row.spec_json))
+        spec = _parse(_load(row.spec_json))
         certified = {entry["name"] for entry in self._catalog()}
         missing: list[str] = []
         uncertified: list[str] = []
@@ -357,7 +357,7 @@ class DashboardService:
         source = row.published_spec_json if published else row.spec_json
         if source is None:
             raise DashboardError("dashboard has not been published")
-        return DashboardSpec.from_manifest(_load(source))
+        return _parse(_load(source))
 
     def _exists(self, name: str) -> bool:
         try:

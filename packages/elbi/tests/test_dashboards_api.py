@@ -9,6 +9,7 @@ since dashboards never call it.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -350,6 +351,28 @@ def test_metric_tile_bound_to_a_derivation_is_refused(client: TestClient) -> Non
     )
     assert response.status_code == 400
     assert "binds a shared metric, not a derivation" in response.text
+
+
+def test_a_metric_tile_stored_before_2_0_is_refused_not_a_crash(
+    client: TestClient, tmp_path: Path
+) -> None:
+    # A dashboard saved before the metric-tile rule existed: write the old shape
+    # behind the API's back, since `create` and `save` now refuse it.
+    created = client.post(
+        "/api/dashboards", json=_kpi_tile({"metric": "region_revenue"})
+    )
+    dashboard_id = created.json()["id"]
+    open_store(f"sqlite:{tmp_path / 'app.db'}").save_dashboard(
+        dashboard_id, json.dumps(_kpi_tile({"derivation": "revenue"}))
+    )
+    for response in (
+        client.post(
+            f"/api/dashboards/{dashboard_id}/pages/main/data", json={"variables": {}}
+        ),
+        client.post(f"/api/dashboards/{dashboard_id}/publish"),
+    ):
+        assert response.status_code == 404, response.text
+        assert "binds a shared metric, not a derivation" in response.text
 
 
 def test_the_dashboard_schema_is_served_for_an_editor(client: TestClient) -> None:

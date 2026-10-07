@@ -20,7 +20,7 @@ vi.mock("@/lib/dashboards", async (importOriginal) => ({
   saveDashboard: vi.fn(),
 }))
 
-import { getDashboard, saveDashboard } from "@/lib/dashboards"
+import { getDashboard, resolvePage, saveDashboard } from "@/lib/dashboards"
 import { DashboardPage } from "./DashboardPage"
 
 const DASHBOARD: Dashboard = {
@@ -54,6 +54,7 @@ const DASHBOARD: Dashboard = {
 
 afterEach(() => {
   vi.clearAllMocks()
+  vi.mocked(resolvePage).mockResolvedValue([])
 })
 
 describe("DashboardPage", () => {
@@ -140,5 +141,30 @@ describe("DashboardPage", () => {
 
     expect(saveDashboard).not.toHaveBeenCalled()
     expect(screen.queryByLabelText("Tile actions: Caveat")).toBeNull()
+  })
+
+  it("says why the tiles did not load when the server refuses the page", async () => {
+    vi.mocked(getDashboard).mockResolvedValue(DASHBOARD)
+    // What post() throws for a stored dashboard the current spec refuses.
+    vi.mocked(resolvePage).mockRejectedValue(
+      new Error(
+        'POST /api/dashboards/d1/pages/main/data failed: 404 {"detail": "manifest failed spec validation:\\n' +
+          "  - pages/main/widgets/kpi: a 'metric' widget binds a shared metric, not a derivation; " +
+          "define the metric, then bind it as {'metric': name}\"}",
+      ),
+    )
+    render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/dashboards/d1"]}>
+          <Routes>
+            <Route path="/dashboards/:id" element={<DashboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>,
+    )
+
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent("Tiles not loaded:")
+    expect(alert).toHaveTextContent("binds a shared metric, not a derivation")
   })
 })

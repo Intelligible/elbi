@@ -180,6 +180,28 @@ describe("TileEditor", () => {
     expect(screen.getByLabelText("Metric")).toHaveTextContent("gone_away")
   })
 
+  it("says when the metrics could not be loaded, rather than offering nothing", async () => {
+    vi.mocked(listMetrics).mockRejectedValueOnce(new Error("503"))
+    open(metricTile)
+
+    expect(await screen.findByText(/Could not load the metrics/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Metric")).toHaveTextContent("subscriptions")
+  })
+
+  it("edits a table bound to a metric without writing a derivation over it", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open({
+      ...boundTile,
+      bind: { metric: "subscriptions", groupBy: ["region"] },
+    })
+
+    expect(screen.queryByLabelText("Derivation")).toBeNull()
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSave.mock.calls[0]?.[1]).not.toHaveProperty("derivation")
+  })
+
   it("resizes a tile without touching its position", async () => {
     const user = userEvent.setup()
     const { onSave } = open(boundTile)
@@ -450,5 +472,19 @@ describe("the Lineage tab", () => {
     open(boundTile)
 
     expect(screen.queryByText(/Computed by/)).toBeNull()
+  })
+
+  it("says a composite metric's trail is on the Metrics page, not that the tile reads nothing", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listMetrics).mockResolvedValueOnce([
+      { name: "paid_share", type: "ratio", numerator: "paid", denominator: "signups" },
+    ])
+    open({ ...metricTile, bind: { metric: "paid_share" } })
+    await metricsReady()
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(await screen.findByText(/built from other metrics/)).toBeInTheDocument()
+    expect(screen.queryByText(/carries its own content/)).toBeNull()
   })
 })

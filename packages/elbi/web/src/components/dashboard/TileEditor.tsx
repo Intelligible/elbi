@@ -84,13 +84,20 @@ export function TileEditor({
   }, [widget])
 
   const [metrics, setMetrics] = useState<Metric[]>([])
+  // Kept apart from an empty list: a picker with nothing to offer should say why.
+  const [metricsState, setMetricsState] = useState<"loading" | "ready" | "failed">("loading")
   const editsMetricTile = widget?.type === "metric"
   useEffect(() => {
     let live = true
     if (!editsMetricTile) return
+    setMetricsState("loading")
     void listMetrics()
-      .then((all) => live && setMetrics(all))
-      .catch(() => live && setMetrics([]))
+      .then((all) => {
+        if (!live) return
+        setMetrics(all)
+        setMetricsState("ready")
+      })
+      .catch(() => live && setMetricsState("failed"))
     return () => {
       live = false
     }
@@ -102,15 +109,24 @@ export function TileEditor({
   const editsContent = widget.type === "text" && !bound
   // A metric tile shows a shared metric, so it picks a metric rather than a derivation.
   const editsMetric = widget.type === "metric"
-  const editsDerivation = bound && !editsMetric
+  // A chart or table may bind a metric too; that binding is edited on the JSON tab.
+  const editsDerivation = bound && !editsMetric && !widget.bind?.metric
   const unknown = editsDerivation && derivation.length > 0 && !catalog.includes(derivation)
   const metricNames = metrics.map((m) => m.name)
-  const unknownMetric = metric.length > 0 && metrics.length > 0 && !metricNames.includes(metric)
+  const boundMetric = metrics.find((m) => m.name === metric)
+  const unknownMetric = metric.length > 0 && metricsState === "ready" && boundMetric === undefined
   // A tile from before metric tiles bound shared metrics aggregates a derivation itself.
   const privateFigure = editsMetric && !metric && Boolean(widget.bind?.derivation)
-  const lineageOf = editsMetric
-    ? (metrics.find((m) => m.name === metric)?.source ?? "")
-    : derivation
+  // The trail runs through the metric once one is bound. Only a simple metric names a
+  // derivation to trace; every other case gets a note rather than a derivation's trail.
+  const lineageOf = editsMetric && metric ? (boundMetric?.source ?? "") : derivation
+  const metricTrailNote = (): string => {
+    if (metricsState === "loading") return "Loading the metric…"
+    if (metricsState === "failed") return "Could not load the metric, so its trail is unknown."
+    if (boundMetric === undefined)
+      return `No metric named “${metric}” exists, so there is nothing to trace.`
+    return `${metric} is a ${boundMetric.type} metric built from other metrics rather than one derivation; the Metrics page lists them.`
+  }
 
   // The widget the fields currently describe. Switching to JSON shows this rather than
   // what the tile was opened with, so an edit made in the fields is not silently lost.
@@ -236,7 +252,11 @@ export function TileEditor({
 
         {tab === "lineage" ? (
           <>
-            <ProvenanceTab derivation={lineageOf} />
+            {editsMetric && metric && !lineageOf ? (
+              <p className="text-sm text-text-tertiary">{metricTrailNote()}</p>
+            ) : (
+              <ProvenanceTab derivation={lineageOf} />
+            )}
             <DialogFooter>
               <Button variant="ghost" onClick={onCancel}>
                 Close
@@ -343,6 +363,11 @@ export function TileEditor({
                     it, but the tile renders an error until it exists.
                   </p>
                 ) : null}
+                {metricsState === "failed" ? (
+                  <p className="text-xs text-destructive">
+                    Could not load the metrics, so only this tile's current one is offered.
+                  </p>
+                ) : null}
               </Field>
             ) : null}
 
@@ -429,15 +454,15 @@ function Field({
  * A Select cannot show a value it has no option for: it would render blank, and saving
  * would write that blank over something nobody meant to clear.
  */
+function withCurrent(options: string[], current: string): string[] {
+  if (!current || options.includes(current)) return options
+  return [current, ...options]
+}
+
 /** A metric tile's binding: the metric, keeping any filters, and nothing a derivation used. */
 export function metricBind(widget: Widget, metric: string): NonNullable<Widget["bind"]> {
   const filters = widget.bind?.filters
   return filters?.length ? { metric, filters } : { metric }
-}
-
-function withCurrent(options: string[], current: string): string[] {
-  if (!current || options.includes(current)) return options
-  return [current, ...options]
 }
 
 /**
