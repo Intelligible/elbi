@@ -5,7 +5,7 @@
 
 import type { SchemaView, SourceDetail, SyncOutcome } from "@/lib/warehouse"
 
-export type SyncHealth = "syncing" | "failed" | "empty" | "synced" | "never" | "off"
+export type SyncHealth = "syncing" | "failed" | "partial" | "empty" | "synced" | "never" | "off"
 
 export type HealthVariant = "info" | "danger" | "warning" | "success" | "neutral"
 
@@ -20,6 +20,7 @@ export interface SyncStatus {
 const VARIANT: Record<SyncHealth, HealthVariant> = {
   syncing: "info",
   failed: "danger",
+  partial: "neutral",
   empty: "warning",
   synced: "success",
   never: "neutral",
@@ -100,6 +101,15 @@ export function sourceSyncStatus(source: SourceDetail): SyncStatus {
       "None of the enabled tables has been synced yet. Click Sync now, or wait for the schedule.",
     )
 
+  // A table just switched on is enabled but pending, so "every enabled table" below would lie.
+  const pending = enabled.length - synced.length
+  if (pending > 0)
+    return status(
+      "partial",
+      `Synced · ${synced.length} of ${plural(enabled.length, "table")}`,
+      `${plural(pending, "enabled table has", "enabled tables have")} not been synced yet. Click Sync now, or wait for the schedule.`,
+    )
+
   const empty = synced.filter((s) => s.rowCount === 0)
   if (empty.length > 0)
     return status(
@@ -119,8 +129,15 @@ export function sourceSyncStatus(source: SourceDetail): SyncStatus {
 }
 
 /** One line of a just-finished sync's result. */
-export function outcomeStatus(outcome: SyncOutcome): SyncStatus {
+export function outcomeStatus(outcome: SyncOutcome, syncType?: SchemaView["syncType"]): SyncStatus {
   if (!outcome.ok) return status("failed", "Failed", outcome.error ?? "This table failed to sync.")
+  // `rows` is what this run wrote, so on an incremental table 0 means nothing new, not empty.
+  if (outcome.rows === 0 && syncType === "incremental")
+    return status(
+      "synced",
+      "No new rows",
+      "This table synced and found no rows newer than the last sync, so it is unchanged.",
+    )
   if (outcome.rows === 0)
     return status("empty", "No rows", `This table synced but got no rows. ${NO_ROWS}`)
   return status("synced", "Synced", `This table synced ${plural(outcome.rows, "row")}.`)

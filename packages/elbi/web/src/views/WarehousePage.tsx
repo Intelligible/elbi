@@ -869,7 +869,12 @@ function SourceDetailView({
           <ul className="space-y-1 text-sm">
             {outcomes.map((o) => (
               <li key={o.table} className="flex items-center gap-2">
-                <SyncStatusBadge status={outcomeStatus(o)} />
+                <SyncStatusBadge
+                  status={outcomeStatus(
+                    o,
+                    detail.schemas.find((s) => s.table === o.table)?.syncType,
+                  )}
+                />
                 <span className="font-mono text-xs">{o.table}</span>
                 <span className="text-text-tertiary">
                   {o.ok ? `${o.rows.toLocaleString()} rows` : o.error}
@@ -953,7 +958,7 @@ function SchemaRow({
         </div>
       </TableCell>
       <TableCell className="px-4 py-2.5 tabular-nums text-text-secondary">
-        {schema.rowCount ?? EMPTY}
+        {schema.rowCount?.toLocaleString() ?? EMPTY}
       </TableCell>
       <TableCell className="px-4 py-2.5">
         <SyncStatusBadge status={tableSyncStatus(schema)} />

@@ -6,7 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getDatasets } from "@/lib/chat"
 import type { Catalog, SourceDetail, SourceSummary } from "@/lib/warehouse"
-import { deleteSource, getCatalog, getSource, listSources, updateSchema } from "@/lib/warehouse"
+import {
+  deleteSource,
+  getCatalog,
+  getSource,
+  listSources,
+  syncSource,
+  updateSchema,
+} from "@/lib/warehouse"
 import { NewSourcePage, SourceDetailPage, WarehousePage } from "./WarehousePage"
 
 vi.mock("@/lib/chat", () => ({ getDatasets: vi.fn() }))
@@ -245,9 +252,28 @@ describe("SourceDetailPage", () => {
     expect(within(ok).getByText("Synced")).toHaveAttribute("data-variant", "success")
   })
 
+  it("an incremental sync with nothing new agrees with the table's Synced badge", async () => {
+    // An incremental table's rowCount is its running total; the outcome's rows are this run's.
+    open([schema({ syncType: "incremental", rowCount: 500 })])
+    const button = await screen.findByRole("button", { name: "Sync now" })
+    vi.mocked(syncSource).mockResolvedValue({
+      outcomes: [{ table: "custom__activation_funnel", rows: 0, ok: true, error: null }],
+      source: await vi.mocked(getSource).mock.results[0].value, // the page's loaded detail
+    })
+    await userEvent.click(button)
+    const last = (await screen.findByText("Last sync")).parentElement as HTMLElement
+    expect(within(last).getByText("No new rows")).toHaveAttribute("data-variant", "success")
+    const row = screen.getByText("custom__activation_funnel", { selector: "td *" }).closest("tr")
+    expect(within(row as HTMLElement).getByText("Synced")).toHaveAttribute(
+      "data-variant",
+      "success",
+    )
+    expect(screen.queryByText("No rows")).toBeNull()
+  })
+
   it.each([
     ["Method", "Full refresh reads every row and replaces the table on each sync."],
-    ["Rows", "Number of rows recorded by this table's last successful sync."],
+    ["Rows", "Rows in this table as of its last successful sync"],
     ["1 of 1 tables enabled", "Enabled tables are the ones a sync reads"],
     [
       "last synced 2026-10-01 09:00",

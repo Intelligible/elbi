@@ -75,6 +75,20 @@ describe("sourceSyncStatus", () => {
     expect(st.label).toBe(`Synced · ${(1234).toLocaleString()} rows`)
   })
 
+  it("does not claim every table synced while a newly enabled one is still pending", () => {
+    const st = sourceSyncStatus(
+      source([table({ rowCount: 1000 }), table({ id: "u", status: "pending", rowCount: null })]),
+    )
+    expect(st).toMatchObject({
+      health: "partial",
+      label: "Synced · 1 of 2 tables",
+      variant: "neutral",
+    })
+    expect(st.explanation).toBe(
+      "1 enabled table has not been synced yet. Click Sync now, or wait for the schedule.",
+    )
+  })
+
   it("warns, not errors, when a successful sync landed no rows for a table", () => {
     const st = sourceSyncStatus(
       source([
@@ -132,5 +146,18 @@ describe("outcomeStatus", () => {
     expect(outcomeStatus({ ...base, rows: 0, ok: false, error: "x" }).health).toBe("failed")
     expect(outcomeStatus({ ...base, rows: 0, ok: true }).health).toBe("empty")
     expect(outcomeStatus({ ...base, rows: 5, ok: true }).health).toBe("synced")
+  })
+
+  // The API's outcome rows are what this run wrote (warehouse service: an incremental
+  // table's rowCount is the running total, its outcome only the rows appended).
+  it("reads 0 rows on an incremental table as nothing new, not as empty", () => {
+    const zero = { table: "custom__events", rows: 0, ok: true, error: null }
+    expect(outcomeStatus(zero, "incremental")).toMatchObject({
+      health: "synced",
+      label: "No new rows",
+      variant: "success",
+    })
+    expect(outcomeStatus(zero, "full_refresh").health).toBe("empty")
+    expect(outcomeStatus(zero, undefined).health).toBe("empty")
   })
 })

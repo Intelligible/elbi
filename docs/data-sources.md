@@ -212,7 +212,10 @@ A source's page shows what its last sync produced, not just whether one is runni
 - **Synced, but no rows** means the sync succeeded but some table got nothing back.
   That is usually wrong: the source is empty, the token sees no data, or the
   connector cannot read the response. A full refresh that gets no rows leaves any
-  earlier rows in place.
+  earlier rows in place. An incremental table that finds nothing newer than its last
+  sync shows **No new rows** in the results list instead; that is normal.
+- **Synced · X of Y tables** means every synced table succeeded, but an enabled table,
+  usually one just switched on, has not been synced yet.
 - **Synced** means every enabled table succeeded and landed rows.
 - **Never synced** means no enabled table has been synced yet.
 

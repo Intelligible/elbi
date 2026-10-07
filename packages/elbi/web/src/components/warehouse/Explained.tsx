@@ -20,7 +20,7 @@ export const SYNC_HELP = {
     "How often the app syncs this source on its own. Manual only means it syncs only when you click Sync now.",
   method:
     "There are two variants of sync. Full refresh reads every row and replaces the table on each sync. Incremental appends only rows past the cursor column's value from the last sync.",
-  rows: "Number of rows recorded by this table's last successful sync.",
+  rows: "Rows in this table as of its last successful sync: everything a full refresh wrote, or the running total of incremental syncs.",
 } as const
 
 /**
