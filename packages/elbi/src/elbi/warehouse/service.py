@@ -372,15 +372,23 @@ class WarehouseService:
 
         if not self._store.claim_external_sync(source_id):
             raise SyncInProgress("This source is already syncing.")
-        with self._heartbeat(source_id):
-            outcomes = [self._sync_schema(connector, config, sid) for sid in schema_ids]
-        had_error = any(not o.ok for o in outcomes)
-        self._mark_source(
-            source_id,
-            status="error" if had_error else "idle",
-            last_error=next((o.error for o in outcomes if o.error), None),
-            synced=not had_error,
-        )
+        try:
+            with self._heartbeat(source_id):
+                outcomes = [
+                    self._sync_schema(connector, config, sid) for sid in schema_ids
+                ]
+            had_error = any(not o.ok for o in outcomes)
+            self._mark_source(
+                source_id,
+                status="error" if had_error else "idle",
+                last_error=next((o.error for o in outcomes if o.error), None),
+                synced=not had_error,
+            )
+        except Exception as exc:
+            # The claim is this run's to give back. Recovery is for a process that
+            # died; left to it, every retry of a live failure is refused for 30 min.
+            self._mark_source(source_id, status="error", last_error=str(exc))
+            raise
         return outcomes
 
     def sync_due(self, now: datetime) -> list[str]:
@@ -427,7 +435,7 @@ class WarehouseService:
         """
         try:
             staged = storage.list_staging()
-        except Exception:  # a store the filesystem cannot reach; every tick, by design
+        except Exception:  # the store is unreachable this tick; the next one retries
             logger.warning("could not list staging tables", exc_info=True)
             return
         if not staged:

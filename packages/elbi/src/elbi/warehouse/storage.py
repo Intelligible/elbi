@@ -16,6 +16,7 @@ locally. DuckDB, already the platform's compute backend, reads the tables direct
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -437,7 +438,7 @@ class StagedWrite:
     def __init__(self, table: str, *, mode: str = "overwrite") -> None:
         self.table = table
         self._append = mode == "append"
-        # Only delta-rs touches the staging table until it is discarded: it reaches
+        # Staging is written, listed and removed through delta-rs alone: it reaches
         # every store the warehouse root can name, where the upload filesystem does not.
         self._key = f"{_STAGING_PREFIX}/{table}-{uuid.uuid4().hex}"
         self._uri = table_uri(self._key)
@@ -528,12 +529,12 @@ def list_staging() -> list[tuple[str, str]]:
     """
     import pyarrow.fs as pafs
 
-    filesystem, base = _warehouse_filesystem()
-    root = f"{base}/{_STAGING_PREFIX}" if base else _STAGING_PREFIX
-    selector = pafs.FileSelector(root, allow_not_found=True)
+    if _is_local() and not Path(table_uri(_STAGING_PREFIX)).is_dir():
+        return []  # delta-rs refuses a local root that does not exist yet
+    selector = pafs.FileSelector(_STAGING_PREFIX, allow_not_found=True)
     return [
         (info.base_name.rsplit("-", 1)[0], f"{_STAGING_PREFIX}/{info.base_name}")
-        for info in filesystem.get_file_info(selector)
+        for info in _staging_filesystem().get_file_info(selector)
         if info.type == pafs.FileType.Directory
     ]
 
@@ -541,14 +542,30 @@ def list_staging() -> list[tuple[str, str]]:
 def delete_staging(key: str) -> None:
     """Remove one staging table; a failure to is logged, never raised."""
     try:
-        # The filesystem is resolved here, inside the guard, so a store it cannot
-        # reach costs a leftover staging table and a warning, never the sync.
-        filesystem, path, _ = warehouse_object(key)
-        filesystem.delete_dir(path)
-    except FileNotFoundError:
-        pass  # a write that failed before creating anything left nothing to delete
+        _staging_filesystem().delete_dir(key)
+        if _is_local():
+            # The objects are gone; a local disk keeps the directories they were in.
+            # rmdir, not rmtree: a file left behind must fail here, not vanish.
+            for directory, _, _ in os.walk(table_uri(key), topdown=False):
+                Path(directory).rmdir()
     except Exception:
         logger.warning("could not remove staging table %s", key, exc_info=True)
+
+
+def _staging_filesystem() -> Any:
+    """The warehouse root as delta-rs reaches it, with the options it writes with.
+
+    Staging is written by delta-rs, so it is listed and removed through delta-rs too.
+    The filesystem behind uploads reaches fewer stores and honours fewer credentials
+    (a GCS service-account key), and a staging table it cannot remove is a full copy
+    of the data, left by every run.
+    """
+    import pyarrow.fs as pafs
+    from deltalake.fs import DeltaStorageHandler
+
+    return pafs.PyFileSystem(
+        DeltaStorageHandler(storage_uri(), storage_options() or None)
+    )
 
 
 def table_location(table: str) -> str | None:

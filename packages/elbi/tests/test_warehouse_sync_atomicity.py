@@ -301,6 +301,33 @@ def test_a_source_already_syncing_refuses_a_second_run(
     assert storage.table_location("stripe__invoices") is None
 
 
+def test_a_run_that_raises_gives_its_claim_back(
+    service: tuple[WarehouseService, Store], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that raises outside a table's own guard, say the database failing as a
+    table's result is saved, still releases the source: left ``syncing``, every retry
+    would be refused until recovery calls the run dead half an hour later."""
+    svc, _store = service
+    source_id = _source(svc)
+    record_columns = WarehouseService._record_columns
+
+    def database_fails(*args: Any) -> None:
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(WarehouseService, "_record_columns", database_fails)
+    with pytest.raises(RuntimeError, match="database is locked"):
+        _sync(svc, source_id, _invoices(1))
+
+    source = svc.get_source(source_id)
+    assert (source.status, source.last_error) == ("error", "database is locked")
+
+    monkeypatch.setattr(WarehouseService, "_record_columns", record_columns)
+    _sync(svc, source_id, _invoices(2))
+
+    assert svc.get_source(source_id).status == "idle"
+    assert [row["id"] for row in _rows()] == [2]
+
+
 # --- What a dead run left behind ---------------------------------------------------
 
 
@@ -344,28 +371,65 @@ def test_staging_of_a_live_run_is_left_alone(
     assert len(_staging_leftovers(tmp_path)) == 1
 
 
+def test_recovery_before_anything_was_written_is_quiet(
+    service: tuple[WarehouseService, Store], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Recovery runs on every scheduler tick, from the first one on a fresh install,
+    before the warehouse root exists."""
+    svc, _store = service
+
+    with caplog.at_level(logging.WARNING):
+        svc.recover_interrupted_syncs(datetime.now(timezone.utc))
+
+    assert caplog.text == ""
+
+
 # --- Staging lives wherever the tables do ------------------------------------------
 
 
-def test_a_store_only_delta_rs_can_reach_still_syncs(
-    service: tuple[WarehouseService, Store],
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """delta-rs writes to every store the warehouse supports; the pyarrow filesystem
-    behind uploads reaches fewer (it refused ``az://``). Staging goes through delta-rs,
-    so a sync must not need the filesystem: only the cleanup may, and a cleanup it
-    cannot do is a warning, not a failed sync."""
-    svc, _store = service
-    source_id = _source(svc)
+def _without_upload_filesystem(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A store the pyarrow filesystem behind uploads cannot reach, though delta-rs can:
+    a scheme it lacks, or credentials it ignores (a GCS service-account key)."""
 
     def no_filesystem() -> tuple[Any, str]:
         raise ValueError("unsupported storage scheme for upload: az://")
 
     monkeypatch.setattr(storage, "_warehouse_filesystem", no_filesystem)
+
+
+def test_a_store_only_delta_rs_can_reach_syncs_and_cleans_up(
+    service: tuple[WarehouseService, Store],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Staging is written by delta-rs, so it is removed the same way: a staging table
+    only the upload filesystem could remove would be a full copy of the data left
+    behind by every run on such a store."""
+    svc, _store = service
+    source_id = _source(svc)
+    _without_upload_filesystem(monkeypatch)
+
     with caplog.at_level(logging.WARNING):
         _sync(svc, source_id, _invoices(1), _invoices(2))
 
     assert [row["id"] for row in _rows()] == [1, 2]
     assert svc.get_source(source_id).status == "idle"
-    assert "could not remove staging table" in caplog.text
+    assert _staging_leftovers(tmp_path) == []
+    assert "could not remove staging table" not in caplog.text
+
+
+def test_recovery_sweeps_a_store_only_delta_rs_can_reach(
+    service: tuple[WarehouseService, Store],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc, _store = service
+    source_id = _source(svc)
+    _without_upload_filesystem(monkeypatch)
+    _run_dies_mid_sync(svc, source_id, monkeypatch)
+    assert len(_staging_leftovers(tmp_path)) == 1
+
+    svc.recover_interrupted_syncs(datetime.now(timezone.utc))
+
+    assert _staging_leftovers(tmp_path) == []
