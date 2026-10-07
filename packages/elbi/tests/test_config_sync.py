@@ -1014,3 +1014,25 @@ def test_a_synced_model_policy_keeps_the_defaults_its_file_left_out(
     assert pulled["source_kind"] == "dataset"
     assert pulled["interval_hours"] == 6.0
     assert pulled["enabled"] is True
+
+
+def test_a_monitor_field_deleted_from_its_file_goes_back_to_the_default(
+    client: httpx.Client, tmp_path: Path
+) -> None:
+    """Deleting a defaulted field from a monitor file resets it in the app.
+
+    The update route keeps any field it is not sent, so a push of only the file's keys
+    left the old value in place while the file compared as the default: plan reported
+    an update after every sync, and the app never changed.
+    """
+    import yaml
+
+    repo = tmp_path / "repo"
+    monitor = {"target_kind": "derivation", "target": "churn_risk", "sensitivity": 2.0}
+    _write(repo, "monitors/risk.yaml", yaml.safe_dump(monitor))
+    config_sync.sync(client, repo)
+
+    del monitor["sensitivity"]
+    _write(repo, "monitors/risk.yaml", yaml.safe_dump(monitor))
+    assert _plan_after_sync(client, repo) == []
+    assert client.get("/api/monitors").json()[0]["sensitivity"] == 3.0

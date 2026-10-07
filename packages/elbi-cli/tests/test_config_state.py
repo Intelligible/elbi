@@ -9,6 +9,7 @@ app, one case per outcome.
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -110,18 +111,42 @@ def test_an_absent_or_corrupt_baseline_is_an_empty_one(repo: Path) -> None:
 def test_a_baseline_digested_another_way_is_not_read_as_a_conflict(
     app: _FakeApp, repo: Path
 ) -> None:
-    """A baseline from an older digest matches nothing, on either side.
+    """A baseline from 0.1.0's digest still says which side moved.
 
-    Read as-is, every edit made here would look like a change in both places and sync
-    would refuse it. Discarded, the comparison is the two-way one until the next sync.
+    Read as-is it matches nothing, so every edit would look like a conflict. Translated,
+    an edit made only here is an update, as it would have been before the upgrade.
     """
-    app.objects["revenue"] = {"sql": "select 1"}
-    pull(None, repo, [app.surface()])  # type: ignore[arg-type]
-    (repo / STATE_PATH).write_text(
-        json.dumps({"surfaces": {"metrics": {"revenue": "0" * 64}}})
-    )
+    _v1_baseline(app, repo)
     _write(repo, "metrics", "revenue", {"sql": "select 2"})
     assert _actions(plan(None, repo, [app.surface()])) == {"revenue": "update"}  # type: ignore[arg-type]
+
+
+def test_an_app_edit_survives_the_first_sync_after_upgrading(
+    app: _FakeApp, repo: Path
+) -> None:
+    """A 0.1.0 baseline still keeps sync from undoing an edit made in the app.
+
+    Discarded, the comparison was two-way, so the app's edit read as an update and the
+    first sync after upgrading pushed the repo's older copy over it.
+    """
+    _v1_baseline(app, repo)
+    app.objects["revenue"] = {"sql": "select 99"}  # edited in the app
+    assert _actions(plan(None, repo, [app.surface()])) == {"revenue": "drift"}  # type: ignore[arg-type]
+    sync(None, repo, surfaces_=[app.surface()])  # type: ignore[arg-type]
+    assert app.objects["revenue"] == {"sql": "select 99"}
+    assert app.pushed == []
+
+
+def _v1_baseline(app: _FakeApp, repo: Path) -> None:
+    """``revenue`` pulled, with the state file 0.1.0 wrote: no version, text digests."""
+    app.objects["revenue"] = {"sql": "select 1"}
+    pull(None, repo, [app.surface()])  # type: ignore[arg-type]
+    pulled = app.surface().serialize({"sql": "select 1"})  # the file text it digested
+    (repo / STATE_PATH).write_text(
+        json.dumps(
+            {"surfaces": {"metrics": {"revenue": sha256(pulled.encode()).hexdigest()}}}
+        )
+    )
 
 
 # -- the matrix ---------------------------------------------------------------

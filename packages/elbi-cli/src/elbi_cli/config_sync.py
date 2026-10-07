@@ -56,10 +56,11 @@ class SyncError(Exception):
 #: way Terraform keeps its working directory beside the configuration rather than in it.
 STATE_PATH = Path(".elbi") / "state.json"
 
-#: Bumped whenever ``_fingerprint`` changes how it digests. A baseline taken under
-#: another version cannot match anything, which would read every edit as a conflict,
-#: so it is discarded and the comparison degrades to two-way until the next sync.
+#: Bumped whenever ``_fingerprint`` changes how it digests. A v1 baseline matches no v2
+#: digest, but it still records which side moved, so it is tagged and translated rather
+#: than dropped: dropped, the first sync would push over every edit made in the app.
 _STATE_VERSION = 2
+_LEGACY = "v1:"
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,11 @@ def _fingerprint(surface: Surface, name: str, body: dict[str, Any]) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _v1_fingerprint(surface: Surface, body: dict[str, Any]) -> str:
+    """0.1.0's digest: the serialized file text, which a v1 state holds."""
+    return hashlib.sha256(surface.serialize(body).encode("utf-8")).hexdigest()
+
+
 def read_state(root: Path) -> dict[str, dict[str, str]]:
     """What the last pull into ``root`` saw, as ``surface -> name -> fingerprint``.
 
@@ -109,13 +115,16 @@ def read_state(root: Path) -> dict[str, dict[str, str]]:
         loaded = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    if not isinstance(loaded, dict) or loaded.get("version") != _STATE_VERSION:
+    if not isinstance(loaded, dict):
         return {}
+    # A pre-version file holds raw-text digests: still evidence of which side moved,
+    # so tagged for classify to translate rather than dropped.
+    tag = "" if loaded.get("version") == _STATE_VERSION else _LEGACY
     surfaces_ = loaded.get("surfaces")
     if not isinstance(surfaces_, dict):
         return {}
     return {
-        str(name): {str(k): str(v) for k, v in table.items()}
+        str(name): {str(k): tag + str(v) for k, v in table.items()}
         for name, table in surfaces_.items()
         if isinstance(table, dict)
     }
@@ -1021,9 +1030,8 @@ def _monitors_surface() -> Surface:
     """Anomaly monitors as ``monitors/<name>.yaml``, keyed by name.
 
     A monitor watches a certified metric or derivation, so the app gates its target on
-    create. The app has no update route, so ``sync`` replaces a monitor of the same name
-    (delete then create) to stay idempotent. The file carries only the monitor's
-    definition; runtime state (last value, incidents) stays app-side.
+    create. ``sync`` updates a monitor of the same name in place. The file carries only
+    the monitor's definition; runtime state (last value, incidents) stays app-side.
     """
     _FIELDS = (
         "target_kind",
@@ -1036,6 +1044,16 @@ def _monitors_surface() -> Surface:
         "max_value",
         "config",
     )
+    # The app's create defaults (app.py create_monitor), shared by push and canonical
+    # so what a file leaves out is both sent and compared as the same value.
+    _DEFAULTS = {
+        "target_kind": "metric",
+        "method": "mad",
+        "sensitivity": 3.0,
+        "window": 30,
+        "interval_hours": 1.0,
+        "config": {},
+    }
 
     def remote(client: httpx.Client) -> dict[str, dict[str, Any]]:
         out = {}
@@ -1056,9 +1074,11 @@ def _monitors_surface() -> Surface:
     def push(
         client: httpx.Client, name: str, body: dict[str, Any], existing: str | None
     ) -> None:
-        # Only what the file sets: an explicit null is not the app's default, and
-        # ``sensitivity: null`` fails its float() where an absent key does not.
-        payload = {"name": name, **{k: body[k] for k in _FIELDS if k in body}}
+        # The file over the defaults: the update route keeps any field it is not sent,
+        # so a field deleted from the file must go out as its default or plan never
+        # settles. Nulls are dropped: ``sensitivity: null`` fails the app's float().
+        set_ = {k: body[k] for k in _FIELDS if body.get(k) is not None}
+        payload = {"name": name, **_DEFAULTS, **set_}
         if existing is not None:
             # Updated rather than replaced: deleting a monitor takes its snapshots and
             # incidents with it, and those snapshots are the baseline anomaly detection
@@ -1081,14 +1101,7 @@ def _monitors_surface() -> Surface:
         schema=_MONITORS_SCHEMA,
         canonical=lambda name, body: _defaulted(
             body,
-            {
-                "target_kind": "metric",
-                "method": "mad",
-                "sensitivity": 3.0,
-                "window": 30,
-                "interval_hours": 1.0,
-                "config": {},
-            },
+            _DEFAULTS,
             {
                 "sensitivity": float,
                 "window": int,
@@ -1329,6 +1342,16 @@ def classify(
             changes.append(Change(surface.name, name, "create"))
             continue
         there = _fingerprint(surface, name, remote[name])
+        if was is not None and was.startswith(_LEGACY):
+            old = was[len(_LEGACY) :]
+            # App unchanged since the pull: ours is the edit. Repo unchanged: drift.
+            # Neither: both moved, a conflict.
+            if _v1_fingerprint(surface, remote[name]) == old:
+                was = there
+            elif _v1_fingerprint(surface, body) == old:
+                was = here
+            else:
+                was = ""
         if here == there:
             changes.append(Change(surface.name, name, "unchanged"))
         elif was is None:
