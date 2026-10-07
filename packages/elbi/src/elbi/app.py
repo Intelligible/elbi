@@ -570,9 +570,9 @@ def create_app(
     Trust model: the app is local-first and single-user. Its endpoints are
     unauthenticated and everything it holds -- conversations, jobs, derivations -- is
     the one person's, so it assumes a trusted user on a trusted machine. Reaching it
-    from anywhere else means putting something that authenticates in front of it. The
-    oracle's verdict stays unforgeable either way, so this is a data-isolation
-    boundary, not a soundness one.
+    from anywhere else means putting something that authenticates in front of it. A
+    caller still cannot forge a verification verdict either way, so this is a
+    data-isolation boundary, not a soundness one.
     """
     mcp_app = None
     if mcp_server is not None:
@@ -674,7 +674,7 @@ def create_app(
         )
         prompt = (
             f"Your background training job for derivation '{job.label}' has finished "
-            f"and CERTIFIED (oracle verdict: {attestation.verdict}). Its verified "
+            f"and CERTIFIED (verdict: {attestation.verdict}). Its verified "
             f"output:\n{result.get('rendered', '')}\n\nInterpret this certified result "
             "and call `answer` now with the finding for the user, in plain language. "
             "The analysis is already certified, so do not run tools or derive again."
@@ -2953,6 +2953,23 @@ def create_app(
         """The certified derivations available to bind to a widget."""
         return _dashboards().catalog()
 
+    @app.get("/api/dashboards/columns/{name}")
+    async def dashboard_columns(name: str) -> dict[str, list[str]]:
+        """The columns a derivation returns, for the tile editor's field picker."""
+        return {"columns": _dashboards().columns(name)}
+
+    @app.get("/api/dashboards/schema")
+    async def dashboard_schema() -> dict[str, Any]:
+        """The DashboardSpec JSON Schema, so an editor can check a spec as it is typed.
+
+        The same document the server validates against, rather than a copy of its rules
+        kept in the client: a rule that drifts would report an error the save accepts,
+        or accept one it refuses.
+        """
+        from elbi_core.dashboard.spec import load_dashboard_schema
+
+        return load_dashboard_schema()
+
     @app.post("/api/dashboards")
     async def create_dashboard(request: Request) -> dict[str, Any]:
         """Validate a dashboard manifest and store it as a new draft."""
@@ -4816,10 +4833,8 @@ def create_app(
     async def test_data_source(body: dict[str, Any]) -> dict[str, Any]:
         """Test an unsaved connection payload before saving it.
 
-        Gated to data-source managers: it opens a connection to an arbitrary host, so an
-        unprivileged caller must not probe internal services through it. Private-network
-        hosts are intentionally allowed (on-prem data lives there), so the permission
-        gate, not IP filtering, is the control.
+        Opens a connection to the host named in the payload, private-network
+        addresses included, and reports what the driver answered.
         """
         return datasources.test_connection(_source_from_body(body, None))
 

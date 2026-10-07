@@ -22,7 +22,7 @@ from typing import Any
 
 from elbi_core import DashboardSpec, Runner
 from elbi_core.dashboard import MetricResolver, resolve_options, resolve_page
-from elbi_core.errors import SpecValidationError
+from elbi_core.errors import ElbiError, SpecValidationError
 
 from .db import Dashboard, DashboardSubscription, Store
 from .duplicate import copy_identifier, copy_label
@@ -195,6 +195,28 @@ class DashboardService:
     def catalog(self) -> list[dict[str, Any]]:
         """The certified derivations available to bind, for the editor's picker."""
         return self._catalog()
+
+    def columns(self, name: str) -> list[str]:
+        """The column names a derivation's rows carry, for the editor's field picker.
+
+        Read from the result rather than from the serve contract: a contract lists the
+        columns it chooses to show, which is not always all of them, and a derivation
+        may declare none at all. The run is a cached read for anything already
+        computed, which a bound derivation on an open dashboard always is.
+        """
+        try:
+            artifact = self._make_runner().run(name)
+        except ElbiError:
+            return []
+        if artifact.kind != "table":
+            return []
+        rows = artifact.value if isinstance(artifact.value, list) else []
+        seen: dict[str, None] = {}
+        for row in rows:
+            if isinstance(row, dict):
+                for key in row:
+                    seen.setdefault(str(key), None)
+        return list(seen)
 
     # -- resolution --------------------------------------------------------------
     def resolve(

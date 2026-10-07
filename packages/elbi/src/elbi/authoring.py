@@ -10,7 +10,6 @@ chat-authored derivations are the app's own durable, cached answers, served nati
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 from collections.abc import Callable, Mapping, Sequence
@@ -24,7 +23,7 @@ from elbi_core.authoring import ManualCertification, author
 from elbi_core.errors import ElbiError
 from elbi_core.tracking import run_from_author
 
-from .db import Derivation, Store
+from .db import Store, derivation_row
 from .tracking import emit_configured_run
 
 logger = logging.getLogger("elbi")
@@ -162,24 +161,16 @@ def make_derive_factory(
                             "failed to persist %s to the authored sidecar", name
                         )
                 store.save_derivation(
-                    Derivation(
-                        name=name,
-                        conversation_id=conversation_id,
-                        # None (the chat path) falls back to save_derivation's
-                        # conversation-row inheritance; promote paths pass the
-                        # caller because their conversation ids are synthetic.
-                        question=question,
+                    derivation_row(
+                        outcome.derivation,
                         source=source,
-                        claim_json=json.dumps(dict(claim)) if claim else None,
-                        serve_json=json.dumps({"format": fmt, "deps": list(deps)}),
+                        origin="agent",
+                        conversation_id=conversation_id,
+                        question=question,
                         verdict=verdict or result.contract_verdict,
                         rendered=rendered,
-                        attestation_json=(
-                            json.dumps(attestation) if attestation else None
-                        ),
-                        assumptions_json=(
-                            json.dumps(list(assumptions)) if assumptions else None
-                        ),
+                        attestation=attestation,
+                        assumptions=assumptions,
                         data_hash=data_hash,
                     )
                 )

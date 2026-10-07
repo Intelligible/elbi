@@ -32,6 +32,8 @@ const DETAIL: DerivationDetail = {
   assumptions: [],
 }
 
+const CLAIM = { x: "amount", y: "risk" }
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/derivations/eff"]}>
@@ -60,5 +62,21 @@ describe("DerivationDetailPage certificate panel", () => {
     renderPage()
     await screen.findByText("does x move y?")
     expect(screen.queryByRole("link", { name: "Download certificate as JSON" })).toBeNull()
+  })
+})
+
+describe("DerivationDetailPage claim panel", () => {
+  it("marks a claim with no verdict as not checked", async () => {
+    vi.mocked(getDerivation).mockResolvedValue({ ...DETAIL, claim: CLAIM, verdict: null })
+    renderPage()
+    await screen.findByRole("heading", { name: "Claim" })
+    expect(screen.getByText("Not checked by the oracle.")).toBeInTheDocument()
+  })
+
+  it("shows no not-checked note on a claim the oracle found sound", async () => {
+    vi.mocked(getDerivation).mockResolvedValue({ ...DETAIL, claim: CLAIM, verdict: "sound" })
+    renderPage()
+    await screen.findByRole("heading", { name: "Claim" })
+    expect(screen.queryByText("Not checked by the oracle.")).toBeNull()
   })
 })

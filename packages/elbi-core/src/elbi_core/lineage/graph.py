@@ -193,7 +193,7 @@ def from_registry(
     """Build the dataset→derivation→derivation graph from a registry.
 
     ``datasets`` seeds declared source datasets even if unreferenced. ``verdict_of``
-    supplies each derivation's oracle verdict by name.
+    returns a derivation's stored verification verdict, looked up by name.
     """
     graph = LineageGraph()
     for name in datasets:

@@ -31,7 +31,7 @@ exposed until it is certified.
 one call:
 
 ```python
-from elbi import Runner, SubprocessExecutor, author, serve
+from elbi_core import Runner, SubprocessExecutor, author, serve
 
 source = """
 def revenue_by_region(ctx):
@@ -71,7 +71,7 @@ comparing the output to the expected value by content fingerprint (so any correc
 implementation passes, however it is written):
 
 ```python
-from elbi import GoldenCase, RequireChecks, author
+from elbi_core import GoldenCase, RequireChecks, author
 
 outcome = author(
     "revenue_by_region",
@@ -113,7 +113,7 @@ Whether a verified proposal is served is decided by a pluggable
   gate, for a regulated setting where a served answer must be human-endorsed.
 
 ```python
-from elbi import ManualCertification, author
+from elbi_core import ManualCertification, author
 
 outcome = author(..., policy=ManualCertification())  # held for review
 assert not outcome.certified

@@ -257,7 +257,7 @@ export function FeatureViewDetailPage() {
 
         <SceneSection
           title="Expectations"
-          description="A data contract on the view's feature values, checked with the oracle's verdict."
+          description="A data contract on the view's feature values: each check is sound, unsound, or inconclusive."
           action={
             d.hasContract ? (
               <Button
