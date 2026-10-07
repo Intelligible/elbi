@@ -254,7 +254,7 @@ describe("SourceDetailPage", () => {
 
   it("an incremental sync with nothing new agrees with the table's Synced badge", async () => {
     // An incremental table's rowCount is its running total; the outcome's rows are this run's.
-    open([schema({ syncType: "incremental", rowCount: 500 })])
+    open([schema({ syncType: "incremental", incrementalField: "updated_at", rowCount: 500 })])
     const button = await screen.findByRole("button", { name: "Sync now" })
     vi.mocked(syncSource).mockResolvedValue({
       outcomes: [{ table: "custom__activation_funnel", rows: 0, ok: true, error: null }],

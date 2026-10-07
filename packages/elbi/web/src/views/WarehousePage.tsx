@@ -872,7 +872,7 @@ function SourceDetailView({
                 <SyncStatusBadge
                   status={outcomeStatus(
                     o,
-                    detail.schemas.find((s) => s.table === o.table)?.syncType,
+                    detail.schemas.find((s) => s.table === o.table),
                   )}
                 />
                 <span className="font-mono text-xs">{o.table}</span>

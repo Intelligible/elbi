@@ -89,6 +89,14 @@ describe("sourceSyncStatus", () => {
     )
   })
 
+  // The headline is the worst state among enabled tables: a warning outranks "not synced yet".
+  it("still warns on an empty table while another enabled table is pending", () => {
+    const st = sourceSyncStatus(
+      source([table({ rowCount: 0 }), table({ id: "u", status: "pending", rowCount: null })]),
+    )
+    expect(st).toMatchObject({ health: "empty", variant: "warning" })
+  })
+
   it("warns, not errors, when a successful sync landed no rows for a table", () => {
     const st = sourceSyncStatus(
       source([
@@ -117,11 +125,28 @@ describe("sourceSyncStatus", () => {
 })
 
 describe("tableSyncStatus", () => {
-  it("marks a failed table with its own error and the partial-write caveat", () => {
+  it("marks a failed table with its own error", () => {
     const st = tableSyncStatus(table({ status: "error", lastError: "cannot merge" }))
     expect(st).toMatchObject({ health: "failed", variant: "danger" })
     expect(st.explanation).toContain("failed: cannot merge")
-    expect(st.explanation).toContain("partly rewritten")
+  })
+
+  // The service stores the raw exception text, which usually has no closing period.
+  it("ends the error with one period", () => {
+    for (const lastError of ["connection refused", "connection refused."])
+      expect(tableSyncStatus(table({ status: "error", lastError })).explanation).toBe(
+        "The last sync of this table failed: connection refused.",
+      )
+  })
+
+  // An incremental rowCount is a running total, so 0 is not a full refresh landing nothing.
+  it("gives an empty incremental table no full-refresh explanation", () => {
+    const st = tableSyncStatus(
+      table({ rowCount: 0, syncType: "incremental", incrementalField: "updated_at" }),
+    )
+    expect(st.health).toBe("empty")
+    expect(st.explanation).not.toContain("full refresh")
+    expect(tableSyncStatus(table({ rowCount: 0 })).explanation).toContain("A full refresh")
   })
 
   it("warns on a synced table with no rows", () => {
@@ -152,12 +177,22 @@ describe("outcomeStatus", () => {
   // table's rowCount is the running total, its outcome only the rows appended).
   it("reads 0 rows on an incremental table as nothing new, not as empty", () => {
     const zero = { table: "custom__events", rows: 0, ok: true, error: null }
-    expect(outcomeStatus(zero, "incremental")).toMatchObject({
+    expect(outcomeStatus(zero, { syncType: "incremental", incrementalField: "ts" })).toMatchObject({
       health: "synced",
       label: "No new rows",
       variant: "success",
     })
-    expect(outcomeStatus(zero, "full_refresh").health).toBe("empty")
+    expect(outcomeStatus(zero, { syncType: "full_refresh", incrementalField: null }).health).toBe(
+      "empty",
+    )
     expect(outcomeStatus(zero, undefined).health).toBe("empty")
+  })
+
+  // The sync service appends only with a cursor column; without one it overwrites (sync.py).
+  it("warns on 0 rows from an incremental table with no cursor, which ran as a refresh", () => {
+    const zero = { table: "custom__events", rows: 0, ok: true, error: null }
+    expect(outcomeStatus(zero, { syncType: "incremental", incrementalField: null }).health).toBe(
+      "empty",
+    )
   })
 })
