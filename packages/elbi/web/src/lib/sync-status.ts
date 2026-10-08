@@ -37,6 +37,16 @@ const status = (health: SyncHealth, label: string, explanation: string): SyncSta
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n.toLocaleString()} ${n === 1 ? one : many}`
 
+// A sync writes batch by batch (warehouse/sync.py), so a run that fails partway keeps the earlier ones.
+const PARTIAL_WRITE =
+  "A failed sync can leave the table partly rewritten, so its row count may not match what is in it."
+
+// "<prefix>: <error>." with exactly one closing period; the service stores raw exception text.
+const withError = (prefix: string, error: string | null | undefined) => {
+  const trimmed = error?.replace(/[.\s]+$/, "") ?? ""
+  return trimmed ? `${prefix}: ${trimmed}.` : `${prefix}.`
+}
+
 const CHECK_SOURCE = "Check that the source has data and that the connector can read its response."
 
 const NO_ROWS = `A full refresh that gets no rows leaves any earlier rows in place. ${CHECK_SOURCE}`
@@ -44,7 +54,7 @@ const NO_ROWS = `A full refresh that gets no rows leaves any earlier rows in pla
 // Whether a sync appends: the sync service only does so with a cursor column set; an
 // "incremental" table without one is overwritten like a full refresh (warehouse/sync.py).
 const appends = (s?: Pick<SchemaView, "syncType" | "incrementalField">) =>
-  s?.syncType === "incremental" && s.incrementalField != null
+  s?.syncType === "incremental" && s.incrementalField !== null && s.incrementalField !== undefined
 
 /** One table's state, from its own last run. */
 export function tableSyncStatus(schema: SchemaView): SyncStatus {
@@ -59,7 +69,7 @@ export function tableSyncStatus(schema: SchemaView): SyncStatus {
     return status(
       "failed",
       "Failed",
-      `The last sync of this table failed${schema.lastError ? `: ${schema.lastError.replace(/[.\s]+$/, "")}` : ""}.`,
+      `${withError("The last sync of this table failed", schema.lastError)} ${PARTIAL_WRITE}`,
     )
   if (schema.status === "synced") {
     if (schema.rowCount === 0)
@@ -86,7 +96,7 @@ export function sourceSyncStatus(source: SourceDetail): SyncStatus {
       failed.length > 0
         ? `The last sync failed for ${failed.length} of ${plural(enabled.length, "enabled table")}`
         : "The last sync failed"
-    return status("failed", "Failed", `${which}${error ? `: ${error}` : "."}`)
+    return status("failed", "Failed", `${withError(which, error)} ${PARTIAL_WRITE}`)
   }
 
   if (enabled.length === 0)

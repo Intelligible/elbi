@@ -206,7 +206,9 @@ A source's page shows what its last sync produced, not just whether one is runni
 
 - **Syncing** means a sync is running now.
 - **Failed** means at least one enabled table failed on the last run. The error is
-  shown on the page and on the table that failed.
+  shown on the page and on the table that failed. A failed sync can leave a table
+  partly rewritten, so its row count may not match what is in it until a sync
+  succeeds.
 - **Synced, but no rows** means the sync succeeded but some table got nothing back.
   That is usually wrong: the source is empty, the token sees no data, or the
   connector cannot read the response. A full refresh that gets no rows leaves any

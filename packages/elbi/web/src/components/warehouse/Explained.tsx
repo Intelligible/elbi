@@ -1,3 +1,4 @@
+import { CircleHelp } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -24,45 +25,38 @@ export const SYNC_HELP = {
 } as const
 
 /**
- * Hover help on a piece of jargon: the trigger keeps its own look and gains a dotted
- * underline, so it reads as explained without turning into a link.
+ * Jargon followed by a help icon: hovering or focusing the icon shows the tip, and the icon
+ * links to the docs. The tip stays text-only so it works the same by mouse, keyboard and touch.
  */
 export function Explained({
   tip,
   docs,
+  about,
   children,
-  asChild = false,
 }: {
   tip: string
-  docs?: string
+  docs: string
+  // What the help is about, for the icon's accessible name.
+  about: string
   children: ReactNode
-  // Wrap an element that is already focusable (a select trigger) instead of a text label.
-  asChild?: boolean
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        asChild={asChild}
-        type={asChild ? undefined : "button"}
-        className={
-          asChild
-            ? undefined
-            : "cursor-help underline decoration-dotted decoration-text-tertiary underline-offset-2"
-        }
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs text-left leading-normal">
-        {tip}
-        {docs ? (
-          <>
-            {" "}
-            <a href={docs} target="_blank" rel="noreferrer" className="font-medium underline">
-              Learn more in the docs
-            </a>
-          </>
-        ) : null}
-      </TooltipContent>
-    </Tooltip>
+    <span className="inline-flex items-center gap-1">
+      {children}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a
+            href={docs}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`What “${about}” means`}
+            className="text-text-tertiary hover:text-foreground"
+          >
+            <CircleHelp className="size-3.5" />
+          </a>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-left leading-normal">{tip}</TooltipContent>
+      </Tooltip>
+    </span>
   )
 }

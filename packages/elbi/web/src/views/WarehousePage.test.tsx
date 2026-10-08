@@ -214,6 +214,9 @@ describe("SourceDetailPage", () => {
     renderAt("/warehouse/sources/a")
   }
 
+  const help = (about: string, scope: HTMLElement = document.body) =>
+    within(scope).getByRole("link", { name: `What “${about}” means` })
+
   const tooltipOn = async (trigger: HTMLElement) => {
     await userEvent.hover(trigger)
     return screen.findByRole("tooltip")
@@ -226,7 +229,7 @@ describe("SourceDetailPage", () => {
     expect(screen.queryByText("idle")).toBeNull()
     const row = screen.getByText("custom__activation_funnel").closest("tr") as HTMLElement
     expect(within(row).getByText("No rows")).toHaveAttribute("data-variant", "warning")
-    expect(await tooltipOn(headline)).toHaveTextContent(
+    expect(await tooltipOn(help("Synced, but no rows"))).toHaveTextContent(
       "The last sync succeeded, but 1 table got no rows: custom__activation_funnel.",
     )
   })
@@ -245,7 +248,7 @@ describe("SourceDetailPage", () => {
     const failed = screen.getByText("custom__activation_funnel").closest("tr") as HTMLElement
     const badge = within(failed).getByText("Failed")
     expect(badge).toHaveAttribute("data-variant", "danger")
-    expect(await tooltipOn(badge)).toHaveTextContent(
+    expect(await tooltipOn(help("Failed", failed))).toHaveTextContent(
       "The last sync of this table failed: cannot merge line items",
     )
     const ok = screen.getByText("custom__charges").closest("tr") as HTMLElement
@@ -274,28 +277,36 @@ describe("SourceDetailPage", () => {
   it.each([
     ["Method", "Full refresh reads every row and replaces the table on each sync."],
     ["Rows", "Rows in this table as of its last successful sync"],
-    ["1 of 1 tables enabled", "Enabled tables are the ones a sync reads"],
-    [
-      "last synced 2026-10-01 09:00",
-      "When a sync last finished with every enabled table succeeding.",
-    ],
-  ])("%s explains itself on hover, with a docs link", async (label, text) => {
+    ["tables enabled", "Enabled tables are the ones a sync reads"],
+    ["last synced", "When a sync last finished with every enabled table succeeding."],
+  ])("%s explains itself from its help icon", async (about, text) => {
     open([schema({ rowCount: 10 })])
-    const tip = await tooltipOn(await screen.findByRole("button", { name: label }))
+    await screen.findByText("Synced · 10 rows")
+    const tip = await tooltipOn(help(about))
     expect(tip).toHaveTextContent(text)
   })
 
   it("the schedule explains what Manual only means", async () => {
     open([schema({ rowCount: 10 })])
-    const tip = await tooltipOn(await screen.findByRole("combobox", { name: "Sync frequency" }))
+    await screen.findByRole("combobox", { name: "Sync frequency" })
+    const tip = await tooltipOn(help("Sync frequency"))
     expect(tip).toHaveTextContent("How often the app syncs this source on its own.")
     expect(tip).toHaveTextContent("Manual only means it syncs only when you click Sync now.")
   })
 
-  it("a tooltip's docs link goes to the data-sources page", async () => {
+  it("a help icon links to its docs section", async () => {
     open([schema({ rowCount: 10 })])
-    await userEvent.hover(await screen.findByRole("button", { name: "Method" }))
-    const links = await screen.findAllByRole("link", { name: "Learn more in the docs" })
-    expect(links[0]).toHaveAttribute("href", "https://docs.elbi.ai/data-sources/#incremental-sync")
+    await screen.findByText("Synced · 10 rows")
+    expect(help("Method")).toHaveAttribute(
+      "href",
+      "https://docs.elbi.ai/data-sources/#incremental-sync",
+    )
+  })
+
+  it("a help tip opens from the keyboard", async () => {
+    open([schema({ rowCount: 10 })])
+    await screen.findByText("Synced · 10 rows")
+    help("Rows").focus()
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Rows in this table")
   })
 })
