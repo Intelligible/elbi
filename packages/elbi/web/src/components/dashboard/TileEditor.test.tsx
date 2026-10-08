@@ -172,6 +172,25 @@ describe("TileEditor", () => {
     expect(onSave).toHaveBeenCalledWith("mrr", expect.objectContaining({ metric: "subscriptions" }))
   })
 
+  it("shows a rebound tile on the JSON tab without its private aggregate", async () => {
+    const user = userEvent.setup()
+    open({
+      ...metricTile,
+      bind: { derivation: "revenue_by_product" },
+      viz: { field: "subscriptions", agg: "sum", color: "blue" },
+    })
+    await metricsReady()
+
+    await pick(user, "Metric", "subscriptions")
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+
+    const shown = JSON.parse(
+      (screen.getByLabelText("This tile's config") as HTMLTextAreaElement).value,
+    )
+    expect(shown.bind).toEqual({ metric: "subscriptions" })
+    expect(shown.viz).toEqual({ color: "blue" })
+  })
+
   it("warns about a metric that does not exist, and keeps it selectable", async () => {
     open({ ...metricTile, bind: { metric: "gone_away" } })
     await metricsReady()

@@ -211,6 +211,20 @@ export async function variableOptions(dashboardId: string, variable: string): Pr
 }
 
 // A blank starter dashboard: one empty page, ready to add widgets to.
+/**
+ * A widget rebound to a shared metric. Filters stay; the derivation and the private
+ * aggregate's `viz.field`/`agg`/`format` go, since the metric now carries the value and
+ * its format.
+ */
+export function bindMetric(widget: Widget, metric: string): Widget {
+  const filters = widget.bind?.filters
+  const next: Widget = { ...widget, bind: filters?.length ? { metric, filters } : { metric } }
+  const { field: _f, agg: _a, format: _fmt, ...viz } = widget.viz ?? {}
+  if (Object.keys(viz).length) next.viz = viz
+  else delete next.viz
+  return next
+}
+
 export function starterSpec(name: string): DashboardSpec {
   const slug = name
     .toLowerCase()

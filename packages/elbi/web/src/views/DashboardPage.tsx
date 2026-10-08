@@ -9,7 +9,7 @@ import "react-resizable/css/styles.css"
 import { DashboardWidget } from "@/components/dashboard/DashboardWidget"
 import { FilterBar } from "@/components/dashboard/FilterBar"
 import { JsonEditor } from "@/components/dashboard/JsonEditor"
-import { metricBind, TileEditor, type TilePatch } from "@/components/dashboard/TileEditor"
+import { TileEditor, type TilePatch } from "@/components/dashboard/TileEditor"
 import { Scene, SceneHeader, SceneSkeleton } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,6 +25,7 @@ import { dashboardExportUrl } from "@/lib/chat"
 import type { Dashboard, DashboardSpec, Variable, Widget, WidgetData } from "@/lib/dashboards"
 import {
   bindableDerivations,
+  bindMetric,
   dashboardSchema,
   getDashboard,
   publishDashboard,
@@ -289,7 +290,7 @@ function DashboardBoard({ id }: { id: string }) {
           // The JSON tab hands back the whole widget, so it replaces rather than merges:
           // a key deleted in the text has to actually go.
           if (patch.widget) return patch.widget as unknown as Widget
-          const next: Widget = { ...w }
+          let next: Widget = { ...w }
           // An emptied title is no title, rather than an empty line above the body.
           if (patch.title !== undefined) {
             if (patch.title.trim()) next.title = patch.title.trim()
@@ -299,18 +300,7 @@ function DashboardBoard({ id }: { id: string }) {
           if (patch.derivation !== undefined && w.bind) {
             next.bind = { ...w.bind, derivation: patch.derivation }
           }
-          if (patch.metric !== undefined) {
-            next.bind = metricBind(w, patch.metric)
-            // The value and format now come from the metric, so a private aggregate goes.
-            const {
-              field: _f,
-              agg: _a,
-              format: _fmt,
-              ...viz
-            } = (w.viz ?? {}) as Record<string, unknown>
-            if (Object.keys(viz).length) next.viz = viz
-            else delete next.viz
-          }
+          if (patch.metric !== undefined) next = bindMetric(next, patch.metric)
           if (patch.gridPos !== undefined) next.gridPos = patch.gridPos
           return next
         }),

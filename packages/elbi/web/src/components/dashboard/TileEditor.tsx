@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { GridPos, Widget } from "@/lib/dashboards"
+import { bindMetric, type GridPos, type Widget } from "@/lib/dashboards"
 import { listMetrics, type Metric } from "@/lib/metrics"
 import { JsonEditor } from "./JsonEditor"
 import { ProvenanceTab } from "./TileProvenance"
@@ -137,13 +137,13 @@ export function TileEditor({
   // The widget the fields currently describe. Switching to JSON shows this rather than
   // what the tile was opened with, so an edit made in the fields is not silently lost.
   const asWidget = (): Record<string, unknown> => {
-    const next: Record<string, unknown> = { ...(widget as unknown as Record<string, unknown>) }
+    const base = editsMetric && metric ? bindMetric(widget, metric) : widget
+    const next: Record<string, unknown> = { ...(base as unknown as Record<string, unknown>) }
     if (title.trim()) next.title = title.trim()
     else delete next.title
     next.gridPos = { ...widget.gridPos, w: clamp(width, 1, columns), h: clamp(height, 1, 80) }
     if (editsContent) next.content = content
     if (editsDerivation) next.bind = { ...(widget.bind ?? {}), derivation }
-    if (editsMetric && metric) next.bind = metricBind(widget, metric)
     return next
   }
 
@@ -463,12 +463,6 @@ function Field({
 function withCurrent(options: string[], current: string): string[] {
   if (!current || options.includes(current)) return options
   return [current, ...options]
-}
-
-/** A metric tile's binding: the metric, keeping any filters, and nothing a derivation used. */
-export function metricBind(widget: Widget, metric: string): NonNullable<Widget["bind"]> {
-  const filters = widget.bind?.filters
-  return filters?.length ? { metric, filters } : { metric }
 }
 
 /**
