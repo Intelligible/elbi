@@ -108,6 +108,18 @@
   "overrides": {
     "sanitize-html": ">=2.17.5",
     "brace-expansion": ">=5.0.12",
-    "minimatch": "^10.2.5"
+    "minimatch": "^10.2.5",
+    "@loaders.gl/compression": {
+      "fflate": "0.7.5"
+    },
+    "@tailwindcss/typography": {
+      "postcss-selector-parser": "^7.1.6"
+    },
+    "rehype-katex": {
+      "katex": "$katex"
+    },
+    "micromark-extension-math": {
+      "katex": "$katex"
+    }
   }
 }
