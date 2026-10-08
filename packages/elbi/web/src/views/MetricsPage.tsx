@@ -67,6 +67,7 @@ import {
   type FilterClause,
   type Format,
   type FormatKind,
+  formatMetricValue,
   type Grain,
   importOsi,
   listDerivations,
@@ -87,42 +88,6 @@ const AGGS: Agg[] = ["sum", "average", "count", "count_distinct", "min", "max", 
 const GRAINS: Grain[] = ["hour", "day", "week", "month", "quarter", "year"]
 const OPS: FilterClause["op"][] = ["eq", "ne", "lt", "le", "gt", "ge", "in"]
 type ChartType = "line" | "bar" | "table"
-
-/** Format a metric cell, honoring the metric's display format (Intl.NumberFormat). */
-function fmt(value: Cell, format?: Format): string {
-  if (value === null) return "∅"
-  if (typeof value !== "number") return String(value)
-  if (!format || format.kind === "duration") {
-    if (format?.kind === "duration") return formatDuration(value)
-    return Number.isInteger(value)
-      ? value.toLocaleString()
-      : value.toLocaleString(undefined, { maximumFractionDigits: 4 })
-  }
-  const opts: Intl.NumberFormatOptions = { notation: format.notation ?? "standard" }
-  if (typeof format.precision === "number") {
-    opts.minimumFractionDigits = format.precision
-    opts.maximumFractionDigits = format.precision
-  }
-  if (format.kind === "currency") {
-    opts.style = "currency"
-    opts.currency = format.currency || "USD"
-  } else if (format.kind === "percent") {
-    opts.style = "percent" // Intl multiplies by 100; a percent metric stores the fraction
-  }
-  return new Intl.NumberFormat(undefined, opts).format(value)
-}
-
-/** Render seconds as a compact ``1h 23m 4s`` duration (Intl has no duration style). */
-function formatDuration(seconds: number): string {
-  const s = Math.floor(Math.abs(seconds))
-  const parts = [
-    [Math.floor(s / 3600), "h"],
-    [Math.floor((s % 3600) / 60), "m"],
-    [s % 60, "s"],
-  ] as const
-  const shown = parts.filter(([n]) => n > 0).map(([n, u]) => `${n}${u}`)
-  return (seconds < 0 ? "-" : "") + (shown.join(" ") || "0s")
-}
 
 /** A metric's own formula line, for the header. */
 function formula(metric: Metric): string {
@@ -270,7 +235,7 @@ export function MetricsPage() {
                   <span className="flex items-center gap-2">
                     {overview[m.name]?.value != null ? (
                       <span className="font-mono text-xs tabular-nums text-foreground">
-                        {fmt(overview[m.name].value, m.format)}
+                        {formatMetricValue(overview[m.name].value, m.format)}
                       </span>
                     ) : (
                       <span className="text-xs text-text-tertiary">{EMPTY}</span>
@@ -617,7 +582,7 @@ function Overview({ metric, onError }: { metric: Metric; onError: (message: stri
     <div className="flex flex-wrap items-end gap-8 px-6 py-6">
       <div>
         <div className="text-3xl font-semibold tabular-nums">
-          {fmt(latest ?? null, metric.format)}
+          {formatMetricValue(latest ?? null, metric.format)}
         </div>
         <div className="mt-1 flex items-center gap-2 text-xs text-text-tertiary">
           <span>
@@ -849,7 +814,7 @@ function MetricResult({
               <TableRow key={rowKey(row)}>
                 {result.columns.map((c) => (
                   <TableCell key={c} className="py-1.5 font-mono text-xs">
-                    {fmt(row[c], c === metric.name ? metric.format : undefined)}
+                    {formatMetricValue(row[c], c === metric.name ? metric.format : undefined)}
                   </TableCell>
                 ))}
               </TableRow>
@@ -1201,7 +1166,7 @@ function AskDialog({
                       <TableRow key={rowKey(row)}>
                         {result.columns.map((c) => (
                           <TableCell key={c} className="py-1 font-mono text-xs">
-                            {fmt(row[c], c === rq.metricName ? format : undefined)}
+                            {formatMetricValue(row[c], c === rq.metricName ? format : undefined)}
                           </TableCell>
                         ))}
                       </TableRow>

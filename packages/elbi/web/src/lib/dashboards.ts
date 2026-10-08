@@ -2,6 +2,8 @@
 // widgets bind to certified derivations. Mirrors the throwing helper style in
 // notebooks.ts. The spec is the Dashboard manifest (camelCase, as stored).
 
+import type { Format } from "@/lib/metrics"
+
 export type WidgetType = "metric" | "chart" | "map" | "table" | "text" | "filter"
 
 export interface GridPos {
@@ -12,7 +14,8 @@ export interface GridPos {
 }
 
 // A tile binds either a certified derivation (with params) or a semantic-layer metric
-// (with groupBy/grain/filters). Exactly one of `derivation` or `metric` is set.
+// (with groupBy/grain/filters). Exactly one of `derivation` or `metric` is set, and a
+// `metric` tile always binds a metric. A filter value may be a "$var" reference.
 export interface Bind {
   derivation?: string
   params?: Record<string, unknown>
@@ -106,6 +109,8 @@ export interface WidgetData {
   value: unknown
   dataVersion: string | null
   error: string | null
+  // The bound metric's display format; null for a derivation-bound widget.
+  format?: Format | null
 }
 
 export interface Option {
@@ -166,14 +171,6 @@ export async function bindableDerivations(): Promise<string[]> {
   return rows.map((row) => row.name)
 }
 
-/** The columns a derivation's rows carry, for the tile editor's field picker. */
-export async function derivationColumns(name: string): Promise<string[]> {
-  const body = await json<{ columns: string[] }>(
-    `/api/dashboards/columns/${encodeURIComponent(name)}`,
-  )
-  return body.columns
-}
-
 /** The DashboardSpec JSON Schema, for checking a spec as it is typed. */
 export const dashboardSchema = () => json<Record<string, unknown>>("/api/dashboards/schema")
 
@@ -214,13 +211,27 @@ export async function variableOptions(dashboardId: string, variable: string): Pr
 }
 
 // A blank starter dashboard: one empty page, ready to add widgets to.
+/**
+ * A widget rebound to a shared metric. Filters stay; the derivation and the private
+ * aggregate's `viz.field`/`agg`/`format` go, since the metric now carries the value and
+ * its format.
+ */
+export function bindMetric(widget: Widget, metric: string): Widget {
+  const filters = widget.bind?.filters
+  const next: Widget = { ...widget, bind: filters?.length ? { metric, filters } : { metric } }
+  const { field: _f, agg: _a, format: _fmt, ...viz } = widget.viz ?? {}
+  if (Object.keys(viz).length) next.viz = viz
+  else delete next.viz
+  return next
+}
+
 export function starterSpec(name: string): DashboardSpec {
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
   return {
-    specVersion: "1.0",
+    specVersion: "2.0",
     kind: "Dashboard",
     name: slug || "dashboard",
     title: name,
