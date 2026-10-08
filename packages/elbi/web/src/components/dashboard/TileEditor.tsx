@@ -86,10 +86,11 @@ export function TileEditor({
   const [metrics, setMetrics] = useState<Metric[]>([])
   // Kept apart from an empty list: a picker with nothing to offer should say why.
   const [metricsState, setMetricsState] = useState<"loading" | "ready" | "failed">("loading")
-  const editsMetricTile = widget?.type === "metric"
+  // A chart or table may bind a metric too, and its lineage runs through that metric.
+  const needsMetrics = widget?.type === "metric" || Boolean(widget?.bind?.metric)
   useEffect(() => {
     let live = true
-    if (!editsMetricTile) return
+    if (!needsMetrics) return
     setMetricsState("loading")
     void listMetrics()
       .then((all) => {
@@ -97,11 +98,16 @@ export function TileEditor({
         setMetrics(all)
         setMetricsState("ready")
       })
-      .catch(() => live && setMetricsState("failed"))
+      .catch(() => {
+        if (!live) return
+        // An older list would contradict the note that only the current metric is offered.
+        setMetrics([])
+        setMetricsState("failed")
+      })
     return () => {
       live = false
     }
-  }, [editsMetricTile])
+  }, [needsMetrics])
 
   if (widget === null) return null
 
@@ -119,7 +125,7 @@ export function TileEditor({
   const privateFigure = editsMetric && !metric && Boolean(widget.bind?.derivation)
   // The trail runs through the metric once one is bound. Only a simple metric names a
   // derivation to trace; every other case gets a note rather than a derivation's trail.
-  const lineageOf = editsMetric && metric ? (boundMetric?.source ?? "") : derivation
+  const lineageOf = metric ? (boundMetric?.source ?? "") : derivation
   const metricTrailNote = (): string => {
     if (metricsState === "loading") return "Loading the metric…"
     if (metricsState === "failed") return "Could not load the metric, so its trail is unknown."
@@ -252,7 +258,7 @@ export function TileEditor({
 
         {tab === "lineage" ? (
           <>
-            {editsMetric && metric && !lineageOf ? (
+            {metric && !lineageOf ? (
               <p className="text-sm text-text-tertiary">{metricTrailNote()}</p>
             ) : (
               <ProvenanceTab derivation={lineageOf} />

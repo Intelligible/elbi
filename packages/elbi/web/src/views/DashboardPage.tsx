@@ -109,18 +109,26 @@ function DashboardBoard({ id }: { id: string }) {
 
   const spec = dashboard?.spec
 
+  // Only the latest resolve may write: an older one finishing late would show its
+  // page's figures, or its error, over the current ones.
+  const resolveSeq = useRef(0)
   const resolve = useCallback(async () => {
     if (!spec || !pageName) return
+    const seq = ++resolveSeq.current
     setLoading(true)
     setResolveError(null)
     try {
       const data = await resolvePage(id, pageName, variables)
+      if (seq !== resolveSeq.current) return
       setWidgets(Object.fromEntries(data.map((d) => [d.widgetId, d])))
     } catch (err) {
+      if (seq !== resolveSeq.current) return
       // Callers fire and forget (`void resolve()`), so a refused page must surface here.
+      // The old figures belong to other filters or another page, so they go too.
+      setWidgets({})
       setResolveError(`Tiles not loaded: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
-      setLoading(false)
+      if (seq === resolveSeq.current) setLoading(false)
     }
   }, [id, pageName, spec, variables])
 

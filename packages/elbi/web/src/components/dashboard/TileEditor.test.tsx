@@ -188,6 +188,31 @@ describe("TileEditor", () => {
     expect(screen.getByLabelText("Metric")).toHaveTextContent("subscriptions")
   })
 
+  it("drops an earlier list when a later load fails, so the picker matches the note", async () => {
+    const user = userEvent.setup()
+    const { rerender } = open(metricTile)
+    await metricsReady()
+    vi.mocked(listMetrics).mockRejectedValueOnce(new Error("503"))
+    const editor = (widget: Widget) => (
+      <MemoryRouter>
+        <TileEditor
+          widget={widget}
+          catalog={[]}
+          columns={24}
+          dark={false}
+          onCancel={() => {}}
+          onSave={async () => {}}
+        />
+      </MemoryRouter>
+    )
+    rerender(editor(textTile))
+    rerender(editor(metricTile))
+
+    expect(await screen.findByText(/Could not load the metrics/)).toBeInTheDocument()
+    await user.click(screen.getByLabelText("Metric"))
+    expect(screen.queryByRole("option", { name: "mrr_usd" })).toBeNull()
+  })
+
   it("edits a table bound to a metric without writing a derivation over it", async () => {
     const user = userEvent.setup()
     const { onSave } = open({
@@ -472,6 +497,17 @@ describe("the Lineage tab", () => {
     open(boundTile)
 
     expect(screen.queryByText(/Computed by/)).toBeNull()
+  })
+
+  it("traces a table bound to a metric through that metric's derivation", async () => {
+    const user = userEvent.setup()
+    open({ ...boundTile, bind: { metric: "subscriptions" } })
+    await metricsReady()
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(await screen.findByRole("link", { name: "revenue_by_product" })).toBeInTheDocument()
+    expect(screen.queryByText(/carries its own content/)).toBeNull()
   })
 
   it("says a composite metric's trail is on the Metrics page, not that the tile reads nothing", async () => {
