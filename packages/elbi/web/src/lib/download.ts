@@ -31,6 +31,10 @@ export function downloadText(filename: string, text: string, mime: string): void
   const a = document.createElement("a")
   a.href = url
   a.download = filename
+  // In the document, and the URL kept until the click is handled: some browsers
+  // otherwise skip the download or save an empty file.
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

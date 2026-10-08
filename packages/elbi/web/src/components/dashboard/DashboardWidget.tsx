@@ -35,6 +35,14 @@ function asRows(value: unknown): Row[] {
   return Array.isArray(value) ? (value as Row[]) : []
 }
 
+// The columns a tile shows and downloads: the table's configured ones, else every key
+// any row has, so the CSV matches the screen and a key the first row lacks is kept.
+function columnsOf(widget: Widget, rows: Row[]): string[] {
+  const configured = widget.viz?.columns
+  if (Array.isArray(configured)) return configured as string[]
+  return [...new Set(rows.flatMap((r) => Object.keys(r)))]
+}
+
 function CenterNote({ children }: { children: ReactNode }) {
   return <div className="grid h-full place-items-center text-xs text-text-tertiary">{children}</div>
 }
@@ -76,7 +84,7 @@ function RowsTable({
   const rows = asRows(data?.value)
   if (rows.length === 0) return <div className="text-sm text-text-tertiary">No rows.</div>
   const viz = widget.viz ?? {}
-  const columns = Array.isArray(viz.columns) ? (viz.columns as string[]) : Object.keys(rows[0])
+  const columns = columnsOf(widget, rows)
   const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50
   return (
     // Fills the tile rather than sizing to the rows: a taller tile shows more of them,
@@ -233,8 +241,9 @@ export function DashboardWidget({
                   <DropdownMenuItem
                     onSelect={() =>
                       downloadText(
-                        `${widget.id}.csv`,
-                        toCsv(Object.keys(csvRows[0]), csvRows),
+                        // Named as ExplorePage names its downloads, after what the tile shows.
+                        `${(widget.title ?? widget.id).trim().replace(/\s+/g, "_").toLowerCase() || widget.id}.csv`,
+                        toCsv(columnsOf(widget, csvRows), csvRows),
                         "text/csv",
                       )
                     }

@@ -101,6 +101,33 @@ def test_the_published_spec_and_values_reach_the_page() -> None:
     assert "data" not in payload["pages"][0]["widgets"][1]
 
 
+def test_filter_and_text_tiles_get_the_defaults_the_page_was_resolved_at() -> None:
+    spec = {
+        "title": "Revenue",
+        "variables": [
+            {
+                "name": "region",
+                "type": "string",
+                "control": "multiselect",
+                "default": ["west"],
+            },
+            {"name": "since", "type": "date"},
+        ],
+        "pages": [
+            {
+                "name": "main",
+                "widgets": [
+                    {"id": "f", "type": "filter", "variable": "region"},
+                    {"id": "t", "type": "text", "content": "Region is $region."},
+                ],
+            }
+        ],
+    }
+    payload = build(_document(published_spec=spec, values={}))
+    assert payload["variables"] == {"region": ["west"], "since": None}
+    assert payload["pages"][0]["widgets"][0]["variable"] == "region"
+
+
 def test_version_history_never_reaches_the_page() -> None:
     page = render(_document())
     assert "old draft" not in page
@@ -157,12 +184,16 @@ def test_the_page_is_a_standards_mode_document_in_english() -> None:
 
 
 def test_the_title_is_escaped() -> None:
-    page = render(_document(title="<b>Revenue</b>"))
+    document = _document()
+    document["published_spec"]["title"] = "<b>Revenue</b>"
+    page = render(document)
     assert "<title>&lt;b&gt;Revenue&lt;/b&gt;</title>" in page
 
 
 def test_a_title_naming_a_placeholder_stays_literal() -> None:
-    page = render(_document(title="__DATA__ and __TITLE__"))
+    document = _document()
+    document["published_spec"]["title"] = "__DATA__ and __TITLE__"
+    page = render(document)
     assert "<title>__DATA__ and __TITLE__</title>" in page
     assert _payload(page)["title"] == "__DATA__ and __TITLE__"
 

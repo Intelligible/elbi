@@ -202,10 +202,35 @@ describe("tile actions", () => {
     await user.click(trigger)
     await user.click(await screen.findByRole("menuitem", { name: "Download CSV" }))
     expect(downloadText).toHaveBeenCalledWith(
-      "w1.csv",
+      "by_region.csv",
       "region,revenue\nwest,12\neast,9",
       "text/csv",
     )
+  })
+
+  it("downloads the columns the tile shows, in its order, and keys the first row lacks", async () => {
+    const user = userEvent.setup()
+    const download = async (widget: Widget, value: unknown) => {
+      downloadText.mockClear()
+      const { unmount } = render(
+        <DashboardWidget widget={widget} data={{ ...DATA, value } as WidgetData} variables={{}} />,
+      )
+      const trigger = screen.getByLabelText(/Tile actions/)
+      trigger.focus()
+      await user.click(trigger)
+      await user.click(await screen.findByRole("menuitem", { name: "Download CSV" }))
+      unmount()
+      return downloadText.mock.calls[0][1]
+    }
+    const rows = [
+      { region: "west", revenue: 12 },
+      { region: "east", revenue: 9, note: "late" },
+    ]
+
+    expect(await download({ ...WIDGET, viz: { columns: ["revenue", "region"] } }, rows)).toBe(
+      "revenue,region\n12,west\n9,east",
+    )
+    expect(await download(WIDGET, rows)).toBe("region,revenue,note\nwest,12,\neast,9,late")
   })
 
   it("keeps the menu from starting a drag", () => {

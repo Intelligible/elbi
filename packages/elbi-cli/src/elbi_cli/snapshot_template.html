@@ -140,6 +140,10 @@
 (() => {
   const S = JSON.parse(document.getElementById("snapshot-data").textContent);
   const EMPTY = "—";
+  // The variable defaults every widget was resolved at. `$name` in text reads them, as
+  // TextBody in DashboardWidget.tsx reads the live ones; no default leaves `$name` as is.
+  const VARS = S.variables || {};
+  const fillVars = (s) => s.replace(/\$([a-z][a-z0-9_]*)/g, (m, n) => (VARS[n] != null ? String(VARS[n]) : m));
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -198,6 +202,15 @@
   const fmtAxis = (n) => Math.abs(n) >= 1e6 ? (n / 1e6).toLocaleString(undefined, { maximumFractionDigits: 1 }) + "M"
     : Math.abs(n) >= 1e4 ? (n / 1e3).toLocaleString(undefined, { maximumFractionDigits: 0 }) + "k"
     : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  // A temporal value as a date, plus the time when it has one (vega-lite's time axis does
+  // the same). A bare YYYY-MM-DD parses as UTC midnight, the day before west of UTC, so it
+  // is read as local midnight instead.
+  const fmtTime = (v) => {
+    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(v) ? v + "T00:00" : v);
+    if (isNaN(d)) return String(v);
+    const day = { year: "numeric", month: "short", day: "numeric" };
+    return d.getHours() || d.getMinutes() ? d.toLocaleString(undefined, { ...day, hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString(undefined, day);
+  };
 
   // -- markdown: the subset derivations and text widgets actually write ---------------
   function inline(s) {
@@ -243,7 +256,8 @@
     const box = $("div");
     if (!rows.length) { box.append($("div", "hint", "No rows.")); return box; }
     const viz = w.viz || {};
-    const cols = Array.isArray(viz.columns) ? viz.columns : Object.keys(rows[0]);
+    // Every key any row has, as the app's table shows it, so a key the first row lacks is kept.
+    const cols = Array.isArray(viz.columns) ? viz.columns : [...new Set(rows.flatMap(Object.keys))];
     const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50;
     const numeric = new Set(cols.filter((c) => rows.every((r) => r[c] == null || typeof r[c] === "number")));
     let sortCol = null, sortDir = 1;
@@ -297,6 +311,12 @@
   // -- charts: bar and line marks from a vega-lite encoding ----------------------------
   const SERIES = ["--data-1", "--data-2", "--data-3", "--data-4", "--data-5", "--data-6"];
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  // The charts on the shown page. renderPage releases them, so a tab switch leaves no
+  // listener behind, and a theme change redraws only what is on screen.
+  let pageCharts = [];
+  const redrawPage = () => pageCharts.forEach((c) => c.draw());
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawPage);
+  new MutationObserver(redrawPage).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   function niceTicks(max, count = 5) {
     if (!(max > 0)) return [0, 1];
     const step0 = max / count, mag = 10 ** Math.floor(Math.log10(step0));
@@ -323,7 +343,10 @@
   function chartBody(w, rows) {
     const spec = chartSpec(w.viz || {});
     if (!spec) return tableBody(w, rows, "This chart type is not drawn in snapshots; its data is shown instead.");
+    if (spec.mark !== "bar" && spec.enc.color?.field) return tableBody(w, rows, "A chart with a line per series is not drawn in snapshots; its data is shown instead.");
+    if (rows.some((r) => Number(r[spec.val.field]) < 0)) return tableBody(w, rows, "A chart with negative values is not drawn in snapshots; its data is shown instead.");
     const { enc, cat, val, valCh, horizontal, mark } = spec;
+    const catLabel = (k) => (cat.type === "temporal" ? fmtTime(k) : String(k));
     const colorField = enc.color?.field;
 
     // Categories, each with its stacked segments, in the encoding's sort order.
@@ -375,11 +398,13 @@
     const tipFields = Array.isArray(enc.tooltip) ? enc.tooltip : [cat, val];
     function showTip(g, x, y) {
       const r = g.rows[0];
-      tip.replaceChildren(...tipFields.map((f) => {
+      // Segments of one bar differ in every other field, so a bar of several shows its
+      // category and total rather than one segment's fields beside the sum of them all.
+      const multi = g.rows.length > 1;
+      tip.replaceChildren(...(multi ? [cat, val] : tipFields).map((f) => {
         const d = $("div");
-        let v = r[f.field];
-        if (f.type === "quantitative" && g.rows.length > 1 && f.field === val.field) v = g.total;
-        d.append($("span", null, f.title || f.field), $("span", null, fmtCell(v)));
+        const v = multi && f.field === val.field ? g.total : r[f.field];
+        d.append($("span", null, f.title || f.field), $("span", null, f.field === cat.field ? catLabel(v) : fmtCell(v)));
         return d;
       }));
       tip.hidden = false;
@@ -401,7 +426,7 @@
       let svg;
       if (horizontal) {
         const band = 26, thick = 16;
-        const labelW = Math.min(W * 0.42, Math.max(...cats.map((g) => measure(String(g.key)))) + 8);
+        const labelW = Math.min(W * 0.42, Math.max(...cats.map((g) => measure(catLabel(g.key)))) + 8);
         const m = { l: labelW + 6, r: 16, t: 4, b: valTitle ? 40 : 24 };
         const pw = W - m.l - m.r, H = m.t + cats.length * band + m.b;
         const sx = (v) => m.l + (v / top) * pw;
@@ -413,7 +438,7 @@
         if (valTitle) { const at = svgEl("text", { x: m.l + pw / 2, y: H - 6, "text-anchor": "middle", class: "axis-title" }); at.textContent = valTitle; svg.append(at); }
         cats.forEach((g, i) => {
           const y = m.t + i * band + (band - thick) / 2;
-          const lab = svgEl("text", { x: m.l - 8, y: y + thick / 2 + 4, "text-anchor": "end" }); lab.textContent = clip(g.key, labelW - 4); svg.append(lab);
+          const lab = svgEl("text", { x: m.l - 8, y: y + thick / 2 + 4, "text-anchor": "end" }); lab.textContent = clip(catLabel(g.key), labelW - 4); svg.append(lab);
           let acc = 0;
           g.segs.forEach((s, j) => {
             const x0 = sx(acc), x1 = sx(acc + s.v); acc += s.v;
@@ -445,7 +470,7 @@
         const pts = [];
         cats.forEach((g, i) => {
           const cx = m.l + bw * i + bw / 2;
-          if (i % every === 0) { const lab = svgEl("text", { x: cx, y: m.t + ph + 16, "text-anchor": "middle" }); lab.textContent = clip(g.key, bw * every - 4); svg.append(lab); }
+          if (i % every === 0) { const lab = svgEl("text", { x: cx, y: m.t + ph + 16, "text-anchor": "middle" }); lab.textContent = clip(catLabel(g.key), bw * every - 4); svg.append(lab); }
           if (mark === "bar") {
             let acc = 0;
             g.segs.forEach((s, j) => {
@@ -471,9 +496,9 @@
     }
     requestAnimationFrame(draw);
     let last = 0;
-    new ResizeObserver(() => { const wd = holder.clientWidth; if (wd && Math.abs(wd - last) > 1) { last = wd; draw(); } }).observe(holder);
-    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
-    new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    const ro = new ResizeObserver(() => { const wd = holder.clientWidth; if (wd && Math.abs(wd - last) > 1) { last = wd; draw(); } });
+    ro.observe(holder);
+    pageCharts.push({ draw, ro });
     return box;
   }
 
@@ -487,9 +512,13 @@
       const e = $("div", "error"); e.append($("span", null, "⚠"), $("span", null, w.data.error)); body.append(e);
     } else if (w.type === "text") {
       const md = $("div", "md");
-      const text = bound ? (typeof w.data.value === "string" ? w.data.value : fmtCell(w.data.value)) : (w.content || "");
+      const text = bound ? (typeof w.data.value === "string" ? w.data.value : fmtCell(w.data.value)) : fillVars(w.content || "");
       md.innerHTML = markdown(text);
       body.append(md);
+    } else if (w.type === "filter") {
+      // A control is never data-bound; the snapshot shows the value it was frozen at.
+      const v = VARS[w.variable];
+      body.append($("div", "hint", v == null || (Array.isArray(v) && !v.length) ? "No default; every value is included." : `Shown at its default: ${Array.isArray(v) ? v.join(", ") : v}`));
     } else if (!bound) {
       body.append($("div", "hint", "No data was resolved for this widget."));
     } else if (w.type === "metric") body.append(metricBody(w));
@@ -510,6 +539,8 @@
   // -- layout: the spec's grid, with rows sized by content ------------------------------
   const grid = document.getElementById("grid");
   function renderPage(page) {
+    pageCharts.forEach((c) => c.ro.disconnect());
+    pageCharts = [];
     const ws = page.widgets.slice().sort((a, b) => ((a.gridPos?.y ?? 0) - (b.gridPos?.y ?? 0)) || ((a.gridPos?.x ?? 0) - (b.gridPos?.x ?? 0)));
     const cols = page.columns || Math.max(24, ...ws.map((w) => (w.gridPos?.x ?? 0) + (w.gridPos?.w ?? 12)));
     const starts = [...new Set(ws.map((w) => w.gridPos?.y ?? 0))].sort((a, b) => a - b);

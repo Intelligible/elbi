@@ -25,8 +25,17 @@ from typing import Any
 _VALUE_FIELDS = ("value", "error", "kind", "derivation", "data_version", "format")
 
 #: The fields of a widget spec the page needs to draw it. A metric tile reads its value
-#: by ``bind.metric``.
-_WIDGET_FIELDS = ("id", "type", "title", "content", "gridPos", "viz", "bind")
+#: by ``bind.metric``; a filter tile names its ``variable``.
+_WIDGET_FIELDS = (
+    "id",
+    "type",
+    "title",
+    "content",
+    "gridPos",
+    "viz",
+    "bind",
+    "variable",
+)
 
 #: What JSON inside a <script> must not hold raw: "<", since "</script" ends the
 #: element, and the rest of the set Rails' json_escape uses (">", "&", U+2028, U+2029).
@@ -75,15 +84,34 @@ def build(document: dict[str, Any]) -> dict[str, Any]:
                 "widgets": widgets,
             }
         )
+    title = document.get("title")
+    version = document.get("version")
+    updated = document.get("updated_at")
+    if published:
+        # A draft save moves the row's title, version and edit time, but the page shows
+        # the published spec, so it names that version (``versions`` is newest first).
+        title = spec.get("title") or title
+        shown = next(
+            (
+                v
+                for v in document.get("versions") or []
+                if v.get("label") == "published"
+            ),
+            None,
+        )
+        if shown is not None:
+            version = shown.get("version", version)
+            updated = shown.get("created_at") or updated
     return {
         "name": document.get("name"),
-        "title": document.get("title") or spec.get("title") or document.get("name"),
+        "title": title or spec.get("title") or document.get("name"),
         "description": spec.get("description"),
-        "version": document.get("version"),
+        "version": version,
         "status": document.get("status"),
-        "updatedAt": document.get("updated_at"),
+        "updatedAt": updated,
         "snapshotAt": document.get("created_at"),
         "hasVariables": bool(spec.get("variables")),
+        "variables": {v["name"]: v.get("default") for v in spec.get("variables") or []},
         "pages": pages,
     }
 
