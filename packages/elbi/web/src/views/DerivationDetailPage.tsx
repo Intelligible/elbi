@@ -151,24 +151,22 @@ export function DerivationDetailPage() {
                       </span>
                     </a>
                   </DropdownMenuItem>
-                  {d.rendered ? (
-                    <DropdownMenuItem asChild>
-                      <a
-                        href={derivationHtmlExportUrl(d.name)}
-                        download
-                        aria-label="Export this derivation's output as an HTML page"
-                        className="items-start"
-                      >
-                        <FileCode2 className="mt-0.5 size-4" />
-                        <span className="flex flex-col">
-                          <span>Output (.html)</span>
-                          <span className="text-xs text-text-tertiary">
-                            The output as shown here, as a page anyone can open
-                          </span>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={derivationHtmlExportUrl(d.name)}
+                      download
+                      aria-label="Export this derivation page as an HTML page"
+                      className="items-start"
+                    >
+                      <FileCode2 className="mt-0.5 size-4" />
+                      <span className="flex flex-col">
+                        <span>Page (.html)</span>
+                        <span className="text-xs text-text-tertiary">
+                          This whole page as a read-only snapshot anyone can open
                         </span>
-                      </a>
-                    </DropdownMenuItem>
-                  ) : null}
+                      </span>
+                    </a>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </ScenePanelLabel>

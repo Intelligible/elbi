@@ -5783,27 +5783,35 @@ def create_app(
 
     @app.get("/api/exports/derivations/{name}/html")
     async def export_derivation_html(name: str, request: Request) -> Response:
-        """A derivation's finding and output as one self-contained, read-only page.
+        """The derivation page as one self-contained, read-only snapshot.
 
-        Unlike the record above, this runs a repo derivation when nothing is stored:
-        the page is the output as the detail view shows it, not evidence of a run.
+        Everything the detail view shows, in its order. Unlike the record above, this
+        runs a repo derivation when nothing is stored: the snapshot is the page as a
+        reader sees it, not evidence of a run. A withheld output is left out of the
+        page, as the detail view leaves it out.
         """
         row = store.get_derivation(name) if store else None
         if row is None:
             raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
         detail = _derivation_detail(row)
-        output = await _rendered_output(name, detail.rendered)
-        if not output:
-            raise HTTPException(
-                status_code=404, detail=f"{name!r} has no output to export"
-            )
+        attestation = detail.attestation or {}
+        history = with_changes(store.runs_for_derivation(name)) if store else []
         page = render_derivation_html(
             name=name,
             title=str((detail.serve or {}).get("title") or name),
-            output=output,
+            output=await _rendered_output(name, detail.rendered) or "",
             finding=detail.narrative or "",
             verdict=detail.verdict,
             exported_at=datetime.now(timezone.utc),
+            question=detail.question,
+            data_hash=detail.data_hash,
+            assumptions=detail.assumptions,
+            checks=attestation.get("checks") or [],
+            history=[
+                {**_run_dict(run), "changed": list(changed)} for run, changed in history
+            ],
+            claim=detail.claim,
+            source=detail.source,
         )
         return Response(
             content=page,

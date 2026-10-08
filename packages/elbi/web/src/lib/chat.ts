@@ -444,7 +444,7 @@ export function derivationExportUrl(name: string): string {
   return `/api/exports/derivations/${encodeURIComponent(name)}`
 }
 
-// The finding and output as the detail page shows them, as a self-contained HTML page.
+// The whole derivation page as a self-contained, read-only HTML snapshot.
 export function derivationHtmlExportUrl(name: string): string {
   return `/api/exports/derivations/${encodeURIComponent(name)}/html`
 }

@@ -43,6 +43,7 @@ from elbi_core import (
 )
 from elbi_core.registry import use_registry
 from elbi_core.sandbox import ComputeProfile, ComputeProfiles
+from elbi_core.tracking import CertifiedRun
 
 pytest.importorskip("duckdb")
 pytest.importorskip("pyarrow")
@@ -205,22 +206,63 @@ def test_derivation_output_exports_as_an_html_page(parts: tuple[Any, Any]) -> No
     assert "script-src" not in page
 
 
-def test_derivation_html_export_needs_an_output(parts: tuple[Any, Any]) -> None:
+def test_derivation_html_export_snapshots_the_whole_page(
+    parts: tuple[Any, Any],
+) -> None:
+    """Every section the derivation page shows travels, not just its output."""
+    store, app = parts
+    _save_derivation(store, name="eff", certified=True)
+    store.append_run(
+        CertifiedRun(
+            name="eff",
+            derivation_version="v1abcdef",
+            verdict="sound",
+            created_at="2026-10-01T00:00:00+00:00",
+            estimate=2.0,
+            estimate_label="in y per unit x",
+            data_hash="d" * 64,
+            claim={"x": "x", "y": "y"},
+        )
+    )
+    with TestClient(app) as http:
+        page = http.get("/api/exports/derivations/eff/html").text
+    assert "does x move y for &#x27;eff&#x27;?" in page, "the question"
+    assert "d" * 64 in page, "the data hash"
+    assert "Verification · 1 checks run by the oracle" in page
+    assert "<b>effect</b>: holds" in page
+    assert "Result history · 1 version" in page
+    assert "2 in y per unit x" in page
+    assert "first certified version" in page
+    assert "&quot;x&quot;: &quot;x&quot;" in page, "the claim"
+    assert "def eff(ctx): ..." in page, "the source"
+
+
+def test_derivation_html_export_without_output_still_exports(
+    parts: tuple[Any, Any],
+) -> None:
+    """A page snapshot needs no output: it shows what the page shows, output or not."""
     store, app = parts
     _save_derivation(store, name="bare", certified=False)
     with TestClient(app) as http:
-        assert http.get("/api/exports/derivations/bare/html").status_code == 404
+        resp = http.get("/api/exports/derivations/bare/html")
         assert http.get("/api/exports/derivations/nope/html").status_code == 404
+    assert resp.status_code == 200
+    assert "def bare(ctx): ..." in resp.text
+    assert ">Output<" not in resp.text
+    assert "Not checked by the oracle." in resp.text, "as the claim panel says"
 
 
 def test_derivation_html_export_honours_withholding(parts: tuple[Any, Any]) -> None:
+    """A withheld output is left out of the page, as the detail view leaves it out."""
     store, app = parts
     store.save_derivation(
-        Derivation(name="secret", source="def secret(ctx): ...", rendered="rows")
+        Derivation(name="secret", source="def secret(ctx): ...", rendered="SECRET ROWS")
     )
     app.state.withhold_rendering = lambda name: name == "secret"
     with TestClient(app) as http:
-        assert http.get("/api/exports/derivations/secret/html").status_code == 404
+        page = http.get("/api/exports/derivations/secret/html").text
+    assert "SECRET ROWS" not in page
+    assert "def secret(ctx): ..." in page
 
 
 def test_derivation_html_export_sanitizes_raw_html(parts: tuple[Any, Any]) -> None:

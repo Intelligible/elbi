@@ -83,7 +83,7 @@ describe("DerivationDetailPage claim panel", () => {
 })
 
 describe("DerivationDetailPage evidence export", () => {
-  it("offers the record and, when there is output, the output as HTML", async () => {
+  it("offers the record and the page as HTML", async () => {
     vi.mocked(getDerivation).mockResolvedValue({ ...DETAIL, rendered: "# Result" })
     const user = userEvent.setup()
     renderPage()
@@ -96,12 +96,13 @@ describe("DerivationDetailPage evidence export", () => {
     )
   })
 
-  it("offers no HTML export for a derivation with no output", async () => {
+  it("offers the page snapshot even when there is no output", async () => {
     vi.mocked(getDerivation).mockResolvedValue(DETAIL)
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole("button", { name: /Export/ }))
-    await screen.findByRole("menuitem", { name: /record/ })
-    expect(screen.queryByRole("menuitem", { name: /as an HTML page/ })).toBeNull()
+    expect(
+      (await screen.findByRole("menuitem", { name: /as an HTML page/ })).getAttribute("href"),
+    ).toBe("/api/exports/derivations/eff/html")
   })
 })
