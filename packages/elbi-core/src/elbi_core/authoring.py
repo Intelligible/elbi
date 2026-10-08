@@ -52,7 +52,7 @@ class VerificationResult:
     verification oracle finds its conclusion sound and the contract checker finds its
     output valid. ``matched_prediction`` is whether all golden cases passed, or ``None``
     when none were given. ``cases_total`` and ``cases_passed`` report how many golden
-    cases ran and passed. ``oracle_verdict`` is the oracle's verdict on the declared
+    cases ran and passed. ``oracle_verdict`` is the result of verifying the declared
     conclusion (``None`` when no claim was declared); ``contract_verdict`` is the
     checker's verdict on the declared contract (``None`` when none was declared).
     """

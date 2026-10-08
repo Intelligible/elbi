@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { derivationColumns, type GridPos, type Widget } from "@/lib/dashboards"
+import { bindMetric, type GridPos, type Widget } from "@/lib/dashboards"
+import { listMetrics, type Metric } from "@/lib/metrics"
 import { JsonEditor } from "./JsonEditor"
 import { ProvenanceTab } from "./TileProvenance"
 
@@ -26,27 +27,12 @@ export interface TilePatch {
   title?: string
   content?: string
   derivation?: string
-  viz?: Record<string, unknown>
+  /** The shared metric a metric tile shows. */
+  metric?: string
   gridPos?: GridPos
   /** The whole widget, from the JSON tab: everything the fields cannot reach. */
   widget?: Record<string, unknown>
 }
-
-/** A metric reads one column; how it reduces the rows to a single figure. */
-const AGGREGATES = [
-  { value: "first", label: "First row's value" },
-  { value: "sum", label: "Sum" },
-  { value: "mean", label: "Mean" },
-  { value: "min", label: "Minimum" },
-  { value: "max", label: "Maximum" },
-  { value: "count", label: "Count of rows" },
-]
-
-const FORMATS = [
-  { value: "plain", label: "Plain number" },
-  { value: "currency", label: "Currency (USD)" },
-  { value: "percent", label: "Percent" },
-]
 
 /**
  * Edit one tile: what it says, what it reads, and how big it is.
@@ -76,9 +62,7 @@ export function TileEditor({
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [derivation, setDerivation] = useState("")
-  const [field, setField] = useState("")
-  const [agg, setAgg] = useState("first")
-  const [format, setFormat] = useState("plain")
+  const [metric, setMetric] = useState("")
   const [width, setWidth] = useState(1)
   const [height, setHeight] = useState(1)
   const [tab, setTab] = useState<"fields" | "json" | "lineage">("fields")
@@ -88,13 +72,10 @@ export function TileEditor({
   // Reset every field when a different tile is opened, so the dialog never shows the
   // previous tile's values.
   useEffect(() => {
-    const viz = (widget?.viz ?? {}) as Record<string, unknown>
     setTitle(widget?.title ?? "")
     setContent(widget?.content ?? "")
     setDerivation(widget?.bind?.derivation ?? "")
-    setField(typeof viz.field === "string" ? viz.field : "")
-    setAgg(typeof viz.agg === "string" ? viz.agg : "first")
-    setFormat(typeof viz.format === "string" ? viz.format : "plain")
+    setMetric(widget?.bind?.metric ?? "")
     setWidth(widget?.gridPos.w ?? 1)
     setHeight(widget?.gridPos.h ?? 1)
     setTab("fields")
@@ -102,50 +83,68 @@ export function TileEditor({
     setError(null)
   }, [widget])
 
-  const [columnOptions, setColumnOptions] = useState<string[]>([])
+  const [metrics, setMetrics] = useState<Metric[]>([])
+  // Kept apart from an empty list: a picker with nothing to offer should say why.
+  const [metricsState, setMetricsState] = useState<"loading" | "ready" | "failed">("loading")
+  // A chart or table may bind a metric too, and its lineage runs through that metric.
+  const needsMetrics = widget?.type === "metric" || Boolean(widget?.bind?.metric)
   useEffect(() => {
     let live = true
-    if (!derivation) {
-      setColumnOptions([])
-      return
-    }
-    void derivationColumns(derivation)
-      .then((columns) => live && setColumnOptions(columns))
-      .catch(() => live && setColumnOptions([]))
+    if (!needsMetrics) return
+    setMetricsState("loading")
+    void listMetrics()
+      .then((all) => {
+        if (!live) return
+        setMetrics(all)
+        setMetricsState("ready")
+      })
+      .catch(() => {
+        if (!live) return
+        // An older list would contradict the note that only the current metric is offered.
+        setMetrics([])
+        setMetricsState("failed")
+      })
     return () => {
       live = false
     }
-  }, [derivation])
+  }, [needsMetrics])
 
   if (widget === null) return null
 
   const bound = widget.bind !== undefined && widget.bind !== null
   const editsContent = widget.type === "text" && !bound
+  // A metric tile shows a shared metric, so it picks a metric rather than a derivation.
   const editsMetric = widget.type === "metric"
-  // A metric bound to a column the derivation does not return renders a dash, so an
-  // unknown name is worth saying before it is saved rather than after the tile blanks.
-  const unknown = bound && derivation.length > 0 && !catalog.includes(derivation)
+  // A chart or table may bind a metric too; that binding is edited on the JSON tab.
+  const editsDerivation = bound && !editsMetric && !widget.bind?.metric
+  const unknown = editsDerivation && derivation.length > 0 && !catalog.includes(derivation)
+  const metricNames = metrics.map((m) => m.name)
+  const boundMetric = metrics.find((m) => m.name === metric)
+  const unknownMetric = metric.length > 0 && metricsState === "ready" && boundMetric === undefined
+  // A tile from before metric tiles bound shared metrics aggregates a derivation itself.
+  const privateFigure = editsMetric && !metric && Boolean(widget.bind?.derivation)
+  // The trail runs through the metric once one is bound. Only a simple metric names a
+  // derivation to trace; every other case gets a note rather than a derivation's trail.
+  const lineageOf = metric ? (boundMetric?.source ?? "") : derivation
+  const metricTrailNote = (): string => {
+    if (metricsState === "loading") return "Loading the metric…"
+    if (metricsState === "failed") return "Could not load the metric, so its trail is unknown."
+    if (boundMetric === undefined)
+      return `No metric named “${metric}” exists, so there is nothing to trace.`
+    return `${metric} is a ${boundMetric.type} metric built from other metrics rather than one derivation; the Metrics page lists them.`
+  }
 
   // The widget the fields currently describe. Switching to JSON shows this rather than
   // what the tile was opened with, so an edit made in the fields is not silently lost.
   const asWidget = (): Record<string, unknown> => {
-    const next: Record<string, unknown> = { ...(widget as unknown as Record<string, unknown>) }
+    const base = editsMetric && metric ? bindMetric(widget, metric) : widget
+    const next: Record<string, unknown> = { ...(base as unknown as Record<string, unknown>) }
     if (title.trim()) next.title = title.trim()
     else delete next.title
     next.gridPos = { ...widget.gridPos, w: clamp(width, 1, columns), h: clamp(height, 1, 80) }
     if (editsContent) next.content = content
-    if (bound) next.bind = { ...(widget.bind ?? {}), derivation }
-    if (editsMetric) next.viz = vizFromFields()
+    if (editsDerivation) next.bind = { ...(widget.bind ?? {}), derivation }
     return next
-  }
-
-  const vizFromFields = (): Record<string, unknown> => {
-    const viz: Record<string, unknown> = { ...(widget.viz ?? {}), field }
-    if (agg === "first") delete viz.agg
-    else viz.agg = agg
-    if (format === "plain") delete viz.format
-    else viz.format = format
-    return viz
   }
 
   const showJson = () => {
@@ -166,13 +165,10 @@ export function TileEditor({
     // Parse first: dropping back to the fields would otherwise discard a JSON edit.
     try {
       const parsed = JSON.parse(draft) as Widget
-      const viz = (parsed.viz ?? {}) as Record<string, unknown>
       setTitle(parsed.title ?? "")
       setContent(parsed.content ?? "")
       setDerivation(parsed.bind?.derivation ?? "")
-      setField(typeof viz.field === "string" ? viz.field : "")
-      setAgg(typeof viz.agg === "string" ? viz.agg : "first")
-      setFormat(typeof viz.format === "string" ? viz.format : "plain")
+      setMetric(parsed.bind?.metric ?? "")
       setWidth(parsed.gridPos?.w ?? width)
       setHeight(parsed.gridPos?.h ?? height)
       setError(null)
@@ -215,10 +211,8 @@ export function TileEditor({
       },
     }
     if (editsContent) patch.content = content
-    if (bound) patch.derivation = derivation
-    // "first" and "plain" are the absence of an aggregate and of a format, so they are
-    // dropped rather than written as values the renderer would have to know.
-    if (editsMetric) patch.viz = vizFromFields()
+    if (editsDerivation) patch.derivation = derivation
+    if (editsMetric && metric) patch.metric = metric
     void submit(patch)
   }
 
@@ -264,7 +258,11 @@ export function TileEditor({
 
         {tab === "lineage" ? (
           <>
-            <ProvenanceTab derivation={derivation} />
+            {metric && !lineageOf ? (
+              <p className="text-sm text-text-tertiary">{metricTrailNote()}</p>
+            ) : (
+              <ProvenanceTab derivation={lineageOf} />
+            )}
             <DialogFooter>
               <Button variant="ghost" onClick={onCancel}>
                 Close
@@ -328,7 +326,7 @@ export function TileEditor({
               </Field>
             ) : null}
 
-            {bound ? (
+            {editsDerivation ? (
               <Field label="Derivation" htmlFor="tile-derivation">
                 <Picker
                   id="tile-derivation"
@@ -347,57 +345,36 @@ export function TileEditor({
             ) : null}
 
             {editsMetric ? (
-              <>
-                <Field
-                  label="Column"
-                  htmlFor="tile-field"
-                  hint={
-                    columnOptions.length
-                      ? "The columns the bound derivation returns."
-                      : "The bound derivation returns no rows to read columns from."
-                  }
-                >
-                  <Picker
-                    id="tile-field"
-                    value={field}
-                    options={named(withCurrent(columnOptions, field))}
-                    placeholder="Pick a column"
-                    onChange={setField}
-                  />
-                  {field && columnOptions.length > 0 && !columnOptions.includes(field) ? (
-                    <p className="text-xs text-destructive">
-                      “{field}” is not a column {derivation} returns, so the tile renders a dash. It
-                      is kept until you pick another.
-                    </p>
-                  ) : null}
-                </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Aggregate" htmlFor="tile-agg">
-                    <Picker
-                      id="tile-agg"
-                      value={agg}
-                      options={AGGREGATES}
-                      placeholder="How to reduce it"
-                      onChange={setAgg}
-                    />
-                  </Field>
-                  <Field label="Format" htmlFor="tile-format">
-                    <Picker
-                      id="tile-format"
-                      value={format}
-                      options={FORMATS}
-                      placeholder="How to render it"
-                      onChange={setFormat}
-                    />
-                  </Field>
-                </div>
-                {format === "percent" ? (
-                  <p className="text-xs text-text-tertiary">
-                    Percent multiplies by 100: a column already holding 69.5 renders as 6,950%. Use
-                    a plain number for a column that is already a percentage.
+              <Field
+                label="Metric"
+                htmlFor="tile-metric"
+                hint="The tile shows this metric's value, in the metric's own format. Metrics are defined on the Metrics page, so the same figure reads the same everywhere."
+              >
+                <Picker
+                  id="tile-metric"
+                  value={metric}
+                  options={named(withCurrent(metricNames, metric))}
+                  placeholder="Pick a metric"
+                  onChange={setMetric}
+                />
+                {privateFigure ? (
+                  <p className="text-xs text-destructive">
+                    This tile computes its own figure from {widget.bind?.derivation}. Pick the
+                    shared metric it should show; define one on the Metrics page if none fits.
                   </p>
                 ) : null}
-              </>
+                {unknownMetric ? (
+                  <p className="text-xs text-destructive">
+                    No metric named “{metric}” exists. It is kept so saving does not silently drop
+                    it, but the tile renders an error until it exists.
+                  </p>
+                ) : null}
+                {metricsState === "failed" ? (
+                  <p className="text-xs text-destructive">
+                    Could not load the metrics, so only this tile's current one is offered.
+                  </p>
+                ) : null}
+              </Field>
             ) : null}
 
             {widget.type !== "metric" && widget.type !== "text" ? (

@@ -22,31 +22,43 @@ vi.mock("@/lib/dashboards", async (importOriginal) => ({
     derivation: ["analyses_clean"],
     dataset: ["posthog_analyses"],
   })),
-  derivationColumns: vi.fn(async () => ["subscriptions", "mrr_usd", "nominal"]),
+}))
+
+vi.mock("@/lib/metrics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/metrics")>()),
+  listMetrics: vi.fn(async () => [
+    { name: "subscriptions", type: "simple", source: "revenue_by_product" },
+    { name: "mrr_usd", type: "simple", source: "revenue_by_product" },
+  ]),
 }))
 
 import type { Widget } from "@/lib/dashboards"
-import { derivationColumns, derivationProvenance } from "@/lib/dashboards"
+import { derivationProvenance } from "@/lib/dashboards"
+import { listMetrics } from "@/lib/metrics"
 import { TileEditor, type TilePatch } from "./TileEditor"
 
 const pos = { x: 0, y: 0, w: 12, h: 6 }
 const textTile: Widget = { id: "note", type: "text", gridPos: pos, content: "before" }
-const boundTile: Widget = {
+const metricTile: Widget = {
   id: "mrr",
   type: "metric",
   gridPos: { x: 6, y: 2, w: 6, h: 3 },
   title: "Subscriptions (all)",
+  bind: { metric: "subscriptions" },
+}
+const boundTile: Widget = {
+  id: "mrr",
+  type: "table",
+  gridPos: { x: 6, y: 2, w: 6, h: 3 },
   bind: { derivation: "revenue_by_product" },
-  viz: { field: "subscriptions", agg: "sum" },
 }
 
 /**
- * The column picker is filled from a request, and a Select opened before it lands keeps
- * the list it opened with. Wait for the columns, then choose.
+ * The metric picker is filled from a request, and a Select opened before it lands keeps
+ * the list it opened with. Wait for the metrics, then choose.
  */
-async function columnsReady() {
-  await waitFor(() => expect(vi.mocked(derivationColumns)).toHaveBeenCalled())
-  await waitFor(() => expect(screen.getByLabelText("Column")).toBeInTheDocument())
+async function metricsReady() {
+  await waitFor(() => expect(vi.mocked(listMetrics)).toHaveBeenCalled())
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
@@ -112,47 +124,126 @@ describe("TileEditor", () => {
     })
   })
 
-  it("shows a metric's existing column and aggregate", () => {
-    open(boundTile)
+  it("shows the shared metric a metric tile binds", async () => {
+    open(metricTile)
+    await metricsReady()
 
-    expect(screen.getByLabelText("Column")).toHaveTextContent("subscriptions")
-    expect(screen.getByLabelText("Aggregate")).toHaveTextContent("Sum")
+    expect(screen.getByLabelText("Metric")).toHaveTextContent("subscriptions")
+    expect(screen.queryByLabelText("Derivation")).toBeNull()
+    expect(screen.queryByLabelText("Aggregate")).toBeNull()
   })
 
-  it("offers the columns the bound derivation actually returns", async () => {
+  it("offers the shared metrics, not columns to aggregate", async () => {
     const user = userEvent.setup()
-    open(boundTile)
-    await columnsReady()
+    open(metricTile)
+    await metricsReady()
 
-    await user.click(screen.getByLabelText("Column"))
+    await user.click(screen.getByLabelText("Metric"))
 
     const offered = (await screen.findAllByRole("option")).map((o) => o.textContent)
-    expect(offered).toEqual(["subscriptions", "mrr_usd", "nominal"])
+    expect(offered).toEqual(["subscriptions", "mrr_usd"])
   })
 
-  it("keeps a column the derivation no longer returns, rather than blanking it", async () => {
+  it("rebinds a metric tile to another metric", async () => {
     const user = userEvent.setup()
-    const stale: Widget = { ...boundTile, viz: { field: "gone_away", agg: "sum" } }
-    open(stale)
-    await columnsReady()
+    const { onSave } = open(metricTile)
+    await metricsReady()
 
-    expect(screen.getByLabelText("Column")).toHaveTextContent("gone_away")
-    await user.click(screen.getByLabelText("Column"))
-    const offered = (await screen.findAllByRole("option")).map((o) => o.textContent)
-    expect(offered[0]).toBe("gone_away")
-  })
-
-  it("edits a metric's column", async () => {
-    const user = userEvent.setup()
-    const { onSave } = open(boundTile)
-
-    await pick(user, "Column", "mrr_usd")
+    await pick(user, "Metric", "mrr_usd")
     await user.click(screen.getByRole("button", { name: "Save" }))
 
-    expect(onSave).toHaveBeenCalledWith(
-      "mrr",
-      expect.objectContaining({ viz: { field: "mrr_usd", agg: "sum" } }),
+    expect(onSave).toHaveBeenCalledWith("mrr", expect.objectContaining({ metric: "mrr_usd" }))
+  })
+
+  it("asks a tile that aggregates a derivation itself to pick a shared metric", async () => {
+    const user = userEvent.setup()
+    const legacy: Widget = {
+      ...metricTile,
+      bind: { derivation: "revenue_by_product" },
+      viz: { field: "subscriptions", agg: "sum" },
+    }
+    const { onSave } = open(legacy)
+    await metricsReady()
+
+    expect(screen.getByText(/computes its own figure from revenue_by_product/)).toBeInTheDocument()
+    await pick(user, "Metric", "subscriptions")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledWith("mrr", expect.objectContaining({ metric: "subscriptions" }))
+  })
+
+  it("shows a rebound tile on the JSON tab without its private aggregate", async () => {
+    const user = userEvent.setup()
+    open({
+      ...metricTile,
+      bind: { derivation: "revenue_by_product" },
+      viz: { field: "subscriptions", agg: "sum", color: "blue" },
+    })
+    await metricsReady()
+
+    await pick(user, "Metric", "subscriptions")
+    await user.click(screen.getByRole("button", { name: "JSON" }))
+
+    const shown = JSON.parse(
+      (screen.getByLabelText("This tile's config") as HTMLTextAreaElement).value,
     )
+    expect(shown.bind).toEqual({ metric: "subscriptions" })
+    expect(shown.viz).toEqual({ color: "blue" })
+  })
+
+  it("warns about a metric that does not exist, and keeps it selectable", async () => {
+    open({ ...metricTile, bind: { metric: "gone_away" } })
+    await metricsReady()
+
+    expect(await screen.findByText(/No metric named/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Metric")).toHaveTextContent("gone_away")
+  })
+
+  it("says when the metrics could not be loaded, rather than offering nothing", async () => {
+    vi.mocked(listMetrics).mockRejectedValueOnce(new Error("503"))
+    open(metricTile)
+
+    expect(await screen.findByText(/Could not load the metrics/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Metric")).toHaveTextContent("subscriptions")
+  })
+
+  it("drops an earlier list when a later load fails, so the picker matches the note", async () => {
+    const user = userEvent.setup()
+    const { rerender } = open(metricTile)
+    await metricsReady()
+    vi.mocked(listMetrics).mockRejectedValueOnce(new Error("503"))
+    const editor = (widget: Widget) => (
+      <MemoryRouter>
+        <TileEditor
+          widget={widget}
+          catalog={[]}
+          columns={24}
+          dark={false}
+          onCancel={() => {}}
+          onSave={async () => {}}
+        />
+      </MemoryRouter>
+    )
+    rerender(editor(textTile))
+    rerender(editor(metricTile))
+
+    expect(await screen.findByText(/Could not load the metrics/)).toBeInTheDocument()
+    await user.click(screen.getByLabelText("Metric"))
+    expect(screen.queryByRole("option", { name: "mrr_usd" })).toBeNull()
+  })
+
+  it("edits a table bound to a metric without writing a derivation over it", async () => {
+    const user = userEvent.setup()
+    const { onSave } = open({
+      ...boundTile,
+      bind: { metric: "subscriptions", groupBy: ["region"] },
+    })
+
+    expect(screen.queryByLabelText("Derivation")).toBeNull()
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSave.mock.calls[0]?.[1]).not.toHaveProperty("derivation")
   })
 
   it("resizes a tile without touching its position", async () => {
@@ -217,7 +308,7 @@ describe("TileEditor", () => {
     rerender(
       <MemoryRouter>
         <TileEditor
-          widget={boundTile}
+          widget={metricTile}
           catalog={[]}
           columns={24}
           dark={false}
@@ -294,7 +385,7 @@ describe("TileEditor", () => {
 describe("the JSON tab", () => {
   it("shows the tile exactly as the spec stores it", async () => {
     const user = userEvent.setup()
-    open(boundTile)
+    open({ ...boundTile, viz: { mark: "bar" } })
 
     await user.click(screen.getByRole("button", { name: "JSON" }))
 
@@ -303,21 +394,21 @@ describe("the JSON tab", () => {
     )
     expect(config.id).toBe("mrr")
     expect(config.bind).toEqual({ derivation: "revenue_by_product" })
-    expect(config.viz).toEqual({ field: "subscriptions", agg: "sum" })
+    expect(config.viz).toEqual({ mark: "bar" })
   })
 
   it("carries an unsaved field edit into the JSON", async () => {
     const user = userEvent.setup()
-    open(boundTile)
-    await columnsReady()
+    open(metricTile)
+    await metricsReady()
 
-    await pick(user, "Column", "mrr_usd")
+    await pick(user, "Metric", "mrr_usd")
     await user.click(screen.getByRole("button", { name: "JSON" }))
 
     const config = JSON.parse(
       (screen.getByLabelText("This tile's config") as HTMLTextAreaElement).value,
     )
-    expect(config.viz.field).toBe("mrr_usd")
+    expect(config.bind).toEqual({ metric: "mrr_usd" })
   })
 
   it("saves the whole widget, so a removed key is really removed", async () => {
@@ -425,5 +516,30 @@ describe("the Lineage tab", () => {
     open(boundTile)
 
     expect(screen.queryByText(/Computed by/)).toBeNull()
+  })
+
+  it("traces a table bound to a metric through that metric's derivation", async () => {
+    const user = userEvent.setup()
+    open({ ...boundTile, bind: { metric: "subscriptions" } })
+    await metricsReady()
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(await screen.findByRole("link", { name: "revenue_by_product" })).toBeInTheDocument()
+    expect(screen.queryByText(/carries its own content/)).toBeNull()
+  })
+
+  it("says a composite metric's trail is on the Metrics page, not that the tile reads nothing", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listMetrics).mockResolvedValueOnce([
+      { name: "paid_share", type: "ratio", numerator: "paid", denominator: "signups" },
+    ])
+    open({ ...metricTile, bind: { metric: "paid_share" } })
+    await metricsReady()
+
+    await user.click(screen.getByRole("button", { name: "Lineage" }))
+
+    expect(await screen.findByText(/built from other metrics/)).toBeInTheDocument()
+    expect(screen.queryByText(/carries its own content/)).toBeNull()
   })
 })

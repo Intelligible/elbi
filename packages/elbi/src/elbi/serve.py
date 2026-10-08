@@ -196,7 +196,7 @@ class _WarehouseBindings(DataBindings):
     """Dataset bindings that resolve every name to a warehouse Delta table.
 
     The runner uses these so a derivation's dataset inputs come from the warehouse.
-    ``version`` returns the stored ingest fingerprint when present (a zero-read cache
+    ``version`` returns the stored ingest version when present (a zero-read cache
     check that changes when a source is re-synced), otherwise a content hash of the
     rows, so the derivation cache invalidates exactly when the data changes.
     """
@@ -261,14 +261,31 @@ def build(
         )
         return rows
 
+    def ingest_version(name: str) -> str | None:
+        """A declared source's version without reading its rows (``None`` otherwise).
+
+        The stored ingest fingerprint describes the declaration as of the last boot or
+        reload, but the table is also re-synced over the API and on its cadence without
+        it changing. So it is combined with when the table last synced: a sync that
+        replaced the rows moves the version, and the derivation cache misses.
+        """
+        stored = store.get_config(f"warehouse.source.{name}.fingerprint")
+        if stored is None:
+            return None
+        schema = store.get_external_schema_by_table(name)
+        synced = schema.last_synced_at if schema is not None else None
+        return hash_json(
+            {"fingerprint": stored, "synced": synced.isoformat() if synced else None}
+        )
+
     def dataset_fingerprint(name: str) -> str | None:
         """A content fingerprint of a table for staleness checks (or ``None`` if gone).
 
-        Prefers the stored ingest fingerprint (cheap, no read) for a declared source;
+        Prefers the stored ingest version (cheap, no read) for a declared source;
         for a connector table it hashes the rows. Used by orchestration data-change
         sensors so "data changed" agrees with the derivation cache's ``version()``.
         """
-        stored = store.get_config(f"warehouse.source.{name}.fingerprint")
+        stored = ingest_version(name)
         if stored is not None:
             return stored
         try:
@@ -538,9 +555,7 @@ def build(
     # metrics, the feature store, dashboards, and orchestration read the warehouse too.
     warehouse_bindings = _WarehouseBindings(
         warehouse=warehouse_service,
-        fingerprint=lambda name: store.get_config(
-            f"warehouse.source.{name}.fingerprint"
-        ),
+        fingerprint=ingest_version,
     )
 
     def make_runner(bindings: DataBindings | None = None) -> Runner:
@@ -1081,7 +1096,7 @@ def build(
     )
 
     def model_edges() -> list[dict[str, Any]]:
-        """Each registered model's oracle verdict and training source.
+        """Each registered model's verification verdict and training source.
 
         ``source_kind`` and ``dataset`` name the training source (a derivation, a
         bound dataset, or a feature-store training set) so lineage links the model to
@@ -1255,6 +1270,7 @@ def build(
             # through the metric service so a metric renders like any other tile.
             resolve_metric=resolve_metric_tile,
             metric_exists=lambda name: metric_service.get(name) is not None,
+            metric_format=lambda name: (metric_service.get(name) or {}).get("format"),
         ),
         # Feature store: entities + feature views over certified derivations, with
         # point-in-time historical joins and a materialized online store.
@@ -1291,7 +1307,7 @@ def build(
         # exports the OSI standard. A simple metric's source must be certified.
         metric_service=metric_service,
         # Monitoring: watch a metric or derivation over time, detect anomalies against a
-        # learned baseline, and alert (webhook + audit) with the oracle verdict.
+        # learned baseline, and alert (webhook + audit) with the source's verdict.
         monitor_service=monitor_service,
         # Data warehouse: sync external sources (SQL DBs, files, SaaS APIs) into a
         # portable Delta Lake lakehouse (local file:// or the user's own S3/GCS/Azure),

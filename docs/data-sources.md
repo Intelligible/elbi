@@ -138,6 +138,16 @@ Klaviyo, SendGrid, Braze, Pipedrive, Front, Vercel, Airtable, Mixpanel, GitHub,
 Jira, Notion, Slack, Sentry, Typeform and Intercom. If yours is not there, the
 **Custom REST source** takes a manifest describing any JSON API.
 
+Some APIs answer **columnar** data, with the field names given once and each row a bare
+array: PostHog's query API returns `{"columns": ["day", "event"], "results": [["2026-09-01",
+"pageview"], ...]}`. Custom REST names each row from the `columns` list beside the
+records, so these land as ordinary rows; a row whose width differs from `columns` fails
+the sync. Records that are neither objects nor nameable rows also fail it, rather than
+being skipped. A response that says `hasMore: true` (or `has_more: true`) fails when no
+paginator is declared to fetch the rest; for PostHog, declare
+`"paginator": {"type": "single_page"}` and give the HogQL query an explicit `LIMIT`
+above its row count, since without one PostHog stops at 100 rows.
+
 ### Deeply nested collections
 
 A connector infers each batch's schema from the JSON it just received, and most APIs
@@ -175,6 +185,11 @@ the rest, so an early page with no line items does not fix the column as a struc
 
 ### Incremental sync
 
+Each table syncs one of two ways, set in its **Method** column. A **full refresh**
+reads every row and replaces the table. An **incremental** sync appends only rows
+whose cursor column is past the highest value the previous sync saw, which is
+cheaper on a large table that only grows.
+
 A connector offers an incremental cursor only where one would actually help. A
 SQL source offers its timestamp and id columns. An object store offers the file's
 modification time. MongoDB offers a field only if it *leads* an index, because
@@ -184,6 +199,44 @@ filtered scan reads and costs exactly what an unfiltered one does.
 
 Where no cursor is offered, the sync is a full refresh. That is a property of the
 source, not a gap in the connector.
+
+### Sync status
+
+A source's page shows what its last sync produced, not just whether one is running:
+
+- **Syncing** means a sync is running now.
+- **Failed** means at least one enabled table failed on the last run. The error is
+  shown on the page and on the table that failed.
+- **Synced, but no rows** means the sync succeeded but some table got nothing back.
+  That is usually wrong: the source is empty, the token sees no data, or the
+  connector cannot read the response. A full refresh that gets no rows leaves any
+  earlier rows in place. An incremental table that finds nothing newer than its last
+  sync shows **No new rows** in the results list instead; that is normal.
+- **Synced · X of Y tables** means every synced table succeeded, but an enabled table,
+  usually one just switched on, has not been synced yet.
+- **Synced** means every enabled table succeeded and landed rows.
+- **Never synced** means no enabled table has been synced yet.
+
+**Rows** is the count recorded by a table's last successful sync: the rows written on
+a full refresh, or the running total appended on incremental. **Last synced** is the
+last time a sync finished with every enabled table succeeding; a run where any table
+fails does not move it. A table switched off is skipped by a sync and keeps whatever
+the last sync left.
+
+### Sync schedule
+
+The schedule (**Daily**, **Hourly** and so on) is how often the app syncs a source on
+its own. Scheduled syncs run only while the app is running; one that fell due while it
+was off runs soon after it starts. After a failed sync, the next attempt waits a full
+interval. **Manual only** means the source syncs only when you click **Sync now**.
+
+### Table names
+
+Each table lands in the warehouse as `<prefix>__<stream>`: the prefix chosen when the
+source was created (by default the source type), two underscores, then the table or
+endpoint name, lowercased. A Stripe source's invoices become `stripe__invoices`, and a
+Custom REST resource called `activation_funnel` becomes `custom__activation_funnel`.
+That is the name to query in Explore, notebooks and chat.
 
 ## Reaching a database behind a firewall
 

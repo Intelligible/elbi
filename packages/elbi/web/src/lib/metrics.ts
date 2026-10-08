@@ -151,3 +151,39 @@ export const importOsi = (document: Record<string, unknown>) =>
 
 // Certified derivations are the only valid metric sources; the picker reads them here.
 export const listDerivations = () => json<{ name: string }[]>("/api/derivations")
+
+/** Format a metric cell, honoring the metric's display format (Intl.NumberFormat). */
+export function formatMetricValue(value: Cell, format?: Format): string {
+  if (value === null) return "∅"
+  if (typeof value !== "number") return String(value)
+  if (!format || format.kind === "duration") {
+    if (format?.kind === "duration") return formatDuration(value)
+    return Number.isInteger(value)
+      ? value.toLocaleString()
+      : value.toLocaleString(undefined, { maximumFractionDigits: 4 })
+  }
+  const opts: Intl.NumberFormatOptions = { notation: format.notation ?? "standard" }
+  if (typeof format.precision === "number") {
+    opts.minimumFractionDigits = format.precision
+    opts.maximumFractionDigits = format.precision
+  }
+  if (format.kind === "currency") {
+    opts.style = "currency"
+    opts.currency = format.currency || "USD"
+  } else if (format.kind === "percent") {
+    opts.style = "percent" // Intl multiplies by 100; a percent metric stores the fraction
+  }
+  return new Intl.NumberFormat(undefined, opts).format(value)
+}
+
+/** Render seconds as a compact ``1h 23m 4s`` duration (Intl has no duration style). */
+function formatDuration(seconds: number): string {
+  const s = Math.floor(Math.abs(seconds))
+  const parts = [
+    [Math.floor(s / 3600), "h"],
+    [Math.floor((s % 3600) / 60), "m"],
+    [s % 60, "s"],
+  ] as const
+  const shown = parts.filter(([n]) => n > 0).map(([n, u]) => `${n}${u}`)
+  return (seconds < 0 ? "-" : "") + (shown.join(" ") || "0s")
+}

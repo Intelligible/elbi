@@ -48,10 +48,11 @@ def _manifest() -> dict:
                         "type": "metric",
                         "gridPos": {"x": 0, "y": 2, "w": 6, "h": 4},
                         "bind": {
-                            "derivation": "monthly_revenue",
-                            "params": {"region": "$region"},
+                            "metric": "mrr",
+                            "filters": [
+                                {"column": "region", "op": "in", "value": "$region"}
+                            ],
                         },
-                        "viz": {"field": "mrr", "format": "currency"},
                         "interactions": {
                             "drillThrough": {
                                 "target": "page:detail",
@@ -68,7 +69,10 @@ def _manifest() -> dict:
                         "id": "rows",
                         "type": "table",
                         "gridPos": {"x": 0, "y": 0, "w": 24, "h": 10},
-                        "bind": {"derivation": "revenue_rows"},
+                        "bind": {
+                            "derivation": "revenue_rows",
+                            "params": {"region": "$region"},
+                        },
                     }
                 ],
             },
@@ -87,11 +91,8 @@ def test_manifest_round_trips() -> None:
 
 def test_derivation_names_covers_binds_and_dynamic_options() -> None:
     spec = DashboardSpec.from_manifest(_manifest())
-    assert set(spec.derivation_names()) == {
-        "regions",
-        "monthly_revenue",
-        "revenue_rows",
-    }
+    assert set(spec.derivation_names()) == {"regions", "revenue_rows"}
+    assert spec.metric_names() == ("mrr",)
 
 
 def test_is_valid_dashboard_accepts_the_example() -> None:
@@ -108,10 +109,53 @@ def test_duplicate_widget_id_rejected() -> None:
 
 def test_param_referencing_unknown_variable_rejected() -> None:
     manifest = _manifest()
-    manifest["pages"][0]["widgets"][1]["bind"]["params"] = {"region": "$unknown"}
+    manifest["pages"][1]["widgets"][0]["bind"]["params"] = {"region": "$unknown"}
     with pytest.raises(SpecValidationError) as err:
         validate_dashboard(manifest)
     assert any("unknown variable $unknown" in m for m in err.value.messages)
+
+
+def test_metric_filter_referencing_unknown_variable_rejected() -> None:
+    manifest = _manifest()
+    manifest["pages"][0]["widgets"][1]["bind"]["filters"][0]["value"] = "$unknown"
+    with pytest.raises(SpecValidationError) as err:
+        validate_dashboard(manifest)
+    assert any(
+        "filter references unknown variable $unknown" in m for m in err.value.messages
+    )
+
+
+def test_metric_tile_bound_to_a_derivation_rejected() -> None:
+    # A tile aggregating a derivation's rows would be a second, private definition of a
+    # number the shared metric already defines.
+    manifest = _manifest()
+    tile = manifest["pages"][0]["widgets"][1]
+    tile["bind"] = {"derivation": "monthly_revenue"}
+    tile["viz"] = {"field": "mrr", "agg": "sum"}
+    with pytest.raises(SpecValidationError) as err:
+        validate_dashboard(manifest)
+    assert any(
+        "'metric' widget binds a shared metric, not a derivation" in m
+        for m in err.value.messages
+    )
+
+
+@pytest.mark.parametrize(
+    ("key", "value"), [("groupBy", ["region"]), ("grain", "month")]
+)
+def test_metric_tile_may_not_slice_its_metric(key: str, value: object) -> None:
+    manifest = _manifest()
+    manifest["pages"][0]["widgets"][1]["bind"][key] = value
+    with pytest.raises(SpecValidationError) as err:
+        validate_dashboard(manifest)
+    assert any(f"may not set {key!r}" in m for m in err.value.messages)
+
+
+def test_chart_may_slice_a_metric() -> None:
+    manifest = _manifest()
+    manifest["pages"][0]["widgets"][1]["type"] = "chart"
+    manifest["pages"][0]["widgets"][1]["bind"].update(groupBy=["region"], grain="month")
+    assert is_valid_dashboard(manifest)
 
 
 def test_filter_widget_requires_known_variable() -> None:

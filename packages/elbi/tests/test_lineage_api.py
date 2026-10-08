@@ -7,6 +7,7 @@ downstream artifacts and the catalog is searchable across types.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -244,7 +245,7 @@ def test_impact_on_feature_view_reaches_training_sets_and_models(
 def test_metrics_and_monitors_are_nodes_with_inherited_verdict(tmp_path: Path) -> None:
     # A metric aggregating a certified derivation, and monitors watching that metric and
     # the derivation directly, must appear as first-class nodes downstream of it, each
-    # inheriting the derivation's oracle verdict, so impact analysis reaches them.
+    # showing the derivation's verification verdict, so impact analysis reaches them.
     from elbi.db import Derivation as DerivationRow
     from elbi.db import MetricMonitor
 
@@ -285,6 +286,58 @@ def test_metrics_and_monitors_are_nodes_with_inherited_verdict(tmp_path: Path) -
     impact = service.impact("derivation:revenue")
     assert impact["affected"]["metric"] == ["revenue_by_region"]
     assert sorted(impact["affected"]["monitor"]) == ["deriv_watch", "rev_watch"]
+
+
+def test_a_metric_links_to_the_dashboards_that_display_it(tmp_path: Path) -> None:
+    # A shared metric is one definition shown in many places, so changing it has to
+    # name every dashboard whose tile displays it.
+    from elbi.db import Derivation as DerivationRow
+
+    store = open_store(f"sqlite:{tmp_path / 'lin.db'}")
+    store.save_derivation(
+        DerivationRow(name="revenue", verdict="sound", origin="repo", source="...")
+    )
+    store.upsert_metric(name="mrr", manifest_json="{}", source="revenue")
+    # A copy over an unrecorded source carries no verdict, so only building its node
+    # before the edge keeps its metadata.
+    store.upsert_metric(name="mrr_copy", manifest_json="{}", source="unrecorded")
+    store.set_metric_copied_from("mrr_copy", "mrr")
+    spec = {
+        "specVersion": "2.0",
+        "kind": "Dashboard",
+        "name": "board",
+        "pages": [
+            {
+                "name": "main",
+                "widgets": [
+                    {
+                        "id": "mrr",
+                        "type": "metric",
+                        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+                        "bind": {"metric": "mrr"},
+                    },
+                    {
+                        "id": "mrr_copy",
+                        "type": "metric",
+                        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+                        "bind": {"metric": "mrr_copy"},
+                    },
+                ],
+            }
+        ],
+    }
+    store.create_dashboard(name="board", title="Board", spec_json=json.dumps(spec))
+    service = LineageService(
+        store=store, registry_provider=lambda: _registry(), dataset_names=lambda: []
+    )
+
+    graph = service.graph()
+    edges = {(e["source"], e["target"]): e["kind"] for e in graph["edges"]}
+    nodes = {n["id"]: n for n in graph["nodes"]}
+    assert edges[("metric:mrr", "dashboard:board")] == "displays"
+    assert nodes["metric:mrr"]["verdict"] == "sound"
+    assert nodes["metric:mrr_copy"]["copied_from"] == "mrr"  # the full node, not a stub
+    assert service.impact("metric:mrr")["affected"]["dashboard"] == ["board"]
 
 
 def _counting_service(tmp_path: Path) -> tuple[LineageService, Callable[[], int]]:

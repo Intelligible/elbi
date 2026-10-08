@@ -1,0 +1,129 @@
+name: Open Code Review
+
+# pull_request_target so labeled fork PRs get an OIDC token. Nothing from the
+# PR head runs: this checkout is the base branch, and the review action reads
+# the head only as git objects.
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+
+concurrency:
+  group: ocr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    # PRs from branches in this repo are reviewed on every push: only people with
+    # write access can push here. Fork PRs are reviewed once each time a
+    # maintainer adds the ocr-review label; later pushes need the label removed
+    # and added again. author_association can't tell maintainers apart, because
+    # the event reports private org members as CONTRIBUTOR.
+    if: >-
+      !github.event.pull_request.draft
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && (github.event.action == 'labeled'
+        && github.event.label.name == 'ocr-review'
+        || github.event.action != 'labeled'
+        && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    env:
+      ANTHROPIC_PROXY_PORT: 8787
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts/anthropic-oidc-proxy.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # The review's own checkout rewrites the workspace, so run the proxy from outside it.
+      # The first token can take up to 60s (two token requests, 30s timeout each).
+      - name: Start the Anthropic token proxy
+        env:
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+        run: |
+          cp .github/scripts/anthropic-oidc-proxy.mjs "$RUNNER_TEMP/"
+          node "$RUNNER_TEMP/anthropic-oidc-proxy.mjs" 2> "$RUNNER_TEMP/anthropic-oidc-proxy.log" &
+          proxy=$!
+          for _ in $(seq 75); do
+            if curl -sf "http://127.0.0.1:$ANTHROPIC_PROXY_PORT/healthz" > /dev/null; then exit 0; fi
+            if ! kill -0 "$proxy" 2> /dev/null; then break; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/anthropic-oidc-proxy.log"
+          exit 1
+
+      - uses: alibaba/open-code-review@182898cf522da3d04157b422752d028417974e19 # v1.12.12
+        with:
+          ocr_version: '1.12.12'
+          llm_url: http://127.0.0.1:${{ env.ANTHROPIC_PROXY_PORT }}/v1/messages
+          # The action requires a token; the proxy replaces it with the federated one.
+          llm_auth_token: federated-by-proxy
+          llm_auth_header: authorization
+          llm_model: claude-opus-5-5
+          llm_use_anthropic: 'true'
+          # Replaces the action's default {"thinking": {"type": "disabled"}}, which Opus 5.5 rejects.
+          llm_extra_body: '{"output_config": {"effort": "high"}}'
+          checkpoint_range: 'true'
+
+      - name: Show the token proxy log
+        if: always()
+        run: cat "$RUNNER_TEMP/anthropic-oidc-proxy.log" 2> /dev/null || true
+
+  # Resolving a review thread needs repository write access, so it runs here, apart
+  # from the job above that runs PR code and a third-party action. This job runs neither.
+  resolve-outdated:
+    needs: review
+    # Threads go outdated because of the push, so clean up even when the review itself failed.
+    if: ${{ !cancelled() && needs.review.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { repository } = await github.graphql(
+              `query ($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: 100) {
+                      totalCount
+                      nodes { id isResolved isOutdated comments(first: 50) { totalCount nodes { author { login } body } } }
+                    }
+                  }
+                }
+              }`,
+              { owner: context.repo.owner, repo: context.repo.repo, number: context.issue.number },
+            );
+            const threads = repository.pullRequest.reviewThreads;
+            if (threads.totalCount > threads.nodes.length) {
+              core.warning(`Checked the first ${threads.nodes.length} of ${threads.totalCount} review threads`);
+            }
+            // Only the review bot's own outdated threads, and none a person has replied to. A thread
+            // with comments we did not fetch is skipped, since an unseen reply could be a person's.
+            const stale = threads.nodes.filter(
+              (t) =>
+                !t.isResolved &&
+                t.isOutdated &&
+                t.comments.totalCount === t.comments.nodes.length &&
+                t.comments.nodes[0]?.body.startsWith('<!-- ocr-') &&
+                t.comments.nodes.every((c) => c.author?.login === 'github-actions'),
+            );
+            for (const t of stale) {
+              await github.graphql('mutation ($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id } } }', {
+                id: t.id,
+              });
+            }
+            core.info(`Resolved ${stale.length} outdated review thread(s)`);
