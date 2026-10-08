@@ -49,3 +49,22 @@ export function useTheme(): {
   const resolved = theme === "system" ? (prefersDark() ? "dark" : "light") : theme
   return { theme, resolved, setTheme }
 }
+
+/**
+ * Whether the dark class is on right now, tracked as it changes.
+ *
+ * `useTheme().resolved` answers the same question from the stored preference; this
+ * watches the element instead, which is what a CodeMirror theme has to follow —
+ * including the system-theme case, where nothing in storage changes when the OS does.
+ */
+export function useDarkTheme(): boolean {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"))
+  useEffect(() => {
+    const observer = new MutationObserver(() =>
+      setDark(document.documentElement.classList.contains("dark")),
+    )
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    return () => observer.disconnect()
+  }, [])
+  return dark
+}

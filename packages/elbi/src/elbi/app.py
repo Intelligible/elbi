@@ -76,6 +76,7 @@ from .certificate_pdf import render_certificate_pdf
 from .compute import over_budget, spend_limit
 from .dashboards import DashboardError, DashboardService
 from .db import Conversation, DataSource, Derivation, LlmProfile, Message, Secret, Store
+from .derivation_html import render as render_derivation_html
 from .derivation_jobs import derivation_job_key, submit_derivation_job
 from .explore import ExploreService
 from .features import (
@@ -570,9 +571,9 @@ def create_app(
     Trust model: the app is local-first and single-user. Its endpoints are
     unauthenticated and everything it holds -- conversations, jobs, derivations -- is
     the one person's, so it assumes a trusted user on a trusted machine. Reaching it
-    from anywhere else means putting something that authenticates in front of it. The
-    oracle's verdict stays unforgeable either way, so this is a data-isolation
-    boundary, not a soundness one.
+    from anywhere else means putting something that authenticates in front of it. A
+    caller still cannot forge a verification verdict either way, so this is a
+    data-isolation boundary, not a soundness one.
     """
     mcp_app = None
     if mcp_server is not None:
@@ -674,7 +675,7 @@ def create_app(
         )
         prompt = (
             f"Your background training job for derivation '{job.label}' has finished "
-            f"and CERTIFIED (oracle verdict: {attestation.verdict}). Its verified "
+            f"and CERTIFIED (verdict: {attestation.verdict}). Its verified "
             f"output:\n{result.get('rendered', '')}\n\nInterpret this certified result "
             "and call `answer` now with the finding for the user, in plain language. "
             "The analysis is already certified, so do not run tools or derive again."
@@ -2953,6 +2954,23 @@ def create_app(
         """The certified derivations available to bind to a widget."""
         return _dashboards().catalog()
 
+    @app.get("/api/dashboards/columns/{name}")
+    async def dashboard_columns(name: str) -> dict[str, list[str]]:
+        """The columns a derivation returns, for the tile editor's field picker."""
+        return {"columns": _dashboards().columns(name)}
+
+    @app.get("/api/dashboards/schema")
+    async def dashboard_schema() -> dict[str, Any]:
+        """The DashboardSpec JSON Schema, so an editor can check a spec as it is typed.
+
+        The same document the server validates against, rather than a copy of its rules
+        kept in the client: a rule that drifts would report an error the save accepts,
+        or accept one it refuses.
+        """
+        from elbi_core.dashboard.spec import load_dashboard_schema
+
+        return load_dashboard_schema()
+
     @app.post("/api/dashboards")
     async def create_dashboard(request: Request) -> dict[str, Any]:
         """Validate a dashboard manifest and store it as a new draft."""
@@ -4816,10 +4834,8 @@ def create_app(
     async def test_data_source(body: dict[str, Any]) -> dict[str, Any]:
         """Test an unsaved connection payload before saving it.
 
-        Gated to data-source managers: it opens a connection to an arbitrary host, so an
-        unprivileged caller must not probe internal services through it. Private-network
-        hosts are intentionally allowed (on-prem data lives there), so the permission
-        gate, not IP filtering, is the control.
+        Opens a connection to the host named in the payload, private-network
+        addresses included, and reports what the driver answered.
         """
         return datasources.test_connection(_source_from_body(body, None))
 
@@ -5526,18 +5542,23 @@ def create_app(
         if row is None:
             raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
         detail = _derivation_detail(row)
-        # A stored rendering is rows already computed, so it cannot be narrowed after
-        # the fact. It is dropped for a caller an extension says to withhold it from,
-        # and the on-demand path below withholds too. The rest of the detail serves:
-        # what is withheld is rows, not the derivation's existence.
-        if _withholds(name):
-            detail.rendered = None
-        # A repo derivation stores no rendering; produce its output on demand.
-        if not detail.rendered and render_derivation is not None:
-            rendered = await run_in_threadpool(render_derivation, name)
-            if rendered:
-                detail.rendered = rendered
+        detail.rendered = await _rendered_output(name, detail.rendered)
         return detail
+
+    async def _rendered_output(name: str, stored: str | None) -> str | None:
+        """The output the detail view shows: stored, or produced on demand.
+
+        A stored rendering is rows already computed, so it cannot be narrowed after
+        the fact. It is dropped for a caller an extension says to withhold it from,
+        and the on-demand path withholds too. What is withheld is rows, not the
+        derivation's existence.
+        """
+        if _withholds(name):
+            stored = None
+        # A repo derivation stores no rendering; produce its output on demand.
+        if not stored and render_derivation is not None:
+            stored = await run_in_threadpool(render_derivation, name) or stored
+        return stored
 
     @app.get("/api/derivations/{name}/history")
     async def derivation_history(name: str, request: Request) -> list[dict[str, Any]]:
@@ -5759,6 +5780,48 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
         document = await _derivation_export_document(row)
         return _download_json(document, f"{name}-record")
+
+    @app.get("/api/exports/derivations/{name}/html")
+    async def export_derivation_html(name: str, request: Request) -> Response:
+        """The derivation page as one self-contained, read-only snapshot.
+
+        Everything the detail view shows, in its order. Unlike the record above, this
+        runs a repo derivation when nothing is stored: the snapshot is the page as a
+        reader sees it, not evidence of a run. A withheld output is left out of the
+        page, as the detail view leaves it out.
+        """
+        row = store.get_derivation(name) if store else None
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
+        detail = _derivation_detail(row)
+        attestation = detail.attestation or {}
+        history = with_changes(store.runs_for_derivation(name)) if store else []
+        page = render_derivation_html(
+            name=name,
+            title=str((detail.serve or {}).get("title") or name),
+            output=await _rendered_output(name, detail.rendered) or "",
+            finding=detail.narrative or "",
+            verdict=detail.verdict,
+            exported_at=datetime.now(timezone.utc),
+            question=detail.question,
+            data_hash=detail.data_hash,
+            assumptions=detail.assumptions,
+            checks=attestation.get("checks") or [],
+            history=[
+                {**_run_dict(run), "changed": list(changed)} for run, changed in history
+            ],
+            claim=detail.claim,
+            source=detail.source,
+        )
+        return Response(
+            content=page,
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{_safe_filename_part(name)}.html"'
+                )
+            },
+        )
 
     def _dashboard_record_document(dashboard_id: str) -> dict[str, Any]:
         """One dashboard's definition and saved versions -- nothing resolved.

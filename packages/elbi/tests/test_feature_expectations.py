@@ -1,9 +1,9 @@
 """Data-contract expectations on feature views, over the HTTP surface.
 
 A feature view can carry a data contract, the platform's existing quality bar, and its
-values are checked against it with the same three-valued verdict the oracle speaks. The
-source derivation reads a mutable list so a test can make good data pass and then break
-it, proving the check actually distinguishes conforming values from violations.
+values are checked against it, with the same three verdicts a derivation's claim gets.
+The source derivation reads a mutable list so a test can make good data pass and then
+break it, proving the check actually distinguishes conforming values from violations.
 """
 
 from __future__ import annotations

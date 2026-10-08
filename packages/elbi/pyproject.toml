@@ -50,6 +50,13 @@ dependencies = [
     # no system libraries (unlike weasyprint), and certificate export is an app
     # presentation surface, so it ships with the app rather than the lean core SDK.
     "fpdf2>=2.8",
+    # Render a derivation's markdown output for the HTML export. Already installed
+    # through rich; declared because the export imports it directly.
+    "markdown-it-py>=3.0",
+    # Sanitize raw HTML in that output the way the app's renderer does: safe markup
+    # renders, anything that could run, navigate or restyle the page is dropped. The
+    # same allowlist sanitizer PyPI uses for untrusted READMEs; 0.3 adds style filtering.
+    "nh3>=0.3",
     # Parse multipart/form-data, which FastAPI needs for the CSV/Parquet file-upload
     # endpoint (UploadFile). Otherwise transitive; pinned so the upload route is not at
     # the mercy of another package happening to pull it in.

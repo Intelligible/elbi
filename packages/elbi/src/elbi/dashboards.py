@@ -22,7 +22,7 @@ from typing import Any
 
 from elbi_core import DashboardSpec, Runner
 from elbi_core.dashboard import MetricResolver, resolve_options, resolve_page
-from elbi_core.errors import SpecValidationError
+from elbi_core.errors import ElbiError, SpecValidationError
 
 from .db import Dashboard, DashboardSubscription, Store
 from .duplicate import copy_identifier, copy_label
@@ -67,6 +67,7 @@ class DashboardService:
         certified_catalog: Callable[[], list[dict[str, Any]]],
         resolve_metric: MetricResolver | None = None,
         metric_exists: Callable[[str], bool] | None = None,
+        metric_format: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self._store = store
         self._make_runner = make_runner
@@ -75,6 +76,9 @@ class DashboardService:
         # exists. Injected by the app (the dashboard core has no metric engine).
         self._resolve_metric = resolve_metric
         self._metric_exists = metric_exists
+        # A metric tile displays its value the way the metric says to, so the format
+        # lives on the shared metric rather than on each tile.
+        self._metric_format = metric_format
 
     # -- authoring ---------------------------------------------------------------
     def create(self, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -138,7 +142,7 @@ class DashboardService:
         either way, since that is a broken manifest rather than a trust decision.
         """
         row = self._require(dashboard_id)
-        spec = DashboardSpec.from_manifest(_load(row.spec_json))
+        spec = _parse(_load(row.spec_json))
         certified = {entry["name"] for entry in self._catalog()}
         missing: list[str] = []
         uncertified: list[str] = []
@@ -196,6 +200,28 @@ class DashboardService:
         """The certified derivations available to bind, for the editor's picker."""
         return self._catalog()
 
+    def columns(self, name: str) -> list[str]:
+        """The column names a derivation's rows carry, for the editor's field picker.
+
+        Read from the result rather than from the serve contract: a contract lists the
+        columns it chooses to show, which is not always all of them, and a derivation
+        may declare none at all. The run is a cached read for anything already
+        computed, which a bound derivation on an open dashboard always is.
+        """
+        try:
+            artifact = self._make_runner().run(name)
+        except ElbiError:
+            return []
+        if artifact.kind != "table":
+            return []
+        rows = artifact.value if isinstance(artifact.value, list) else []
+        seen: dict[str, None] = {}
+        for row in rows:
+            if isinstance(row, dict):
+                for key in row:
+                    seen.setdefault(str(key), None)
+        return list(seen)
+
     # -- resolution --------------------------------------------------------------
     def resolve(
         self,
@@ -226,9 +252,20 @@ class DashboardService:
                 "value": data.value,
                 "data_version": data.data_version,
                 "error": data.error,
+                "format": self._format_for(spec, data.widget_id),
             }
             for data in results
         ]
+
+    def _format_for(self, spec: DashboardSpec, widget_id: str) -> dict[str, Any] | None:
+        """The display format of the metric a widget binds, or ``None``."""
+        if self._metric_format is None:
+            return None
+        for page in spec.pages:
+            for widget in page.widgets:
+                if widget.id == widget_id and widget.bind and widget.bind.metric:
+                    return self._metric_format(widget.bind.metric)
+        return None
 
     def options(self, dashboard_id: str, variable: str) -> list[dict[str, Any]]:
         """The selectable options for a filter control, static or derivation-backed."""
@@ -320,7 +357,7 @@ class DashboardService:
         source = row.published_spec_json if published else row.spec_json
         if source is None:
             raise DashboardError("dashboard has not been published")
-        return DashboardSpec.from_manifest(_load(source))
+        return _parse(_load(source))
 
     def _exists(self, name: str) -> bool:
         try:

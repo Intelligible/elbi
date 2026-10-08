@@ -123,3 +123,74 @@ describe("a text widget", () => {
     expect(screen.getByText(/unknown derivation 'missing'/)).toBeInTheDocument()
   })
 })
+
+describe("DashboardWidget metric", () => {
+  const KPI: Widget = {
+    id: "mrr",
+    type: "metric",
+    gridPos: { x: 0, y: 0, w: 6, h: 4 },
+    bind: { metric: "mrr" },
+  }
+  const resolved = (value: unknown, format: WidgetData["format"]): WidgetData => ({
+    widgetId: "mrr",
+    derivation: "mrr",
+    kind: "table",
+    value,
+    dataVersion: null,
+    error: null,
+    format,
+  })
+
+  it("shows the shared metric's value in the metric's own format", () => {
+    render(
+      <DashboardWidget
+        widget={KPI}
+        data={resolved([{ mrr: 0.125 }], { kind: "percent", precision: 1 })}
+        variables={{}}
+      />,
+    )
+    expect(screen.getByText("12.5%")).toBeInTheDocument()
+  })
+
+  it("says which metric came back empty rather than rendering a silent dash", () => {
+    render(<DashboardWidget widget={KPI} data={resolved([], null)} variables={{}} />)
+    expect(screen.getByText("no value for metric “mrr”")).toBeInTheDocument()
+  })
+})
+
+describe("tile actions", () => {
+  const widget: Widget = { id: "mrr", type: "text", gridPos: pos, content: "hi" }
+
+  it("offers no menu on a dashboard that cannot be edited", () => {
+    render(<DashboardWidget widget={widget} variables={{}} />)
+
+    expect(screen.queryByLabelText(/Tile actions/)).toBeNull()
+  })
+
+  it("edits and deletes through the menu", async () => {
+    const user = userEvent.setup()
+    const onEdit = vi.fn()
+    const onDelete = vi.fn()
+    render(<DashboardWidget widget={widget} variables={{}} onEdit={onEdit} onDelete={onDelete} />)
+
+    const trigger = screen.getByLabelText(/Tile actions/)
+    // Radix menus close on a window blur, which jsdom fires at pointerdown when nothing
+    // is focused; focusing first avoids it (jsdom only).
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Edit…" }))
+    expect(onEdit).toHaveBeenCalledOnce()
+
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }))
+    expect(onDelete).toHaveBeenCalledOnce()
+  })
+
+  it("keeps the menu from starting a drag", () => {
+    render(<DashboardWidget widget={widget} variables={{}} onEdit={() => {}} />)
+
+    // react-grid-layout's draggableCancel; without it, opening the menu drags the tile.
+    expect(screen.getByLabelText(/Tile actions/).className).toContain("dash-no-drag")
+  })
+})

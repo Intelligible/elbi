@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { outcomeStatus, sourceSyncStatus, tableSyncStatus } from "./sync-status"
+import { outcomeStatus, sourceSyncStatus, summarySyncStatus, tableSyncStatus } from "./sync-status"
 import type { SchemaView, SourceDetail } from "./warehouse"
 
 const table = (s: Partial<SchemaView> = {}): SchemaView => ({
@@ -38,6 +38,7 @@ const source = (schemas: SchemaView[], s: Partial<SourceDetail> = {}): SourceDet
   failedCount: 0,
   tableError: null,
   emptyTables: [],
+  emptyTablesAppend: false,
   schemas,
   ...s,
 })
@@ -57,7 +58,9 @@ describe("sourceSyncStatus", () => {
       }),
     )
     expect(st).toMatchObject({ health: "failed", label: "Failed", variant: "danger" })
-    expect(st.explanation).toBe("The last sync failed for 1 of 2 enabled tables: cannot merge")
+    expect(st.explanation).toMatch(
+      /^The last sync failed for 1 of 2 enabled tables: cannot merge\. /,
+    )
   })
 
   it("is failed when an enabled table failed even if the job reads idle", () => {
@@ -79,6 +82,28 @@ describe("sourceSyncStatus", () => {
     )
     expect(st).toMatchObject({ health: "synced", variant: "success" })
     expect(st.label).toBe(`Synced · ${(1234).toLocaleString()} rows`)
+  })
+
+  it("does not claim every table synced while a newly enabled one is still pending", () => {
+    const st = sourceSyncStatus(
+      source([table({ rowCount: 1000 }), table({ id: "u", status: "pending", rowCount: null })]),
+    )
+    expect(st).toMatchObject({
+      health: "partial",
+      label: "Synced · 1 of 2 tables",
+      variant: "neutral",
+    })
+    expect(st.explanation).toBe(
+      "1 enabled table has not been synced yet. Click Sync now, or wait for the schedule.",
+    )
+  })
+
+  // The headline is the worst state among enabled tables: a warning outranks "not synced yet".
+  it("still warns on an empty table while another enabled table is pending", () => {
+    const st = sourceSyncStatus(
+      source([table({ rowCount: 0 }), table({ id: "u", status: "pending", rowCount: null })]),
+    )
+    expect(st).toMatchObject({ health: "empty", variant: "warning" })
   })
 
   it("warns, not errors, when a successful sync landed no rows for a table", () => {
@@ -116,6 +141,31 @@ describe("tableSyncStatus", () => {
     expect(st.explanation).toContain("partly rewritten")
   })
 
+  // The service stores the raw exception text, which usually has no closing period.
+  it("ends the error with one period", () => {
+    for (const lastError of ["connection refused", "connection refused."])
+      expect(tableSyncStatus(table({ status: "error", lastError })).explanation).toMatch(
+        /^The last sync of this table failed: connection refused\. A failed/,
+      )
+    expect(
+      sourceSyncStatus(source([table({ status: "error", lastError: "connection refused." })]))
+        .explanation,
+    ).toMatch(/^The last sync failed for 1 of 1 enabled table: connection refused\. A failed/)
+    expect(tableSyncStatus(table({ status: "error", lastError: ". " })).explanation).toMatch(
+      /^The last sync of this table failed\. A failed/,
+    )
+  })
+
+  // An incremental rowCount is a running total, so 0 is not a full refresh landing nothing.
+  it("gives an empty incremental table no full-refresh explanation", () => {
+    const st = tableSyncStatus(
+      table({ rowCount: 0, syncType: "incremental", incrementalField: "updated_at" }),
+    )
+    expect(st.health).toBe("empty")
+    expect(st.explanation).not.toContain("full refresh")
+    expect(tableSyncStatus(table({ rowCount: 0 })).explanation).toContain("A full refresh")
+  })
+
   it("warns on a synced table with no rows", () => {
     expect(tableSyncStatus(table({ rowCount: 0 }))).toMatchObject({
       health: "empty",
@@ -138,5 +188,46 @@ describe("outcomeStatus", () => {
     expect(outcomeStatus({ ...base, rows: 0, ok: false, error: "x" }).health).toBe("failed")
     expect(outcomeStatus({ ...base, rows: 0, ok: true }).health).toBe("empty")
     expect(outcomeStatus({ ...base, rows: 5, ok: true }).health).toBe("synced")
+  })
+
+  // The API's outcome rows are what this run wrote (warehouse service: an incremental
+  // table's rowCount is the running total, its outcome only the rows appended).
+  it("reads 0 rows on an incremental table as nothing new, not as empty", () => {
+    const zero = { table: "custom__events", rows: 0, ok: true, error: null }
+    expect(outcomeStatus(zero, { syncType: "incremental", incrementalField: "ts" })).toMatchObject({
+      health: "synced",
+      label: "No new rows",
+      variant: "success",
+    })
+    expect(outcomeStatus(zero, { syncType: "full_refresh", incrementalField: null }).health).toBe(
+      "empty",
+    )
+    expect(outcomeStatus(zero, undefined).health).toBe("empty")
+  })
+
+  // The sync service appends only with a cursor column; without one it overwrites (sync.py).
+  it("warns on 0 rows from an incremental table with no cursor, which ran as a refresh", () => {
+    const zero = { table: "custom__events", rows: 0, ok: true, error: null }
+    expect(outcomeStatus(zero, { syncType: "incremental", incrementalField: null }).health).toBe(
+      "empty",
+    )
+  })
+})
+
+describe("summarySyncStatus", () => {
+  // The list only has the API's counts, but has to say what the source page says.
+  it.each([
+    ["a full refresh", table({ rowCount: 0 })],
+    ["an appending table", table({ rowCount: 0, syncType: "incremental", incrementalField: "id" })],
+  ])("explains an empty table in %s like the source page", (_, t) => {
+    const detail = source([t])
+    const row = {
+      ...detail,
+      enabledCount: 1,
+      enabledSyncedCount: 1,
+      emptyTables: [t.table],
+      emptyTablesAppend: t.syncType === "incremental",
+    }
+    expect(summarySyncStatus(row).explanation).toBe(sourceSyncStatus(detail).explanation)
   })
 })

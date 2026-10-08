@@ -842,6 +842,7 @@ def _source_dict(
     enabled = [s for s in schemas if s.should_sync]
     failed = [s for s in enabled if s.status == "error"]
     synced = [s for s in enabled if s.status == "synced"]
+    empty = [s for s in synced if s.row_count == 0]
     return {
         "id": source.id,
         "name": source.name,
@@ -861,7 +862,14 @@ def _source_dict(
         "enabled_rows": sum(s.row_count or 0 for s in synced),
         "failed_count": len(failed),
         "table_error": next((s.last_error for s in failed if s.last_error), None),
-        "empty_tables": [s.table for s in synced if s.row_count == 0],
+        "empty_tables": [s.table for s in empty],
+        # An appending table's row_count is a running total, so its 0 means nothing has
+        # arrived yet. "Appending" is run_sync's own test: incremental with a cursor.
+        "empty_tables_append": bool(empty)
+        and all(
+            s.sync_type == "incremental" and s.incremental_field is not None
+            for s in empty
+        ),
     }
 
 

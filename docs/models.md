@@ -37,7 +37,7 @@ run executes as a background job you can watch in the jobs bar), ask the chat, o
 call `train_automl` directly:
 
 ```python
-from elbi.ml import train_automl
+from elbi_core.ml import train_automl
 
 report = train_automl(
     rows,  # the dataset's records
@@ -93,7 +93,7 @@ version never displaces a champion silently: compare its held-out metrics and
 promote when they earn it.
 
 ```python
-from elbi.ml import ModelRegistry
+from elbi_core.ml import ModelRegistry
 
 registry = ModelRegistry("sqlite:///.elbi/mlflow.db")
 registry.models()  # every registered model, champion included
@@ -232,7 +232,7 @@ The chat model has four tools: `train_model`, `list_models`, `predict`, and
 `promote_model`. It is instructed to reach for them when you want a reusable model,
 and to keep using `derive` when the question is only whether predictive signal
 exists: training is for a deliverable, certification is for a claim. Reported
-numbers in a training answer are the held-out metrics from the report, and the
-oracle's verdict rides along in the run and version tags
+numbers in a training answer are the held-out metrics from the report. The
+signal check's verdict is stored in the run and version tags
 (`elbi.oracle_verdict`), so an audit can always separate certified signal
 from registered-but-unproven models.

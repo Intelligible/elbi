@@ -423,7 +423,7 @@ export function SourceDetailPage() {
 // A sync state as a badge whose hover says what the state means here.
 function SyncStatusBadge({ status }: { status: SyncStatus }) {
   return (
-    <Explained tip={status.explanation} docs={SYNC_DOCS.status}>
+    <Explained tip={status.explanation} docs={SYNC_DOCS.status} about={status.label}>
       <Badge variant={status.variant}>
         {status.health === "syncing" ? <Loader2 className="size-3 animate-spin" /> : null}
         {status.label}
@@ -750,41 +750,41 @@ function SourceDetailView({
             <SyncStatusBadge status={sourceSyncStatus(detail)} />
           </div>
           <p className="mt-0.5 font-mono text-xs text-text-tertiary">
-            <Explained tip={SYNC_HELP.enabled} docs={SYNC_DOCS.status}>
+            <Explained tip={SYNC_HELP.enabled} docs={SYNC_DOCS.status} about="tables enabled">
               {enabled} of {detail.schemas.length} tables enabled
             </Explained>
             {" · "}
-            <Explained tip={SYNC_HELP.lastSynced} docs={SYNC_DOCS.status}>
+            <Explained tip={SYNC_HELP.lastSynced} docs={SYNC_DOCS.status} about="last synced">
               {detail.lastSyncedAt
                 ? `last synced ${detail.lastSyncedAt.slice(0, 16).replace("T", " ")}`
                 : "never synced"}
             </Explained>
           </p>
         </div>
-        <Select
-          value={detail.syncFrequency}
-          onValueChange={async (f) => {
-            try {
-              setDetail(await setSyncFrequency(sourceId, f as SyncFrequency))
-              onChanged()
-            } catch (e) {
-              onError(e instanceof Error ? e.message : String(e))
-            }
-          }}
-        >
-          <Explained tip={SYNC_HELP.schedule} docs={SYNC_DOCS.schedule} asChild>
+        <Explained tip={SYNC_HELP.schedule} docs={SYNC_DOCS.schedule} about="Sync frequency">
+          <Select
+            value={detail.syncFrequency}
+            onValueChange={async (f) => {
+              try {
+                setDetail(await setSyncFrequency(sourceId, f as SyncFrequency))
+                onChanged()
+              } catch (e) {
+                onError(e instanceof Error ? e.message : String(e))
+              }
+            }}
+          >
             <SelectTrigger className="h-8 w-40 text-xs" aria-label="Sync frequency">
               <SelectValue />
             </SelectTrigger>
-          </Explained>
-          <SelectContent>
-            {FREQUENCY_LABELS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectContent>
+              {FREQUENCY_LABELS.map((f) => (
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Explained>
         <Button size="sm" onClick={sync} disabled={busy || enabled === 0}>
           {busy ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -837,12 +837,12 @@ function SourceDetailView({
               <TableHead className="px-4">Sync</TableHead>
               <TableHead className="px-4">Table</TableHead>
               <TableHead className="px-4">
-                <Explained tip={SYNC_HELP.method} docs={SYNC_DOCS.method}>
+                <Explained tip={SYNC_HELP.method} docs={SYNC_DOCS.method} about="Method">
                   Method
                 </Explained>
               </TableHead>
               <TableHead className="px-4">
-                <Explained tip={SYNC_HELP.rows} docs={SYNC_DOCS.status}>
+                <Explained tip={SYNC_HELP.rows} docs={SYNC_DOCS.status} about="Rows">
                   Rows
                 </Explained>
               </TableHead>
@@ -863,7 +863,12 @@ function SourceDetailView({
           <ul className="space-y-1 text-sm">
             {outcomes.map((o) => (
               <li key={o.table} className="flex items-center gap-2">
-                <SyncStatusBadge status={outcomeStatus(o)} />
+                <SyncStatusBadge
+                  status={outcomeStatus(
+                    o,
+                    detail.schemas.find((s) => s.table === o.table),
+                  )}
+                />
                 <span className="font-mono text-xs">{o.table}</span>
                 <span className="text-text-tertiary">
                   {o.ok ? `${o.rows.toLocaleString()} rows` : o.error}
@@ -947,7 +952,7 @@ function SchemaRow({
         </div>
       </TableCell>
       <TableCell className="px-4 py-2.5 tabular-nums text-text-secondary">
-        {schema.rowCount ?? EMPTY}
+        {schema.rowCount?.toLocaleString() ?? EMPTY}
       </TableCell>
       <TableCell className="px-4 py-2.5">
         <SyncStatusBadge status={tableSyncStatus(schema)} />

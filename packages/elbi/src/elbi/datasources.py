@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy import create_engine, pool, text
 from sqlalchemy.engine import URL
@@ -63,18 +64,36 @@ def connection_url(source: DataSource) -> str:
     ).render_as_string(hide_password=False)
 
 
+def _without_secret(source: DataSource, message: str) -> str:
+    """``message`` with the source's password masked out, in both forms it can take.
+
+    A driver may echo the password as handed to it, or the URL it holds written out in
+    full, where SQLAlchemy has percent-encoded it (``quote(secret, safe=" +")``), so
+    ``hunt@r2`` appears as ``hunt%40r2``.
+    """
+    secret = _password(source)
+    if not secret:
+        return message
+    # Encoded form first: the raw form can be a substring of it ("%2" -> "%252").
+    return message.replace(quote(secret, safe=" +"), "***").replace(secret, "***")
+
+
 def test_connection(source: DataSource) -> dict[str, Any]:
-    """Open a throwaway connection and run ``SELECT 1`` to validate the config."""
+    """Open a throwaway connection and run ``SELECT 1`` to validate the config.
+
+    The driver's own message is reported so a failure names the host and cause, with
+    the password masked: a dialect is free to quote the URL it was handed.
+    """
     try:
         engine = create_engine(connection_url(source), poolclass=pool.NullPool)
     except Exception as exc:  # bad URL / missing driver / unsupported kind
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": _without_secret(source, str(exc))}
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"ok": True}
     except SQLAlchemyError as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": _without_secret(source, str(exc))}
     finally:
         engine.dispose()
 

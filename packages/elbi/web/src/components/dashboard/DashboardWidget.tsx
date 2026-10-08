@@ -1,13 +1,19 @@
 // Renders a single dashboard widget from its spec and resolved data. Chart and map
 // widgets reuse the shared VizView (which routes a lat/long spec to the deck.gl map);
-// metric, table, and text are light renderers. A widget whose derivation failed shows
+// metric (a shared metric's value), table, and text are light renderers. A widget whose derivation failed shows
 // its error in place rather than blanking.
 
-import { AlertCircle, GripVertical } from "lucide-react"
+import { AlertCircle, GripVertical, MoreHorizontal } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Table,
   TableBody,
@@ -19,6 +25,7 @@ import {
 import { VizView } from "@/components/viz/VizView"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Widget, WidgetData } from "@/lib/dashboards"
+import { formatMetricValue } from "@/lib/metrics"
 import { EMPTY } from "@/lib/utils"
 
 type Row = Record<string, string | number>
@@ -31,65 +38,14 @@ function CenterNote({ children }: { children: ReactNode }) {
   return <div className="grid h-full place-items-center text-xs text-text-tertiary">{children}</div>
 }
 
-function formatValue(value: unknown, format?: string): string {
-  if (value === null || value === undefined) return EMPTY
-  const num = typeof value === "number" ? value : Number(value)
-  if (Number.isNaN(num)) return String(value)
-  if (format === "currency")
-    return num.toLocaleString(undefined, {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    })
-  if (format === "percent")
-    return num.toLocaleString(undefined, { style: "percent", maximumFractionDigits: 1 })
-  // Integers read cleanest with no decimals; a fractional KPI (a mean) keeps one.
-  return num.toLocaleString(undefined, {
-    maximumFractionDigits: Number.isInteger(num) ? 0 : 1,
-  })
-}
-
-function aggregate(rows: Row[], field: string, agg: string): number | undefined {
-  const nums = rows.map((r) => Number(r[field])).filter((n) => Number.isFinite(n))
-  if (nums.length === 0) return undefined
-  switch (agg) {
-    case "sum":
-      return nums.reduce((a, b) => a + b, 0)
-    case "mean":
-      return nums.reduce((a, b) => a + b, 0) / nums.length
-    case "min":
-      return Math.min(...nums)
-    case "max":
-      return Math.max(...nums)
-    default:
-      return undefined
-  }
-}
-
 function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
-  const viz = widget.viz ?? {}
-  const field = typeof viz.field === "string" ? viz.field : undefined
-  const agg = typeof viz.agg === "string" ? viz.agg : undefined
-  const rows = asRows(data?.value)
-  // A KPI is usually an aggregate over the bound derivation's rows: a count of rows,
-  // or a mean/sum/min/max of a column. Falling back to the first row's value (or a
-  // scalar result) covers a derivation that already returns a single figure.
-  let raw: unknown
-  if (agg === "count") {
-    raw = rows.length
-  } else if (agg && field) {
-    raw = aggregate(rows, field, agg)
-  } else if (field && rows.length > 0) {
-    raw = rows[0][field]
-  } else if (typeof data?.value === "number" || typeof data?.value === "string") {
-    raw = data?.value
-  }
+  // The tile shows its shared metric's single value (the one row, keyed by the metric's
+  // name), formatted as the metric defines, so the number and its display live in one
+  // place for every surface that shows it.
+  const name = widget.bind?.metric
+  const raw = name ? asRows(data?.value)[0]?.[name] : undefined
   if (raw === null || raw === undefined) {
-    // Say why it's blank: a metric needs a `viz.field` naming a column the bound derivation
-    // returns, or a scalar result, so a wrong field is obvious, not a silent dash.
-    const hint = field
-      ? `no column “${field}” in the result`
-      : "set viz.field to a column of the bound derivation"
+    const hint = name ? `no value for metric “${name}”` : "bind a metric to this tile"
     return (
       <div className="flex h-full flex-col justify-center">
         <div className="text-3xl font-semibold text-text-tertiary/40">{EMPTY}</div>
@@ -100,7 +56,7 @@ function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
   return (
     <div className="flex h-full flex-col justify-center">
       <div className="text-3xl font-semibold tabular-nums">
-        {formatValue(raw, typeof viz.format === "string" ? viz.format : undefined)}
+        {formatMetricValue(raw, data?.format ?? undefined)}
       </div>
     </div>
   )
@@ -122,7 +78,9 @@ function RowsTable({
   const columns = Array.isArray(viz.columns) ? (viz.columns as string[]) : Object.keys(rows[0])
   const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50
   return (
-    <div className="overflow-auto">
+    // Fills the tile rather than sizing to the rows: a taller tile shows more of them,
+    // and a shorter one scrolls, instead of leaving the extra height as padding.
+    <div className="h-full overflow-auto">
       <Table className="text-sm">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -167,12 +125,16 @@ export function DashboardWidget({
   variables,
   onCrossFilter,
   onDrillThrough,
+  onEdit,
+  onDelete,
 }: {
   widget: Widget
   data?: WidgetData
   variables: Record<string, unknown>
   onCrossFilter?: (emit: Record<string, unknown>) => void
   onDrillThrough?: () => void
+  onEdit?: () => void
+  onDelete?: () => void
 }) {
   const crossFilter = widget.interactions?.crossFilter
   const drillThrough = widget.interactions?.drillThrough
@@ -250,6 +212,28 @@ export function DashboardWidget({
             >
               Details →
             </Button>
+          ) : null}
+          {onEdit || onDelete ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Tile actions: ${widget.title ?? widget.id}`}
+                  className="dash-no-drag text-text-tertiary opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="dash-no-drag">
+                {onEdit ? <DropdownMenuItem onSelect={onEdit}>Edit…</DropdownMenuItem> : null}
+                {onDelete ? (
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                    Delete
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-tertiary/30 opacity-0 transition group-hover:opacity-100" />
         </div>

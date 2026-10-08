@@ -21,6 +21,7 @@ from elbi_core import (
     Bm25Retriever,
     Context,
     Dataset,
+    Derivation,
     Registry,
     RoutingExecutor,
     Runner,
@@ -1104,36 +1105,42 @@ def test_delete_survives_a_hook_that_does_its_own_teardown(tmp_path: Path) -> No
 def test_propose_reports_a_certified_derivation_to_on_author(
     tmp_path: Path,
 ) -> None:
-    """The served app's on_author hook receives the fields the store row needs.
+    """The served app's on_author hook receives the derivation and what only MCP knows.
 
-    The hook's record is what serve.py persists as the governed DB row (the
-    fix for IP-27 Finding 2's root cause: MCP-authored derivations previously
-    existed only in the live registry and sidecar, so /api/derivations and
-    trash never saw them).
+    The served app builds its store row from the derivation and the record, which is
+    what lists an MCP-authored derivation in /api/derivations and lets it be trashed
+    (IP-27 Finding 2). The name, format and claim travel on the derivation, and the
+    record carries the rest.
     """
     from elbi_cli.authored import AuthoredStore
 
     registry = Registry()
-    authored = []
+    authored: list[tuple[Derivation, dict[str, Any]]] = []
     server = build_server(
         registry,
         lambda: _routing_runner(registry),
         enable_propose=True,
         authored_store=AuthoredStore(tmp_path / "authored"),
-        on_author=lambda name, record: authored.append((name, record)),
+        on_author=lambda authored_derivation, record: authored.append(
+            (authored_derivation, record)
+        ),
     )
     source = "def probe(ctx):\n    return [{'x': 1}]\n"
     asyncio.run(
         server.call_tool("propose_derivation", {"name": "probe", "source": source})
     )
-    assert [name for name, _ in authored] == ["probe"]
-    record = authored[0][1]
+    assert len(authored) == 1
+    authored_derivation, record = authored[0]
+    assert authored_derivation.name == "probe"
+    assert authored_derivation.serve is not None
+    assert authored_derivation.serve.format == "table"
+    assert authored_derivation.claim is None
     assert record["source"] == source
-    assert record["format"] == "table"
     assert record["question"] == "Proposed via MCP"
-    # No claim was declared, so there is no oracle verdict to carry.
+    # No claim was declared, so nothing was verified and there is no verdict.
     assert record["verdict"] is None
-    assert record["claim"] is None
+    assert "format" not in record
+    assert "claim" not in record
 
 
 def test_proposed_derivation_is_not_served() -> None:

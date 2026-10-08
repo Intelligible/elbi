@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 
@@ -32,6 +33,8 @@ const DETAIL: DerivationDetail = {
   assumptions: [],
 }
 
+const CLAIM = { x: "amount", y: "risk" }
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/derivations/eff"]}>
@@ -60,5 +63,46 @@ describe("DerivationDetailPage certificate panel", () => {
     renderPage()
     await screen.findByText("does x move y?")
     expect(screen.queryByRole("link", { name: "Download certificate as JSON" })).toBeNull()
+  })
+})
+
+describe("DerivationDetailPage claim panel", () => {
+  it("marks a claim with no verdict as not checked", async () => {
+    vi.mocked(getDerivation).mockResolvedValue({ ...DETAIL, claim: CLAIM, verdict: null })
+    renderPage()
+    await screen.findByRole("heading", { name: "Claim" })
+    expect(screen.getByText("Not checked by the oracle.")).toBeInTheDocument()
+  })
+
+  it("shows no not-checked note on a claim the oracle found sound", async () => {
+    vi.mocked(getDerivation).mockResolvedValue({ ...DETAIL, claim: CLAIM, verdict: "sound" })
+    renderPage()
+    await screen.findByRole("heading", { name: "Claim" })
+    expect(screen.queryByText("Not checked by the oracle.")).toBeNull()
+  })
+})
+
+describe("DerivationDetailPage evidence export", () => {
+  it("offers the record and the page as HTML", async () => {
+    vi.mocked(getDerivation).mockResolvedValue({ ...DETAIL, rendered: "# Result" })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole("button", { name: /Export/ }))
+    expect((await screen.findByRole("menuitem", { name: /record/ })).getAttribute("href")).toBe(
+      "/api/exports/derivations/eff",
+    )
+    expect(screen.getByRole("menuitem", { name: /as an HTML page/ }).getAttribute("href")).toBe(
+      "/api/exports/derivations/eff/html",
+    )
+  })
+
+  it("offers the page snapshot even when there is no output", async () => {
+    vi.mocked(getDerivation).mockResolvedValue(DETAIL)
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole("button", { name: /Export/ }))
+    expect(
+      (await screen.findByRole("menuitem", { name: /as an HTML page/ })).getAttribute("href"),
+    ).toBe("/api/exports/derivations/eff/html")
   })
 })

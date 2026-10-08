@@ -2,6 +2,8 @@
 // widgets bind to certified derivations. Mirrors the throwing helper style in
 // notebooks.ts. The spec is the Dashboard manifest (camelCase, as stored).
 
+import type { Format } from "@/lib/metrics"
+
 export type WidgetType = "metric" | "chart" | "map" | "table" | "text" | "filter"
 
 export interface GridPos {
@@ -12,7 +14,8 @@ export interface GridPos {
 }
 
 // A tile binds either a certified derivation (with params) or a semantic-layer metric
-// (with groupBy/grain/filters). Exactly one of `derivation` or `metric` is set.
+// (with groupBy/grain/filters). Exactly one of `derivation` or `metric` is set, and a
+// `metric` tile always binds a metric. A filter value may be a "$var" reference.
 export interface Bind {
   derivation?: string
   params?: Record<string, unknown>
@@ -106,6 +109,8 @@ export interface WidgetData {
   value: unknown
   dataVersion: string | null
   error: string | null
+  // The bound metric's display format; null for a derivation-bound widget.
+  format?: Format | null
 }
 
 export interface Option {
@@ -160,6 +165,31 @@ export const deleteDashboard = (dashboardId: string) =>
 export const publishDashboard = (dashboardId: string) =>
   post<{ ok: boolean }>(`/api/dashboards/${id(dashboardId)}/publish`)
 
+/** The certified derivations a widget may bind, by name. */
+export async function bindableDerivations(): Promise<string[]> {
+  const rows = await json<{ name: string }[]>("/api/dashboards/catalog")
+  return rows.map((row) => row.name)
+}
+
+/** The DashboardSpec JSON Schema, for checking a spec as it is typed. */
+export const dashboardSchema = () => json<Record<string, unknown>>("/api/dashboards/schema")
+
+/** What a derivation reads, for the trail from a tile back to its sources. */
+export interface Provenance {
+  derivation: string[]
+  dataset: string[]
+}
+
+export async function derivationProvenance(name: string): Promise<Provenance> {
+  const body = await json<{ feedsFrom?: Partial<Provenance> }>(
+    `/api/lineage/provenance?node=derivation:${encodeURIComponent(name)}`,
+  )
+  return {
+    derivation: body.feedsFrom?.derivation ?? [],
+    dataset: body.feedsFrom?.dataset ?? [],
+  }
+}
+
 export async function resolvePage(
   dashboardId: string,
   page: string,
@@ -181,13 +211,27 @@ export async function variableOptions(dashboardId: string, variable: string): Pr
 }
 
 // A blank starter dashboard: one empty page, ready to add widgets to.
+/**
+ * A widget rebound to a shared metric. Filters stay; the derivation and the private
+ * aggregate's `viz.field`/`agg`/`format` go, since the metric now carries the value and
+ * its format.
+ */
+export function bindMetric(widget: Widget, metric: string): Widget {
+  const filters = widget.bind?.filters
+  const next: Widget = { ...widget, bind: filters?.length ? { metric, filters } : { metric } }
+  const { field: _f, agg: _a, format: _fmt, ...viz } = widget.viz ?? {}
+  if (Object.keys(viz).length) next.viz = viz
+  else delete next.viz
+  return next
+}
+
 export function starterSpec(name: string): DashboardSpec {
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
   return {
-    specVersion: "1.0",
+    specVersion: "2.0",
     kind: "Dashboard",
     name: slug || "dashboard",
     title: name,

@@ -411,6 +411,7 @@ def test_sources_list_summarizes_each_sources_last_sync(
 
     assert summary("people") == (1, 1, 3, 0, [])
     assert listed["people"]["tableError"] is None
+    assert listed["people"]["emptyTablesAppend"] is False  # no empty tables at all
     assert summary("empty") == (1, 1, 0, 0, ["csv__empty"])
     assert summary("gone") == (1, 0, 0, 1, [])
     assert listed["gone"]["tableError"]
@@ -424,6 +425,33 @@ def test_sources_list_summarizes_each_sources_last_sync(
     )
     assert tuple(off[k] for k in keys) == (0, 0, 0, 0, [])
     assert never["enabledCount"] == 1  # the detail response carries the same fields
+
+
+def test_sources_list_says_whether_its_empty_tables_append(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """An empty table that appends had nothing new; an empty refresh got nothing."""
+    db = tmp_path / "source.db"
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.commit()
+    source = _create(client, "evt", {"database": str(db)}, "sqlite")
+    schema = next(s for s in source["schemas"] if s["name"] == "events")
+
+    def synced_then_listed() -> dict[str, Any]:
+        client.post(f"/api/warehouse/sources/{source['id']}/sync")
+        rows = client.get("/api/warehouse/sources").json()
+        return next(s for s in rows if s["id"] == source["id"])
+
+    full = synced_then_listed()
+    assert full["emptyTables"] == ["sqlite__events"]
+    assert full["emptyTablesAppend"] is False
+
+    client.patch(
+        f"/api/warehouse/schemas/{schema['id']}",
+        json={"sync_type": "incremental", "incremental_field": "id"},
+    )
+    assert synced_then_listed()["emptyTablesAppend"] is True
 
 
 def test_delete_source_removes_it_and_its_table(

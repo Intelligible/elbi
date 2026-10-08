@@ -3,6 +3,27 @@
 This changelog tracks the Open Derivation Spec (ODS) only. It is independent of the SDK and
 CLI changelog at the repository root.
 
+## Dashboard Spec 2.0 (unreleased)
+
+Makes the shared metric the one definition of a dashboard number. Breaking.
+
+- A `metric` widget's `bind` MUST name a `metric`; a `derivation` binding, with the
+  tile aggregating rows through `viz.field` / `viz.agg`, is invalid. The tile takes its
+  value and display format from the metric, and MUST NOT set `groupBy` or `grain`.
+- A metric binding's filter `value` MAY reference a dashboard variable as `$name`, so a
+  metric tile follows the page's filters. A clause with no selection is dropped.
+- Migration: define each tile's figure as a metric over the derivation it bound
+  (`viz.agg` becomes the measure's `agg`, with `mean` spelled `average`; `viz.field`
+  becomes its `column`), then bind the tile as `{"metric": name}`. A derivation
+  `param` a tile passed becomes a metric `filter` or a dimension.
+
+## Dashboard 1.0 (unreleased)
+
+- A `text` widget MAY now `bind` a derivation that returns markdown, in place of its
+  own `content`; it MUST have exactly one of the two. This makes a governed derivation
+  the escape hatch for a bespoke visual. Backwards compatible: a `text` widget with
+  `content` is unaffected.
+
 ## 1.1 (unreleased)
 
 Adds provenance and lifecycle, supporting agent-authored derivations.
@@ -26,9 +47,6 @@ Adds provenance and lifecycle, supporting agent-authored derivations.
   definitions rather than only over rows. Such an input implies no `dependsOn`
   edge, and runners SHOULD version the derivation by the document's content.
   Backward compatible: existing `dataset` and `derivation` inputs are unaffected.
-- A dashboard `text` widget MAY carry a `bind` in place of `content`, naming a
-  derivation that returns markdown; it MUST NOT carry both. Backward
-  compatible: a text widget with `content` is unaffected.
 
 ## 1.0 (unreleased)
 

@@ -69,6 +69,8 @@ export interface SourceSummary {
   failedCount: number
   tableError: string | null
   emptyTables: string[]
+  // True when there are empty tables and every one of them appends (incremental with a cursor).
+  emptyTablesAppend: boolean
 }
 
 export interface SchemaView {

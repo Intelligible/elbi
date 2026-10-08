@@ -19,7 +19,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -41,6 +41,9 @@ from elbi_core import Job, JobState
 from elbi_core.tracking import CertifiedRun
 
 from .resources import ResourceType
+
+if TYPE_CHECKING:
+    from elbi_core import Derivation as CoreDerivation
 
 logger = logging.getLogger("elbi")
 
@@ -208,6 +211,49 @@ class Derivation(SQLModel, table=True):
     #: (:func:`Store.sync_repo_derivations`), which would silently clear this stamp, so
     #: trashing a repo derivation is refused rather than accepted and then undone.
     deleted_at: datetime | None = Field(default=None)
+
+
+def derivation_row(
+    derivation: CoreDerivation,
+    *,
+    source: str,
+    origin: str,
+    question: str = "",
+    conversation_id: str | None = None,
+    verdict: str | None = None,
+    rendered: str = "",
+    attestation: Mapping[str, Any] | None = None,
+    assumptions: Sequence[str] = (),
+    data_hash: str | None = None,
+) -> Derivation:
+    """Build the store row for ``derivation``.
+
+    The name, claim and serve contract are read off the derivation itself, so every
+    path that records a derivation writes the same row, and none can leave out a field
+    the derivation declares. The keywords are what only the caller knows.
+    ``serve_json`` is the spec's manifest form, plus ``deps`` when there are any, since
+    a derivation authored over MCP has no run history to keep them otherwise.
+    ``origin`` has no default: a silent one is how a row ends up with the wrong origin.
+    """
+    serve_manifest: dict[str, Any] | None = None
+    if derivation.serve is not None:
+        serve_manifest = derivation.serve.to_manifest()
+        if derivation.deps:
+            serve_manifest["deps"] = list(derivation.deps)
+    return Derivation(
+        name=derivation.name,
+        conversation_id=conversation_id,
+        question=question,
+        source=source,
+        claim_json=json.dumps(dict(derivation.claim)) if derivation.claim else None,
+        serve_json=json.dumps(serve_manifest) if serve_manifest is not None else None,
+        verdict=verdict,
+        rendered=rendered,
+        attestation_json=json.dumps(dict(attestation)) if attestation else None,
+        assumptions_json=json.dumps(list(assumptions)) if assumptions else None,
+        data_hash=data_hash,
+        origin=origin,
+    )
 
 
 class DerivationRun(SQLModel, table=True):
@@ -1003,8 +1049,8 @@ class MetricSnapshot(SQLModel, table=True):
     upper: float | None = Field(default=None)
     score: float | None = Field(default=None)
     reason: str = ""
-    # The source's oracle verdict at snapshot time: a monitored number rides on a
-    # certified metric/derivation, so an alert can say the moved number was verified.
+    # The source's verification verdict at snapshot time. A monitor only watches a
+    # certified metric or derivation, so an alert can say the moved number was verified.
     source_verdict: str | None = Field(default=None)
 
 
@@ -1062,7 +1108,7 @@ class Notification(SQLModel, table=True):
     body: str = ""
     target_type: str = ""  # "metric_monitor" | "orchestration_run" | "model_version"
     target_id: str = ""
-    verdict: str | None = None  # the source's oracle verdict, where the event has one
+    verdict: str | None = None  # the source's verification verdict, if any
     payload_json: str = "{}"  # full event payload, for a detail view
     read_at: datetime | None = Field(default=None, index=True)
     emailed_at: datetime | None = None
