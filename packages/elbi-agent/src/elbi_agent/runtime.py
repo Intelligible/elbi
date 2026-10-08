@@ -2190,10 +2190,13 @@ _TOOLSPECS: tuple[ToolSpec, ...] = (
         "write_dashboard",
         "Create a dashboard (omit dashboard_id) or replace an existing one's spec "
         "(pass dashboard_id). `spec` is the full Dashboard manifest: {specVersion: "
-        "'1.0', kind: 'Dashboard', name, title, variables?, pages: [{name, widgets: "
-        "[{id, type, gridPos: {x,y,w,h}, bind: {derivation, params}, viz?}]}]}. A "
-        "widget of type metric/chart/map/table binds a certified derivation; a param "
-        "value of '$var' resolves to a dashboard variable. Build a dashboard when the "
+        "'2.0', kind: 'Dashboard', name, title, variables?, pages: [{name, widgets: "
+        "[{id, type, gridPos: {x,y,w,h}, bind, viz?}]}]}. A widget of type metric "
+        "shows one number and binds a shared metric: bind {metric, filters?}; find it "
+        "with list_metrics, or define_metric first, never aggregate in the tile. A "
+        "chart/map/table binds a certified derivation {derivation, params} or a "
+        "metric {metric, groupBy?, grain?, filters?}. A param or filter value of "
+        "'$var' resolves to a dashboard variable. Build a dashboard when the "
         "user wants a reusable, shareable view of several derivations; for a one-off "
         "answer, use derive. Then call publish_dashboard.",
         {

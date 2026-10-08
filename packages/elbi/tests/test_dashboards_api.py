@@ -9,6 +9,7 @@ since dashboards never call it.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -122,6 +123,11 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
             {"region": "east", name: 20},
         ],
         metric_exists=lambda name: name == "region_revenue",
+        metric_format=lambda name: (
+            {"kind": "currency", "currency": "EUR"}
+            if name == "region_revenue"
+            else None
+        ),
     )
     app = create_app(
         load_datasets=lambda: DATASETS,
@@ -305,6 +311,79 @@ def test_publish_refuses_unknown_metric(client: TestClient) -> None:
     created = client.post("/api/dashboards", json=_metric_dashboard("nope")).json()
     published = client.post(f"/api/dashboards/{created['id']}/publish")
     assert published.status_code == 409
+
+
+def _kpi_tile(bind: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "specVersion": "2.0",
+        "kind": "Dashboard",
+        "name": "kpis",
+        "pages": [
+            {
+                "name": "main",
+                "widgets": [
+                    {
+                        "id": "kpi",
+                        "type": "metric",
+                        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+                        "bind": bind,
+                    },
+                    {
+                        "id": "rows",
+                        "type": "table",
+                        "gridPos": {"x": 6, "y": 0, "w": 12, "h": 8},
+                        "bind": {"derivation": "revenue"},
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def test_metric_tile_carries_its_metrics_format(client: TestClient) -> None:
+    created = client.post(
+        "/api/dashboards", json=_kpi_tile({"metric": "region_revenue"})
+    )
+    assert created.status_code == 200, created.text
+    resolved = client.post(
+        f"/api/dashboards/{created.json()['id']}/pages/main/data",
+        json={"variables": {}},
+    )
+    widgets = {w["widgetId"]: w for w in resolved.json()["widgets"]}
+    # The display format is the shared metric's, never the tile's.
+    assert widgets["kpi"]["format"] == {"kind": "currency", "currency": "EUR"}
+    assert widgets["rows"]["format"] is None
+
+
+def test_metric_tile_bound_to_a_derivation_is_refused(client: TestClient) -> None:
+    response = client.post(
+        "/api/dashboards",
+        json=_kpi_tile({"derivation": "revenue"}) | {"name": "private_kpi"},
+    )
+    assert response.status_code == 400
+    assert "binds a shared metric, not a derivation" in response.text
+
+
+def test_a_metric_tile_stored_before_2_0_is_refused_not_a_crash(
+    client: TestClient, tmp_path: Path
+) -> None:
+    # A dashboard saved before the metric-tile rule existed: write the old shape
+    # behind the API's back, since `create` and `save` now refuse it.
+    created = client.post(
+        "/api/dashboards", json=_kpi_tile({"metric": "region_revenue"})
+    )
+    dashboard_id = created.json()["id"]
+    open_store(f"sqlite:{tmp_path / 'app.db'}").save_dashboard(
+        dashboard_id, json.dumps(_kpi_tile({"derivation": "revenue"}))
+    )
+    for response in (
+        client.post(
+            f"/api/dashboards/{dashboard_id}/pages/main/data", json={"variables": {}}
+        ),
+        client.post(f"/api/dashboards/{dashboard_id}/publish"),
+    ):
+        assert response.status_code == 404, response.text
+        assert "binds a shared metric, not a derivation" in response.text
 
 
 def test_the_dashboard_schema_is_served_for_an_editor(client: TestClient) -> None:

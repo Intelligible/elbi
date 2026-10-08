@@ -16,13 +16,13 @@ the schema's constraints in Python. The bundled copy in the package is asserted
 byte-identical to the canonical `spec/` file by a test, so the two cannot drift.
 
 The spec is versioned on its own SemVer line, independent of the SDK. Each SDK
-release declares the spec version it implements via `elbi.SPEC_VERSION`.
+release declares the spec version it implements via `elbi_core.SPEC_VERSION`.
 
 ```python
-import elbi
+from elbi_core import SPEC_VERSION, is_valid_manifest, validate_manifest
 
-elbi.SPEC_VERSION  # -> "1.0"
+SPEC_VERSION  # -> "1.1"
 
-elbi.validate_manifest(my_manifest)  # raises SpecValidationError if invalid
-elbi.is_valid_manifest(my_manifest)  # -> bool
+validate_manifest(my_manifest)  # raises SpecValidationError if invalid
+is_valid_manifest(my_manifest)  # -> bool
 ```

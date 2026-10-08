@@ -53,7 +53,7 @@ approximate cardinality would save.
 Bind a dataset and load it as an engine handle rather than rows:
 
 ```python
-from elbi import profile_columns, suggest_contract, verify_contract
+from elbi_core import profile_columns, suggest_contract, verify_contract
 
 handle = bindings.load_backend("events", base_dir)  # scans events.parquet out of core
 profile = profile_columns(handle)  # the aggregate runs in the engine

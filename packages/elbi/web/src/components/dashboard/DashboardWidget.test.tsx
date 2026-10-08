@@ -130,6 +130,40 @@ describe("a text widget", () => {
   })
 })
 
+describe("DashboardWidget metric", () => {
+  const KPI: Widget = {
+    id: "mrr",
+    type: "metric",
+    gridPos: { x: 0, y: 0, w: 6, h: 4 },
+    bind: { metric: "mrr" },
+  }
+  const resolved = (value: unknown, format: WidgetData["format"]): WidgetData => ({
+    widgetId: "mrr",
+    derivation: "mrr",
+    kind: "table",
+    value,
+    dataVersion: null,
+    error: null,
+    format,
+  })
+
+  it("shows the shared metric's value in the metric's own format", () => {
+    render(
+      <DashboardWidget
+        widget={KPI}
+        data={resolved([{ mrr: 0.125 }], { kind: "percent", precision: 1 })}
+        variables={{}}
+      />,
+    )
+    expect(screen.getByText("12.5%")).toBeInTheDocument()
+  })
+
+  it("says which metric came back empty rather than rendering a silent dash", () => {
+    render(<DashboardWidget widget={KPI} data={resolved([], null)} variables={{}} />)
+    expect(screen.getByText("no value for metric “mrr”")).toBeInTheDocument()
+  })
+})
+
 describe("tile actions", () => {
   const widget: Widget = { id: "mrr", type: "text", gridPos: pos, content: "hi" }
 

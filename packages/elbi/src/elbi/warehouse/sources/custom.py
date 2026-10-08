@@ -60,6 +60,151 @@ def _declares_paginator(manifest: dict[str, Any]) -> bool:
     )
 
 
+#: The sibling key a columnar response names its fields in (PostHog's query API, and
+#: SQL-over-HTTP APIs generally): ``{"columns": [...], "results": [[...], ...]}``.
+_COLUMNS_KEY = "columns"
+
+#: Flags an API sets when it answered with only part of the result.
+_TRUNCATION_FLAGS = ("hasMore", "has_more")
+
+#: Paginator types that never ask for a second page, or only guess at one.
+_NON_PAGINATORS = frozenset({"single_page", "auto"})
+
+
+def _endpoints(manifest: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """Every endpoint config in the manifest, defaults included."""
+    defaults = manifest.get("resource_defaults")
+    if isinstance(defaults, dict) and isinstance(defaults.get("endpoint"), dict):
+        yield defaults["endpoint"]
+    for resource in manifest.get("resources", []):
+        if isinstance(resource, dict) and isinstance(resource.get("endpoint"), dict):
+            yield resource["endpoint"]
+
+
+def _fetches_more(manifest: dict[str, Any]) -> bool:
+    """Whether any declared paginator could fetch a page past the first.
+
+    Manifest-wide on purpose: one client session serves every resource, including the
+    parents a dependent resource reads, so a ``has_more`` meant for a real paginator
+    anywhere must not trip the truncation check.
+    """
+    declared = [manifest.get("client", {}).get("paginator")]
+    declared += [endpoint.get("paginator") for endpoint in _endpoints(manifest)]
+    for paginator in declared:
+        kind = paginator.get("type") if isinstance(paginator, dict) else paginator
+        if paginator and kind not in _NON_PAGINATORS:
+            return True
+    return False
+
+
+def _selector_paths(manifest: dict[str, Any]) -> list[tuple[str, ...]]:
+    """The declared ``data_selector`` values that are plain dotted key paths."""
+    paths = []
+    for endpoint in _endpoints(manifest):
+        selector = endpoint.get("data_selector")
+        if not isinstance(selector, str):
+            continue
+        keys = tuple(selector.removeprefix("$").lstrip(".").split("."))
+        if all(key and key.isidentifier() for key in keys):
+            paths.append(keys)
+    return paths
+
+
+def _name_rows(payload: dict[str, Any], paths: list[tuple[str, ...]]) -> bool:
+    """Zip a sibling ``columns`` list onto every row array found at ``paths``.
+
+    Strict: a row of the wrong width is an error, because zipping it short would land
+    values under the wrong names. Returns whether anything was rewritten.
+    """
+    rewritten = False
+    for path in paths:
+        parent: Any = payload
+        for key in path[:-1]:
+            parent = parent.get(key) if isinstance(parent, dict) else None
+        if not isinstance(parent, dict):
+            continue
+        rows, columns = parent.get(path[-1]), parent.get(_COLUMNS_KEY)
+        if not (isinstance(rows, list) and rows and isinstance(columns, list)):
+            continue
+        if not all(isinstance(name, str) for name in columns):
+            continue
+        if not all(isinstance(row, list) for row in rows):
+            continue
+        records = []
+        for index, row in enumerate(rows):
+            if len(row) != len(columns):
+                raise ValueError(
+                    f"row {index} of {path[-1]!r} has {len(row)} values but "
+                    f"{_COLUMNS_KEY!r} names {len(columns)} fields"
+                )
+            records.append(dict(zip(columns, row, strict=True)))
+        parent[path[-1]] = records
+        rewritten = True
+    return rewritten
+
+
+def _inspecting_session(manifest: dict[str, Any]) -> Any:
+    """The dlt session, with each response checked before ``rest_api`` reads it.
+
+    dlt keeps only the record list a response holds, so anything beside it (the
+    field names of a columnar answer, a flag saying the answer is partial) has to be
+    read here, while the whole body is still in hand. Wrapping ``send`` runs after
+    dlt's response hooks, so its error handling and redaction of failed requests stay
+    untouched.
+    """
+    from ._dlt import detect_records_path, rest_api_session
+
+    session = rest_api_session()
+    send = session.send
+    selectors = _selector_paths(manifest)
+    guard = not _fetches_more(manifest)
+
+    def inspected(request: Any, **kwargs: Any) -> Any:
+        response = send(request, **kwargs)
+        content = response.content or b""
+        flagged = guard and any(f'"{f}"'.encode() in content for f in _TRUNCATION_FLAGS)
+        if not response.ok or not (flagged or f'"{_COLUMNS_KEY}"'.encode() in content):
+            return response
+        try:
+            payload = response.json()
+        except ValueError:
+            return response
+        if not isinstance(payload, dict):
+            return response
+        for flag in _TRUNCATION_FLAGS:
+            if guard and payload.get(flag) is True:
+                raise ValueError(
+                    f"The response says {flag}: true, so it holds only part of the "
+                    "result, and no paginator is declared that would fetch the rest. "
+                    "Declare one, or narrow the request so it fits in one response "
+                    "(a PostHog HogQL query needs a LIMIT above its row count)."
+                )
+        if _name_rows(payload, [*selectors, detect_records_path(payload)]):
+            response._content = json.dumps(payload).encode()
+        return response
+
+    session.send = inspected
+    return session
+
+
+def _inspected(manifest: dict[str, Any]) -> dict[str, Any]:
+    """The manifest with a client session that inspects every response."""
+    client = {**manifest["client"], "session": _inspecting_session(manifest)}
+    return {**manifest, "client": client}
+
+
+def _as_record(record: Any, resource: str) -> dict[str, Any]:
+    """The record itself, or an error: a non-object is never dropped quietly."""
+    if isinstance(record, dict):
+        return record
+    raise ValueError(
+        f"Resource {resource!r} returned a {type(record).__name__} where a record (a "
+        "JSON object) was expected. A columnar response needs its field names in a "
+        f"sibling {_COLUMNS_KEY!r} list; otherwise point `data_selector` at a list of "
+        "objects."
+    )
+
+
 @SourceRegistry.register
 class CustomSource(SimpleSource):
     """Sync any REST API from a dltHub-shaped manifest (a Custom REST source)."""
@@ -213,9 +358,10 @@ class CustomSource(SimpleSource):
             try:
                 from ._dlt import rest_api_source
 
-                source = rest_api_source(manifest)
+                source = rest_api_source(_inspected(manifest))
                 resource = source.resources[name].add_limit(max_time=_PROBE_TIMEOUT)
-                for _record in resource:
+                for record in resource:
+                    _as_record(record, name)
                     outcome["record"] = True
                     break
             except Exception as exc:  # any failure is the operator's to see
@@ -257,17 +403,20 @@ class CustomSource(SimpleSource):
         return [SourceSchema(name=name) for name in names]
 
     def extract(self, inputs: SourceInputs) -> Iterator[pa.Table]:
-        """Run the chosen resource through dlt's ``rest_api``, batched to Arrow."""
+        """Run the chosen resource through dlt's ``rest_api``, batched to Arrow.
+
+        A record that is not an object fails the sync rather than being skipped, so an
+        API whose shape the manifest does not describe cannot report an empty success.
+        """
         from ._dlt import rest_api_source
 
         manifest = self._assemble(inputs.config)
-        source = rest_api_source(manifest)
+        source = rest_api_source(_inspected(manifest))
         if inputs.schema not in source.resources:
             raise ValueError(f"resource {inputs.schema!r} not found in the manifest")
         batch: list[dict[str, Any]] = []
         for record in source.resources[inputs.schema]:
-            if isinstance(record, dict):
-                batch.append(record)
+            batch.append(_as_record(record, inputs.schema))
             if len(batch) >= _BATCH:
                 yield pa.Table.from_pylist(batch)
                 batch = []

@@ -16,7 +16,7 @@ Search for an existing piece before adding one. In particular:
 
 | Need | Use | Not |
 |---|---|---|
-| the oracle's verdict | `<VerdictBadge>` | a raw badge / colored span |
+| a verification verdict | `<VerdictBadge>` | a raw badge / colored span |
 | a status pill | `<Badge variant="...">` | an ad-hoc styled span |
 | a data grid | `components/ui/data-table` | a raw `<table>` |
 | a menu / dropdown | `components/ui/dropdown-menu`, `command` | a hand-rolled popover |

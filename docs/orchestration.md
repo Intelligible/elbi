@@ -24,8 +24,8 @@ A run materializes a selection in dependency order (from the lineage graph):
 
 Each asset is materialized through the project runner; fresh ones are skipped, and a
 transient failure is retried with backoff. The run records a per-asset result (status
-(`succeeded` / `failed` / `skipped`), attempts, duration, and the oracle verdict) so you
-can see exactly what ran and what failed.
+(`succeeded` / `failed` / `skipped`), attempts, duration, and the derivation's
+verification verdict) so you can see exactly what ran and what failed.
 
 The retry count is configurable (Schedules tab, or `/api/orchestration/settings`); a
 failing run can be **retried from failure** (re-materializing only the failed assets and

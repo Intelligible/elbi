@@ -41,6 +41,7 @@ import { dashboardExportUrl, dashboardSnapshotUrl } from "@/lib/chat"
 import type { Dashboard, DashboardSpec, Variable, Widget, WidgetData } from "@/lib/dashboards"
 import {
   bindableDerivations,
+  bindMetric,
   dashboardSchema,
   getDashboard,
   publishDashboard,
@@ -96,6 +97,7 @@ function DashboardBoard({ id }: { id: string }) {
   const [loading, setLoading] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [resolveError, setResolveError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -124,14 +126,26 @@ function DashboardBoard({ id }: { id: string }) {
 
   const spec = dashboard?.spec
 
+  // Only the latest resolve may write: an older one finishing late would show its
+  // page's figures, or its error, over the current ones.
+  const resolveSeq = useRef(0)
   const resolve = useCallback(async () => {
     if (!spec || !pageName) return
+    const seq = ++resolveSeq.current
     setLoading(true)
+    setResolveError(null)
     try {
       const data = await resolvePage(id, pageName, variables)
+      if (seq !== resolveSeq.current) return
       setWidgets(Object.fromEntries(data.map((d) => [d.widgetId, d])))
+    } catch (err) {
+      if (seq !== resolveSeq.current) return
+      // Callers fire and forget (`void resolve()`), so a refused page must surface here.
+      // The old figures belong to other filters or another page, so they go too.
+      setWidgets({})
+      setResolveError(`Tiles not loaded: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
-      setLoading(false)
+      if (seq === resolveSeq.current) setLoading(false)
     }
   }, [id, pageName, spec, variables])
 
@@ -292,7 +306,7 @@ function DashboardBoard({ id }: { id: string }) {
           // The JSON tab hands back the whole widget, so it replaces rather than merges:
           // a key deleted in the text has to actually go.
           if (patch.widget) return patch.widget as unknown as Widget
-          const next: Widget = { ...w }
+          let next: Widget = { ...w }
           // An emptied title is no title, rather than an empty line above the body.
           if (patch.title !== undefined) {
             if (patch.title.trim()) next.title = patch.title.trim()
@@ -302,7 +316,7 @@ function DashboardBoard({ id }: { id: string }) {
           if (patch.derivation !== undefined && w.bind) {
             next.bind = { ...w.bind, derivation: patch.derivation }
           }
-          if (patch.viz !== undefined) next.viz = patch.viz
+          if (patch.metric !== undefined) next = bindMetric(next, patch.metric)
           if (patch.gridPos !== undefined) next.gridPos = patch.gridPos
           return next
         }),
@@ -451,6 +465,15 @@ function DashboardBoard({ id }: { id: string }) {
         </div>
       ) : null}
 
+      {resolveError ? (
+        <div
+          role="alert"
+          className="shrink-0 border-b border-danger/30 bg-danger-tint px-6 py-2 text-sm text-danger"
+        >
+          {resolveError}
+        </div>
+      ) : null}
+
       <FilterBar
         dashboardId={id}
         variables={pageVariables(spec, pageName)}
@@ -552,7 +575,8 @@ function DashboardBoard({ id }: { id: string }) {
             <p className="text-xs text-text-tertiary">
               A widget’s <code>bind</code> is a certified derivation (
               <code>{'{"derivation": "name", "params": {…}}'}</code>) or a metric (
-              <code>{'{"metric": "name", "groupBy": ["…"], "grain": "month"}'}</code>).
+              <code>{'{"metric": "name", "groupBy": ["…"], "grain": "month"}'}</code>). A{" "}
+              <code>metric</code> tile always binds a metric from the Metrics page.
             </p>
           </DialogHeader>
           <JsonEditor value={draft} label="Dashboard spec" dark={dark} onChange={setDraft} />

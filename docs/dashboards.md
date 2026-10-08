@@ -6,7 +6,7 @@ parameters, and declares how that derivation's already-verified, already-cached 
 is rendered. The derivation is the semantic layer; the dashboard is the layout.
 
 That separation is what you trust. A published dashboard can only
-bind derivations the oracle has certified, so every number a viewer sees has been
+bind certified derivations, so every number a viewer sees has been
 verified, not merely rendered from whatever SQL happened to sit behind a tile.
 
 ## The shape of a dashboard
@@ -17,7 +17,7 @@ pages, and, on each page, a grid of widgets:
 
 ```json
 {
-  "specVersion": "1.0",
+  "specVersion": "2.0",
   "kind": "Dashboard",
   "name": "revenue_health",
   "title": "Revenue Health",
@@ -38,8 +38,10 @@ pages, and, on each page, a grid of widgets:
           "id": "mrr",
           "type": "metric",
           "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
-          "bind": { "derivation": "monthly_revenue", "params": { "region": "$region" } },
-          "viz": { "field": "mrr", "format": "currency" }
+          "bind": {
+            "metric": "mrr",
+            "filters": [{ "column": "region", "op": "in", "value": "$region" }]
+          }
         },
         {
           "id": "trend",
@@ -76,7 +78,7 @@ moved.
 
 | Type | Renders |
 | --- | --- |
-| `metric` | A KPI/stat card reading one field from the bound derivation. |
+| `metric` | A KPI/stat card showing one shared metric's value, in the metric's format. |
 | `chart` | A [grammar-of-graphics spec](result-history.md) over the derivation's rows. |
 | `map` | A geographic layer over a spatially-gated derivation. |
 | `table` | The derivation's rows, with paging and conditional formatting. |
@@ -94,6 +96,23 @@ sandboxed like everything else:
 
 A text widget takes `content` or `bind`, never both — otherwise which one renders would
 be decided somewhere other than the spec.
+
+## Metric tiles bind shared metrics
+
+A `metric` tile never computes its own number. It binds a metric from the
+[semantic layer](metrics.md), the same definition the Metrics page, the agent, and
+every other dashboard read, and shows that metric's value in the metric's own format:
+
+```json
+{ "id": "mrr", "type": "metric", "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+  "bind": { "metric": "mrr", "filters": [{ "column": "region", "op": "in", "value": "$region" }] } }
+```
+
+So "MRR" means one thing wherever it appears, and changing its definition changes it
+everywhere at once (lineage lists every dashboard that displays it). A filter `value`
+of `"$name"` follows a dashboard variable; clearing that control drops the filter. To
+slice a metric by a dimension or over time, bind it to a `chart` or `table` with
+`groupBy` and `grain`; a `metric` tile is one number.
 
 ## Filters, variables, and interactions
 

@@ -1245,7 +1245,7 @@ function SaveButton({
 }
 
 // The one-click loop in one dialog: draft from a question (or the editor SQL), read
-// the oracle's verdict, certify. Certify reuses the promote path and stays disabled
+// whether it verified, certify. Certify reuses the promote path and stays disabled
 // unless the draft verified, so a rejected draft can never serve.
 function DraftButton({
   sql,

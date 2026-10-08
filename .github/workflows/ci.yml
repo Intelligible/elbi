@@ -63,14 +63,17 @@ jobs:
             code:
               - "packages/**"
               - "spec/**"
+              - "tests/**"
               - "pyproject.toml"
               - "uv.lock"
               - ".github/workflows/ci.yml"
             docs:
               - "docs/**"
+              - "README.md"
               - "mkdocs.yml"
               - "packages/**"
               - "pyproject.toml"
+              - "tests/test_docs_imports.py"
               - ".github/workflows/ci.yml"
 
   # The workflows themselves, checked like any other source. Both tools caught real things
@@ -471,6 +474,10 @@ jobs:
       - run: uv sync --locked --all-extras --dev
       - name: Build docs (strict)
         run: uv run mkdocs build --strict
+      # Here as well as in `test`, because `test` never starts on a docs-only change, which
+      # is the change most likely to break a documented import.
+      - name: Documented imports resolve
+        run: uv run pytest tests/test_docs_imports.py -q
 
   # A change a user would notice should say so in the changelog before it merges, rather than
   # being reconstructed from the commit log at release time by whoever cuts the release.
@@ -490,7 +497,7 @@ jobs:
           fetch-depth: 0
           # The checkout token is not needed after cloning.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Check for a news fragment
         # `bash` rather than the default so the pipe below fails loudly if the label query
         # is refused.

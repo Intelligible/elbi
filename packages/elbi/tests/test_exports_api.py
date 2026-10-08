@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 from elbi import create_app
 from elbi.dashboards import DashboardService
 from elbi.db import Derivation, Secret, open_store
+from elbi.derivation_html import render as render_derivation_html
 from elbi.metrics import MetricService
 from elbi.monitoring import MonitorService
 from elbi.notebooks import NotebookService
@@ -42,6 +43,7 @@ from elbi_core import (
 )
 from elbi_core.registry import use_registry
 from elbi_core.sandbox import ComputeProfile, ComputeProfiles
+from elbi_core.tracking import CertifiedRun
 
 pytest.importorskip("duckdb")
 pytest.importorskip("pyarrow")
@@ -171,6 +173,154 @@ def test_uncertified_derivation_exports_with_a_null_certificate(
         resp = http.get("/api/exports/derivations/draft")
     assert resp.status_code == 200, resp.text
     assert resp.json()["certificate"] is None
+
+
+# -- derivation output as HTML ----------------------------------------------------
+
+
+def test_derivation_output_exports_as_an_html_page(parts: tuple[Any, Any]) -> None:
+    store, app = parts
+    store.save_derivation(
+        Derivation(
+            name="posture",
+            question="why it costs what it does",
+            source="def posture(ctx): ...",
+            verdict="sound",
+            serve_json=json.dumps({"format": "markdown", "title": "Posture cost"}),
+            narrative="Most of it was a **one-off** scan.",
+            rendered="# Posture\n\n| a | b |\n|---|---|\n| 1 | 2 |\n",
+        )
+    )
+    with TestClient(app) as http:
+        resp = http.get("/api/exports/derivations/posture/html")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/html")
+    assert 'filename="posture.html"' in resp.headers["content-disposition"]
+    page = resp.text
+    assert "<title>Posture cost</title>" in page
+    assert "<h1>Posture</h1>" in page
+    assert "<td>1</td>" in page, "GFM tables render, as they do in the app"
+    assert "<strong>one-off</strong>" in page
+    assert "Verified output" in page
+    assert "default-src 'none'" in page
+    assert "script-src" not in page
+
+
+def test_derivation_html_export_snapshots_the_whole_page(
+    parts: tuple[Any, Any],
+) -> None:
+    """Every section the derivation page shows travels, not just its output."""
+    store, app = parts
+    _save_derivation(store, name="eff", certified=True)
+    store.append_run(
+        CertifiedRun(
+            name="eff",
+            derivation_version="v1abcdef",
+            verdict="sound",
+            created_at="2026-10-01T00:00:00+00:00",
+            estimate=2.0,
+            estimate_label="in y per unit x",
+            data_hash="d" * 64,
+            claim={"x": "x", "y": "y"},
+        )
+    )
+    with TestClient(app) as http:
+        page = http.get("/api/exports/derivations/eff/html").text
+    assert "does x move y for &#x27;eff&#x27;?" in page, "the question"
+    assert "d" * 64 in page, "the data hash"
+    assert "Verification · 1 checks run by the oracle" in page
+    assert "<b>effect</b>: holds" in page
+    assert "Result history · 1 version" in page
+    assert "2 in y per unit x" in page
+    assert "first certified version" in page
+    assert "&quot;x&quot;: &quot;x&quot;" in page, "the claim"
+    assert "def eff(ctx): ..." in page, "the source"
+
+
+def test_derivation_html_export_without_output_still_exports(
+    parts: tuple[Any, Any],
+) -> None:
+    """A page snapshot needs no output: it shows what the page shows, output or not."""
+    store, app = parts
+    _save_derivation(store, name="bare", certified=False)
+    with TestClient(app) as http:
+        resp = http.get("/api/exports/derivations/bare/html")
+        assert http.get("/api/exports/derivations/nope/html").status_code == 404
+    assert resp.status_code == 200
+    assert "def bare(ctx): ..." in resp.text
+    assert ">Output<" not in resp.text
+    assert "Not checked by the oracle." in resp.text, "as the claim panel says"
+
+
+def test_derivation_html_export_honours_withholding(parts: tuple[Any, Any]) -> None:
+    """A withheld output is left out of the page, as the detail view leaves it out."""
+    store, app = parts
+    store.save_derivation(
+        Derivation(name="secret", source="def secret(ctx): ...", rendered="SECRET ROWS")
+    )
+    app.state.withhold_rendering = lambda name: name == "secret"
+    with TestClient(app) as http:
+        page = http.get("/api/exports/derivations/secret/html").text
+    assert "SECRET ROWS" not in page
+    assert "def secret(ctx): ..." in page
+
+
+def test_derivation_html_export_sanitizes_raw_html(parts: tuple[Any, Any]) -> None:
+    store, app = parts
+    meta = '<meta http-equiv="refresh" content="0;url=https://example.com">'
+    store.save_derivation(
+        Derivation(
+            name="notes",
+            source="def notes(ctx): ...",
+            serve_json=json.dumps({"format": "table"}),
+            rendered=(
+                "| note | n |\n|---|---:|\n"
+                f"| {meta} | 1 |\n| <style>.meta{{x:y}}</style> | 2 |\n"
+                "| due <b>soon</b> | 3 |"
+            ),
+        )
+    )
+    with TestClient(app) as http:
+        page = http.get("/api/exports/derivations/notes/html").text
+    assert 'http-equiv="refresh"' not in page, "a synced cell must not navigate"
+    assert ".meta{x:y}" not in page, "output must not restyle the verdict line"
+    assert "due <b>soon</b>" in page, "safe markup renders, as it does in the app"
+    assert '<td style="text-align:right">3</td>' in page, "column alignment survives"
+
+
+def test_derivation_html_dates_the_export_for_people() -> None:
+    central = timezone(timedelta(hours=-5))
+    page = render_derivation_html(
+        name="d",
+        title="T",
+        output="x",
+        exported_at=datetime(2026, 10, 7, 14, 17, 44, 849144, tzinfo=central),
+    )
+    want = '<time datetime="2026-10-07T19:17:44+00:00">7 Oct 2026, 19:17 UTC</time>'
+    assert want in page
+
+
+@pytest.mark.parametrize(
+    ("verdict", "status"),
+    [
+        ("unsound", '<p class="meta">Not sound. Exported'),
+        ("INCONCLUSIVE", '<p class="meta">Inconclusive. Exported'),
+        ("sound", '<p class="meta">Verified. Exported'),
+        ("<odd>", '<p class="meta">&lt;odd&gt;. Exported'),
+        (None, '<p class="meta">Exported'),
+    ],
+)
+def test_derivation_html_names_the_verdict_as_the_app_badge(
+    verdict: str | None, status: str
+) -> None:
+    page = render_derivation_html(
+        name="d",
+        title="T",
+        output="x",
+        verdict=verdict,
+        exported_at=datetime(2026, 10, 7, tzinfo=timezone.utc),
+    )
+    assert status in page
 
 
 # -- AC-2: dashboard + metric export --------------------------------------------------
