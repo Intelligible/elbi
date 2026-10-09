@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { outcomeStatus, sourceSyncStatus, tableSyncStatus } from "./sync-status"
+import { outcomeStatus, sourceSyncStatus, summarySyncStatus, tableSyncStatus } from "./sync-status"
 import type { SchemaView, SourceDetail } from "./warehouse"
 
 const table = (s: Partial<SchemaView> = {}): SchemaView => ({
@@ -32,6 +32,13 @@ const source = (schemas: SchemaView[], s: Partial<SourceDetail> = {}): SourceDet
   schemaCount: schemas.length,
   syncedCount: schemas.filter((x) => x.status === "synced").length,
   rows: 0,
+  enabledCount: 0,
+  enabledSyncedCount: 0,
+  enabledRows: 0,
+  failedCount: 0,
+  tableError: null,
+  emptyTables: [],
+  emptyTablesAppend: false,
   schemas,
   ...s,
 })
@@ -204,5 +211,23 @@ describe("outcomeStatus", () => {
     expect(outcomeStatus(zero, { syncType: "incremental", incrementalField: null }).health).toBe(
       "empty",
     )
+  })
+})
+
+describe("summarySyncStatus", () => {
+  // The list only has the API's counts, but has to say what the source page says.
+  it.each([
+    ["a full refresh", table({ rowCount: 0 })],
+    ["an appending table", table({ rowCount: 0, syncType: "incremental", incrementalField: "id" })],
+  ])("explains an empty table in %s like the source page", (_, t) => {
+    const detail = source([t])
+    const row = {
+      ...detail,
+      enabledCount: 1,
+      enabledSyncedCount: 1,
+      emptyTables: [t.table],
+      emptyTablesAppend: t.syncType === "incremental",
+    }
+    expect(summarySyncStatus(row).explanation).toBe(sourceSyncStatus(detail).explanation)
   })
 })
