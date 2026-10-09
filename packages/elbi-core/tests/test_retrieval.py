@@ -22,6 +22,7 @@ from elbi_core import serve
 from elbi_core.derivation import Derivation
 from elbi_core.retrieval import (
     Bm25Retriever,
+    CachedEmbedder,
     EmbeddingRetriever,
     HybridRetriever,
     OnnxEmbedder,
@@ -214,6 +215,23 @@ class _StubEmbedder:
                     vector[concept] += 1.0
             vectors.append(vector)
         return vectors
+
+
+def test_cached_embedder_memoizes_documents_but_not_queries() -> None:
+    class _Counting:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
+            self.calls.extend(texts)
+            return [[1.0, float(len(text))] for text in texts]
+
+    inner = _Counting()
+    cached = CachedEmbedder(inner)
+    assert cached.embed(["a", "b", "a"]) == cached.embed(["a", "b", "a"])
+    assert inner.calls == ["a", "b"]  # deduplicated within a call, memoized across
+    assert cached.embed_query("q") == cached.embed_query("q")
+    assert inner.calls == ["a", "b", "q", "q"]  # queries go straight through
 
 
 def test_embedding_finds_synonym_that_lexical_misses() -> None:

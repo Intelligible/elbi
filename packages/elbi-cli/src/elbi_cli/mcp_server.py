@@ -47,6 +47,7 @@ from elbi_core import (
     Derivation,
     InMemoryJobStore,
     JobRunner,
+    ManualCertification,
     Param,
     Registry,
     Runner,
@@ -94,17 +95,15 @@ from elbi_core import (
     verify_survival,
     verify_trend,
 )
-from elbi_core import (
-    serve as serve_builders,
-)
 from elbi_core.cache import LocalCacheStore, derivation_tag
 from elbi_core.config import ColumnSpec, DatasetSpec
 from elbi_core.data import Table
 from elbi_core.errors import CertificateError, ElbiError
+from elbi_core.retrieval import CachedEmbedder
 from elbi_core.tracking import CertifiedRun, RunLog, run_from_author
 from elbi_core.tracking.mlflow import emit_run
 
-from .authored import AuthoredStore
+from .authored import SERVE_BUILDERS, AuthoredStore
 from .serving import ServeOutcome, Serving
 
 logger = logging.getLogger(__name__)
@@ -349,7 +348,10 @@ def build_server(
     served immediately; it defaults to auto-certify-on-verify
     (:data:`~elbi.authoring.DEFAULT_CERTIFICATION`). Pass
     :class:`~elbi.ManualCertification` to require an explicit
-    ``elbi certify`` instead.
+    ``elbi certify`` instead. A ``components`` proposal is held for ``elbi certify``
+    by default whatever it verified to, because its check is structural (each
+    statement carries evidence) and says nothing about truth; an explicit policy
+    applies to it like any other.
 
     ``audit`` is the observability seam: the default records nothing, while a
     deployment passes a sink that writes an append-only trail of every invocation.
@@ -869,11 +871,16 @@ def _register_component_search(
     :func:`elbi_core.components.search_components`'s docstring for why): each call
     re-serves every eligible derivation through the same :class:`Serving` cache
     ``run_<name>`` uses, so it costs nothing beyond what is already cached, then
-    ranks the combined corpus. There is no persistence across restarts and no
+    ranks the combined corpus off the event loop, with statement vectors memoized
+    by text across calls. There is no persistence across restarts and no
     incremental re-indexing; :mod:`elbi.search`'s chunked, persisted index (already
     used for a derivation's own fields) is the right home once this needs to run at
     real scale.
     """
+    # Wrapped once, outside the handler, so statement vectors survive across calls:
+    # a corpus of N statements costs N embeddings the first time and only the
+    # query's after.
+    cached = None if embedder is None else CachedEmbedder(embedder)
 
     async def search_components_tool(query: str, limit: int = 5) -> CallToolResult:
         # Recomputed per call, like search_derivations: a derivation can be authored
@@ -902,7 +909,9 @@ def _register_component_search(
             if outcome.structured is not None:
                 corpus.extend(outcome.structured.get("components", []))
 
-        matches = search_components(query, corpus, limit=limit, embedder=embedder)
+        matches = await asyncio.to_thread(
+            search_components, query, corpus, limit=limit, embedder=cached
+        )
         if not matches:
             text = f"No components match {query!r}."
         else:
@@ -915,7 +924,7 @@ def _register_component_search(
         )
 
     search_components_tool.__doc__ = (
-        "Search grounded, natural-language facts (OpenReasoningComponents) drawn "
+        "Search the natural-language facts (OpenReasoningComponents) drawn "
         "from every served components-format derivation. Returns matched "
         "statements as text, and the full component objects -- with evidence, "
         "relations and provenance -- as structured content."
@@ -1950,7 +1959,14 @@ def _register_propose(
                     claim=claim,
                     contract=data_contract,
                     deps=deps,
-                    policy=certification,
+                    # Statements are prose: the structural check says each carries
+                    # evidence, not that it is true, so a components proposal is
+                    # held for `elbi certify` unless the deployment chose a policy.
+                    policy=(
+                        ManualCertification()
+                        if format == "components" and certification is None
+                        else certification
+                    ),
                     registry=registry,
                 )
             )
@@ -2063,7 +2079,10 @@ def _register_propose(
         "define a function named the same as `name`, taking a Context and "
         "returning a value. It runs once under sandbox isolation; if it verifies "
         "cleanly it is certified and served immediately (unless this server is "
-        "configured to hold proposals for human review). `inputs` lists dataset "
+        "configured to hold proposals for human review; a `components` derivation "
+        "is always held for human review unless this server was given a policy, "
+        "because its check is structural: every statement must carry `evidence`). "
+        "`inputs` lists dataset "
         "names the function reads via ctx.input(name). `deps` names third-party "
         "packages the source imports (e.g. ['numpy','scikit-learn']); the derivation "
         "sandbox is stdlib-only, so any non-stdlib import must be declared here or it "
@@ -2458,14 +2477,8 @@ def _render_environment() -> str:
 
 
 def _serve_for(format: str, title: str | None) -> Serve:
-    builders = {
-        "table": serve_builders.table,
-        "markdown": serve_builders.markdown,
-        "json": serve_builders.json,
-        "text": serve_builders.text,
-    }
-    if format not in builders:
+    if format not in SERVE_BUILDERS:
         raise ElbiError(
-            f"unknown serve format {format!r}; choose one of {sorted(builders)}"
+            f"unknown serve format {format!r}; choose one of {sorted(SERVE_BUILDERS)}"
         )
-    return builders[format](title=title)
+    return SERVE_BUILDERS[format](title=title)

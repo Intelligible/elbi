@@ -19,11 +19,12 @@ from collections import Counter
 from collections.abc import Sequence
 from functools import lru_cache
 from importlib.resources import files
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 import jsonschema
 
 from .errors import ComponentError
+from .retrieval import CachedEmbedder, Embedder, cosine
 from .text import BM25_B, BM25_K1, rrf_fuse
 from .text import tokens as _tokens
 
@@ -62,22 +63,45 @@ def is_valid_component(component: dict[str, Any]) -> bool:
     return bool(_validator().is_valid(component))
 
 
+def validate_components(value: object) -> list[dict[str, Any]]:
+    """Validate a whole ``components`` artifact value and return it as a list.
+
+    Raises:
+        ComponentError: if the value is not a list, an item fails ORC validation
+            (reported with its position), or two items share an ``id``.
+    """
+    if not isinstance(value, list):
+        raise ComponentError(
+            f"components artifact must be a list, got {type(value).__name__}"
+        )
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        try:
+            validate_component(item)
+        except ComponentError as exc:
+            raise ComponentError(f"item {index}: {exc}") from None
+        if item["id"] in seen:
+            raise ComponentError(f"item {index}: duplicate id {item['id']!r}")
+        seen.add(item["id"])
+    return value
+
+
 def stamp_provenance(
     component: dict[str, Any], *, derivation: str, derivation_version: str
 ) -> dict[str, Any]:
-    """Attach ``derivation``/``derivation_version`` provenance to a component.
+    """Set ``provenance.derivation``/``derivation_version`` on a component.
 
-    Only fills in fields the author hasn't already set: a hand-authored
-    ``domain_knowledge`` component with real human provenance (``source: "human"``,
-    an ``author``) is left alone. A component that already names a *different*
-    ``derivation`` (e.g. authored against another system's computation) is also
-    left alone -- this only fills gaps, it never overwrites.
+    Always this derivation and this version: whatever code emitted the item, the
+    computation being served is its producer, and a value the author (or an
+    upstream system) wrote there would let a component claim a producer, or a
+    freshness, it does not have. Every other provenance field (``source``,
+    ``author``, ``method``, ...) is the author's and is kept as is.
 
     Returns a new dict; the input is not mutated.
     """
     provenance = dict(component.get("provenance") or {})
-    provenance.setdefault("derivation", derivation)
-    provenance.setdefault("derivation_version", derivation_version)
+    provenance["derivation"] = derivation
+    provenance["derivation_version"] = derivation_version
     return {**component, "provenance": provenance}
 
 
@@ -85,20 +109,6 @@ def _format_error(error: jsonschema.ValidationError) -> str:
     location = "/".join(str(part) for part in error.path)
     prefix = f"{location}: " if location else ""
     return f"{prefix}{error.message}"
-
-
-@runtime_checkable
-class Embedder(Protocol):
-    """Maps texts to dense vectors.
-
-    The same protocol as :class:`elbi_core.retrieval.Embedder`; any implementation
-    of one satisfies the other structurally, so an already-constructed embedder
-    (e.g. the ``OnnxEmbedder`` a server already loads for derivation search) can be
-    reused here as-is.
-    """
-
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        """Return one vector per text in ``texts``, in order."""
 
 
 def search_components(
@@ -115,31 +125,28 @@ def search_components(
     :mod:`elbi_core.retrieval` uses for derivation search), so a query that shares
     no words with any statement can still surface the right component.
 
-    This is a thin, in-memory, rebuild-every-call index: it holds no state of its
-    own between calls and does no chunking. It exists to make a ``components``
-    artifact searchable at all; the persisted, chunked index under ``elbi.search``
-    (already used for a derivation's own fields) is the right home once components
-    need to be indexed at real scale, incrementally, across restarts.
+    Results are keyed by position, not ``id``, so two derivations that serve the
+    same ``id`` both surface. The ranking is rebuilt every call and does no
+    chunking; pass a :class:`~elbi_core.retrieval.CachedEmbedder` to keep statement
+    vectors between calls, otherwise every statement is embedded each call. The
+    persisted, chunked index under ``elbi.search`` (already used for a derivation's
+    own fields) is the right home once components need to be indexed at real
+    scale, incrementally, across restarts.
     """
     docs = list(components)
     if not query.strip() or not docs:
         return []
 
-    by_id = {
-        component.get("id", str(index)): component
-        for index, component in enumerate(docs)
-    }
     bm25_ranking = _bm25_rank(query, docs)
     if embedder is None:
-        return [by_id[cid] for cid in bm25_ranking[:limit]]
+        return [docs[int(key)] for key in bm25_ranking[:limit]]
 
-    embedding_ranking = _embedding_rank(query, docs, embedder)
+    cached = (
+        embedder if isinstance(embedder, CachedEmbedder) else CachedEmbedder(embedder)
+    )
+    embedding_ranking = _embedding_rank(query, docs, cached)
     fused = rrf_fuse(bm25_ranking, embedding_ranking)
-    return [by_id[cid] for cid in fused[:limit]]
-
-
-def _component_id(component: dict[str, Any], index: int) -> str:
-    return str(component.get("id", index))
+    return [docs[int(key)] for key in fused[:limit]]
 
 
 def _bm25_rank(query: str, docs: Sequence[dict[str, Any]]) -> list[str]:
@@ -152,7 +159,7 @@ def _bm25_rank(query: str, docs: Sequence[dict[str, Any]]) -> list[str]:
     if not terms:
         return []
 
-    ids = [_component_id(doc, index) for index, doc in enumerate(docs)]
+    ids = [str(index) for index in range(len(docs))]
     statement_tokens = [_tokens(doc.get("statement", "")) for doc in docs]
     n_docs = len(docs)
     avg_length = sum(len(toks) for toks in statement_tokens) / n_docs
@@ -183,25 +190,16 @@ def _bm25_rank(query: str, docs: Sequence[dict[str, Any]]) -> list[str]:
 
 
 def _embedding_rank(
-    query: str, docs: Sequence[dict[str, Any]], embedder: Embedder
+    query: str, docs: Sequence[dict[str, Any]], embedder: CachedEmbedder
 ) -> list[str]:
-    ids = [_component_id(doc, index) for index, doc in enumerate(docs)]
+    ids = [str(index) for index in range(len(docs))]
     texts = [doc.get("statement", "") for doc in docs]
     vectors = embedder.embed(texts)
-    query_vector = embedder.embed([query])[0]
+    query_vector = embedder.embed_query(query)
 
     scored = [
-        (_cosine(query_vector, vector), cid)
+        (cosine(query_vector, vector), cid)
         for cid, vector in zip(ids, vectors, strict=True)
     ]
     scored.sort(key=lambda row: (-row[0], row[1]))
     return [cid for _, cid in scored]
-
-
-def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)

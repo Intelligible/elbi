@@ -55,6 +55,7 @@ from .components import (
     search_components,
     stamp_provenance,
     validate_component,
+    validate_components,
 )
 from .container import DockerExecutor, DockerReplSession
 from .context import Context
@@ -162,6 +163,7 @@ from .registry import Registry
 from .registry import default_registry as registry
 from .retrieval import (
     Bm25Retriever,
+    CachedEmbedder,
     Embedder,
     EmbeddingRetriever,
     HybridRetriever,
@@ -235,6 +237,7 @@ __all__ = [
     "Bm25Retriever",
     "CacheError",
     "CachePolicy",
+    "CachedEmbedder",
     "Certificate",
     "CertificateError",
     "CertificateIssuer",
@@ -371,6 +374,7 @@ __all__ = [
     "suggest_contract",
     "to_osi",
     "validate_component",
+    "validate_components",
     "validate_dashboard",
     "validate_feature_store",
     "validate_manifest",

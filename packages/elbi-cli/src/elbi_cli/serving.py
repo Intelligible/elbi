@@ -21,12 +21,14 @@ from elbi_core import (
     Artifact,
     AuditEvent,
     AuditSink,
+    ComponentError,
     DerivationError,
     NullAuditSink,
     Registry,
     Runner,
     Serve,
     stamp_provenance,
+    validate_components,
 )
 
 ParamValues = Mapping[str, Any]
@@ -171,8 +173,19 @@ class Serving:
     async def _compute(
         self, runner: Runner, name: str, params: ParamValues
     ) -> Artifact:
-        """Run the derivation off the event loop and return its artifact."""
-        return await _in_thread(lambda: runner.run(name, dict(params)))
+        """Run the derivation off the event loop and return its artifact.
+
+        A ``components`` artifact is validated here, once per computation, so a
+        malformed item is refused on the miss that would have cached it and never
+        reaches a hit, a stale serve or the search corpus.
+        """
+        artifact = await _in_thread(lambda: runner.run(name, dict(params)))
+        if self._contract(name).format == "components":
+            try:
+                validate_components(artifact.value)
+            except ComponentError as exc:
+                raise ComponentError(f"derivation {name!r}: {exc}") from None
+        return artifact
 
     def _present(
         self,
@@ -184,18 +197,17 @@ class Serving:
     ) -> ServeOutcome:
         """Render an artifact for serving.
 
-        For a ``components`` contract with a known ``data_version``, each item
-        that doesn't already declare its own ``provenance.derivation`` is stamped
-        with this derivation's name and *this artifact's* version.
+        For a ``components`` contract with a known ``data_version``, every item is
+        stamped with this derivation's name and *this artifact's* version (the
+        value was validated as a list of components when it was computed).
         """
         if contract.format == "components" and data_version is not None:
-            items = artifact.value if isinstance(artifact.value, list) else []
             artifact = Artifact.components(
                 [
                     stamp_provenance(
                         item, derivation=name, derivation_version=data_version
                     )
-                    for item in items
+                    for item in artifact.value
                 ]
             )
         return ServeOutcome(

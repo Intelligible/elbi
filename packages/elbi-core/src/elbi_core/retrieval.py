@@ -237,13 +237,42 @@ def _searchable_text(derivation: Derivation) -> str:
     return f"{readable_name}. {description}".strip()
 
 
-def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
+def cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    """Cosine similarity of two vectors; 0.0 when either has no magnitude."""
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(y * y for y in b))
     if norm_a == 0 or norm_b == 0:
         return 0.0
     return dot / (norm_a * norm_b)
+
+
+class CachedEmbedder:
+    """An :class:`Embedder` that memoizes document vectors by their text.
+
+    Text alone is a sufficient key: the memo is in-memory and bound to one
+    embedder. Wrap a model once and share the wrapper, so a derivation's text or a
+    component's statement is embedded the first time it is seen and never again.
+    Query vectors go through :meth:`embed_query` and are never kept, so a
+    long-running server's memo grows with its corpus, not with its traffic.
+    """
+
+    def __init__(self, embedder: Embedder) -> None:
+        self._embedder = embedder
+        self._cache: dict[str, list[float]] = {}
+
+    def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
+        """One vector per text, computing only the texts not seen before."""
+        missing = [text for text in dict.fromkeys(texts) if text not in self._cache]
+        if missing:
+            vectors = self._embedder.embed(missing)
+            for text, vector in zip(missing, vectors, strict=True):
+                self._cache[text] = list(vector)
+        return [self._cache[text] for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        """The vector for one query, straight through: never memoized."""
+        return list(self._embedder.embed([text])[0])
 
 
 class EmbeddingRetriever:
@@ -265,10 +294,8 @@ class EmbeddingRetriever:
 
     def __init__(self, embedder: Embedder, *, min_similarity: float = 0.0) -> None:
         self._embedder = embedder
+        self._vectors = CachedEmbedder(embedder)
         self._min_similarity = min_similarity
-        # Vectors memoized by text; text alone is a sufficient key because the
-        # cache is in-memory and bound to this retriever's single embedder.
-        self._cache: dict[str, list[float]] = {}
 
     def search(
         self, query: str, corpus: Iterable[Derivation], *, limit: int
@@ -279,24 +306,17 @@ class EmbeddingRetriever:
             return []
 
         texts = [_searchable_text(derivation) for derivation in docs]
-        self._ensure_cached(texts)
-        query_vector = list(self._embedder.embed([query])[0])
+        vectors = self._vectors.embed(texts)
+        query_vector = self._vectors.embed_query(query)
 
         scored: list[tuple[float, str, Derivation]] = []
-        for derivation, text in zip(docs, texts, strict=True):
-            similarity = _cosine(query_vector, self._cache[text])
+        for derivation, vector in zip(docs, vectors, strict=True):
+            similarity = cosine(query_vector, vector)
             if similarity > self._min_similarity:
                 scored.append((similarity, derivation.name, derivation))
 
         scored.sort(key=lambda row: (-row[0], row[1]))
         return [derivation for _, _, derivation in scored[:limit]]
-
-    def _ensure_cached(self, texts: Sequence[str]) -> None:
-        missing = [text for text in dict.fromkeys(texts) if text not in self._cache]
-        if not missing:
-            return
-        for text, vector in zip(missing, self._embedder.embed(missing), strict=True):
-            self._cache[text] = list(vector)
 
 
 class HybridRetriever:

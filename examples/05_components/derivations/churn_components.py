@@ -90,6 +90,11 @@ def churn_components(ctx: Context) -> Artifact:
                 "column_name": "discount",
                 "data_type": "float",
             },
+            "evidence": {
+                "sample_size": n,
+                "min": min(discounts),
+                "max": max(discounts),
+            },
         },
         {
             "id": f"{NAMESPACE}/discount_distribution",

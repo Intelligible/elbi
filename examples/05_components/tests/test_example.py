@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from elbi_core import Registry, Runner
+from elbi_core import Registry, Runner, verify
 from elbi_core.components import is_valid_component
 from elbi_core.config import DataBindings
 from elbi_core.discovery import discover
@@ -12,11 +12,15 @@ from elbi_core.discovery import discover
 PROJECT = Path(__file__).resolve().parent.parent
 
 
-def _runner() -> Runner:
+def _registry() -> Registry:
     registry = Registry()
     discover(PROJECT / "derivations", registry=registry)
+    return registry
+
+
+def _runner(registry: Registry | None = None) -> Runner:
     bindings = DataBindings.load(PROJECT / "elbi.dev.yaml")
-    return Runner(registry, bindings=bindings, base_dir=PROJECT)
+    return Runner(registry or _registry(), bindings=bindings, base_dir=PROJECT)
 
 
 def test_churn_components_produces_valid_orc_components() -> None:
@@ -25,6 +29,15 @@ def test_churn_components_produces_valid_orc_components() -> None:
     assert len(artifact.value) == 4
     for component in artifact.value:
         assert is_valid_component(component)
+
+
+def test_churn_components_verifies_sound() -> None:
+    """Every component carries evidence, so the structural check certifies it."""
+    registry = _registry()
+    result = verify(_runner(registry), registry.get("churn_components"))
+    assert result.ok and result.oracle_verdict == "sound", result.oracle_detail
+    assert result.oracle_attestation is not None
+    assert len(result.oracle_attestation["checks"]) == 4
 
 
 def test_churn_components_evidence_is_internally_consistent() -> None:

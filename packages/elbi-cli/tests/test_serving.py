@@ -22,7 +22,7 @@ from elbi_core import (
     serve,
 )
 from elbi_core.config import DataBindings
-from elbi_core.errors import DerivationError
+from elbi_core.errors import ComponentError, DerivationError
 
 
 class _RecordingSink:
@@ -422,9 +422,7 @@ def test_components_uncached_still_gets_a_version_stamped(tmp_path: Path) -> Non
     assert _stamped(outcome)["provenance"]["derivation_version"]
 
 
-def test_components_author_provided_provenance_is_not_overwritten(
-    tmp_path: Path,
-) -> None:
+def test_components_author_fields_are_kept_around_the_stamp(tmp_path: Path) -> None:
     (tmp_path / "n.csv").write_text("value\n2\n", encoding="utf-8")
     registry = Registry()
 
@@ -459,7 +457,31 @@ def test_components_author_provided_provenance_is_not_overwritten(
     provenance = _stamped(outcome)["provenance"]
     assert provenance["source"] == "human"
     assert provenance["author"] == "analyst@example.com"
-    assert provenance["derivation"] == "facts"  # gap-filled, not overwritten
+    assert provenance["derivation"] == "facts"  # set by the serving derivation
+
+
+def test_components_malformed_item_is_refused_when_served(tmp_path: Path) -> None:
+    """Validation runs once per computation, on the miss, so a bad item is never
+    cached, served stale or searched.
+    """
+    (tmp_path / "n.csv").write_text("value\n2\n", encoding="utf-8")
+    registry = Registry()
+
+    @derivation(
+        inputs={"n": Dataset("n")},
+        serve=serve.components(),
+        registry=registry,
+        name="facts",
+    )
+    def facts(ctx: Context) -> Artifact:
+        return Artifact.components([{"id": "no-namespace", "statement": "n is 2."}])
+
+    bindings = DataBindings(bindings={"n": "n.csv"})
+    serving = Serving(
+        registry, lambda: Runner(registry, bindings=bindings, base_dir=tmp_path)
+    )
+    with pytest.raises(ComponentError, match="derivation 'facts': item 0"):
+        asyncio.run(serving.serve("facts"))
 
 
 def test_serving_internal_derivation_is_rejected(tmp_path: Path) -> None:

@@ -18,6 +18,7 @@ from elbi_cli.mcp_server import (
 )
 from elbi_core import (
     Artifact,
+    AutoCertifyOnVerify,
     Bm25Retriever,
     Context,
     Dataset,
@@ -1411,6 +1412,101 @@ def test_propose_derivation_tool_rejects_unknown_format() -> None:
         )
     )
     assert "unknown serve format" in _tool_text(out)
+
+
+_BACKED_FACTS = (
+    "def facts(ctx):\n"
+    "    return [{'id': 't/rule', 'type': 'threshold_rule', "
+    "'scope': {'source': 's'}, 'statement': 'Discounts above 20% raise churn.', "
+    "'evidence': {'churn_rate_above': 0.4}}]\n"
+)
+
+
+def test_propose_components_is_held_for_a_human_by_default(tmp_path: Path) -> None:
+    registry = Registry()
+    store = AuthoredStore(tmp_path / "authored")
+    server = build_server(
+        registry,
+        lambda: _routing_runner(registry),
+        enable_propose=True,
+        authored_store=store,
+    )
+    out = _tool_text(
+        asyncio.run(
+            server.call_tool(
+                "propose_derivation",
+                {"name": "facts", "source": _BACKED_FACTS, "format": "components"},
+            )
+        )
+    )
+    # Structurally sound, yet held: the check cannot speak to truth.
+    assert "held" in out and "run_facts" not in {
+        t.name for t in asyncio.run(server.list_tools())
+    }
+    proposed = registry.get("facts")
+    assert not proposed.is_certified
+    assert proposed.serve is not None and proposed.serve.format == "components"
+    # And the sidecar rebuilds it on the next start instead of raising.
+    reloaded = Registry()
+    assert store.load_into(reloaded) == ("facts",)
+    reloaded_contract = reloaded.get("facts").serve
+    assert reloaded_contract is not None and reloaded_contract.format == "components"
+
+
+def test_propose_components_certifies_under_an_explicit_policy() -> None:
+    registry = Registry()
+    server = build_server(
+        registry,
+        lambda: _routing_runner(registry),
+        enable_propose=True,
+        certification=AutoCertifyOnVerify(),
+    )
+    asyncio.run(
+        server.call_tool(
+            "propose_derivation",
+            {"name": "facts", "source": _BACKED_FACTS, "format": "components"},
+        )
+    )
+    assert registry.get("facts").is_certified
+    assert "run_facts" in {t.name for t in asyncio.run(server.list_tools())}
+
+
+def test_search_components_embeds_each_statement_once_across_calls() -> None:
+    class _CountingEmbedder:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            self.calls.extend(texts)
+            return [[1.0, float(len(text))] for text in texts]
+
+    registry = Registry()
+
+    @derivation(name="facts", serve=serve.components(), registry=registry)
+    def facts(ctx: Context) -> Artifact:
+        return Artifact.components(
+            [
+                {
+                    "id": "t/discount",
+                    "type": "column",
+                    "scope": {"source": "s"},
+                    "statement": "Discounts above 20% raise churn.",
+                },
+                {
+                    "id": "t/tenure",
+                    "type": "column",
+                    "scope": {"source": "s"},
+                    "statement": "Tenure protects against churn.",
+                },
+            ]
+        )
+
+    embedder = _CountingEmbedder()
+    server = build_server(registry, lambda: Runner(registry), embedder=embedder)
+    for query in ("discount churn", "tenure"):
+        asyncio.run(server.call_tool("search_components", {"query": query}))
+    statements = [text for text in embedder.calls if text.endswith(".")]
+    assert len(statements) == 2  # two statements, two searches, embedded once each
 
 
 def test_every_tool_declares_what_it_does_to_the_world() -> None:

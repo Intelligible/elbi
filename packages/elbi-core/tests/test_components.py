@@ -17,6 +17,7 @@ from elbi_core import (
     search_components,
     stamp_provenance,
     validate_component,
+    validate_components,
 )
 
 VALID_COMPONENT = {
@@ -53,7 +54,7 @@ def test_stamp_provenance_fills_gap() -> None:
 
 
 def test_stamp_provenance_preserves_other_fields() -> None:
-    """Stamping fills only the two gap fields; a human author/source is kept."""
+    """Stamping sets the two derivation fields; a human author/source is kept."""
     authored = {
         **VALID_COMPONENT,
         "provenance": {"source": "human", "author": "analyst@example.com"},
@@ -133,16 +134,33 @@ def test_search_components_fuses_with_an_embedder() -> None:
     assert results[0]["id"] == "a/tenure_shape"
 
 
-def test_stamp_provenance_does_not_overwrite_existing_derivation() -> None:
-    """A component that already names its own derivation is left alone: this only
-    fills gaps, it never overwrites a producer's own claim.
+def test_stamp_provenance_overwrites_a_foreign_derivation() -> None:
+    """A derivation the author wrote in is replaced: the computation serving the
+    component is its producer, and a written-in name or version would let it claim
+    a producer, or a freshness, it does not have.
     """
     authored = {
         **VALID_COMPONENT,
         "provenance": {"derivation": "other_system_job", "derivation_version": "v9"},
     }
     stamped = stamp_provenance(authored, derivation="x", derivation_version="y")
-    assert stamped["provenance"] == {
-        "derivation": "other_system_job",
-        "derivation_version": "v9",
-    }
+    assert stamped["provenance"] == {"derivation": "x", "derivation_version": "y"}
+
+
+def test_validate_components_reports_position_and_duplicate_ids() -> None:
+    with pytest.raises(ComponentError, match="must be a list"):
+        validate_components({"id": "a/b"})
+    with pytest.raises(ComponentError, match="item 1:"):
+        validate_components([VALID_COMPONENT, "not a component"])
+    with pytest.raises(ComponentError, match="item 1: duplicate id"):
+        validate_components([VALID_COMPONENT, dict(VALID_COMPONENT)])
+    assert validate_components([VALID_COMPONENT]) == [VALID_COMPONENT]
+
+
+def test_search_components_keeps_both_components_that_share_an_id() -> None:
+    # Two derivations may each serve an "<ns>/summary"; keyed by position, neither
+    # shadows the other.
+    twins = [{**CORPUS[0], "id": "a/summary"}, {**CORPUS[1], "id": "a/summary"}]
+    results = search_components("customers discount churn column", twins, limit=5)
+    assert len(results) == 2
+    assert {r["statement"] for r in results} == {c["statement"] for c in twins}

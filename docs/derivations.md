@@ -123,10 +123,22 @@ these shallow: agents fill flat arguments more reliably than nested ones.
 | `serve.markdown()` | a Markdown document |
 | `serve.json(indent=...)` | pretty-printed JSON |
 | `serve.text()` | plain text |
+| `serve.components()` | OpenReasoningComponents statements: one Markdown bullet per statement, the full components as structured content |
+
+`components` is the one format with checks of its own. On serve every item is
+validated against the ORC component schema (ids unique) and stamped with
+`provenance.derivation` and `provenance.derivation_version`, so a consumer can tell
+whether a statement is still current. Under `verify()` the artifact gets one check
+per component: sound when it carries `evidence` (a `domain_knowledge` note is
+exempt), `invalid` when an item fails the schema. That check is structural, so an
+agent-proposed components derivation is held for a human by default; see
+[Certification policy](authoring.md#certification-policy). A worked example is
+`examples/05_components`.
 
 ## Artifacts
 
-Return an `Artifact` (`Artifact.table`, `.markdown`, `.json`, `.text`) or a raw
+Return an `Artifact` (`Artifact.table`, `.markdown`, `.json`, `.text`,
+`.components`) or a raw
 value, which is coerced: a list of dicts becomes a table, a string becomes text,
 anything else becomes JSON.
 

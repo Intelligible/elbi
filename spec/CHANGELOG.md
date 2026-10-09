@@ -51,8 +51,8 @@ Adds provenance and lifecycle, supporting agent-authored derivations.
   OpenReasoningComponents (ORC) components, each a self-contained natural-language
   statement about the data with optional structure/evidence/relations/provenance.
   A runner SHOULD stamp `provenance.derivation`/`provenance.derivation_version`
-  onto a component that doesn't already declare its own provenance, so freshness
-  is checkable against the same content-hash versioning the spec already uses.
+  onto every component it serves, so freshness is checkable against the same
+  content-hash versioning the spec already uses.
   Backward compatible: existing formats are unaffected.
 
 ## 1.0 (unreleased)

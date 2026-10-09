@@ -136,14 +136,15 @@ A component's `statement` is composed directly into an agent's reasoning, the wa
 (`structure`/`evidence`/`relations`/`provenance`) that support retrieval and validation,
 exposed to an agent as structured content alongside the rendered statements.
 
-The component payload's shape is defined by ORC's own schema, not this one — this spec
+The component payload's shape is defined by ORC's own schema, not this one: this spec
 takes no position on it beyond "an array of components," the same way §3 treats a
-`semantic_model` input's document format as external. A runner SHOULD attach
+`semantic_model` input's document format as external. A runner SHOULD set
 `provenance.derivation` and `provenance.derivation_version` (this derivation's `name`
-and its current content-hash version) to each component that doesn't already declare
-its own provenance, so a consumer can decide whether a component is still current by
-comparing that version against the derivation's current one — the same versioning this
-spec already uses for caching, without any component-level refresh machinery of its own.
+and its current content-hash version) on every component it serves, replacing any
+value the author wrote there and keeping the other provenance fields, so a consumer
+can decide whether a component is still current by comparing that version against the
+derivation's current one. That is the same versioning this spec already uses for
+caching, without any component-level refresh machinery of its own.
 
 Each format permits an optional `title`. No other fields are permitted: the
 `serve` object declares its shared fields (`format`, `title`) and its

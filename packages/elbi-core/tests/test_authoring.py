@@ -115,6 +115,95 @@ def test_verify_runs_and_renders(registry: Registry) -> None:
     assert "| total |" in (result.rendered or "")
 
 
+_FACTS = """
+def facts(ctx):
+    "One backed statement and one note."
+    return [
+        {
+            "id": "t/churn_rule",
+            "type": "threshold_rule",
+            "scope": {"source": "customers"},
+            "statement": "Discounts above 20% raise churn.",
+            "evidence": {"churn_rate_above": 0.4},
+        },
+        {
+            "id": "t/note",
+            "type": "domain_knowledge",
+            "scope": {"source": "customers"},
+            "statement": "Discounts are set by the sales team.",
+        },
+    ]
+"""
+
+_FACTS_BARE = """
+def facts(ctx):
+    "A statement with nothing behind it."
+    return [
+        {
+            "id": "t/bare",
+            "type": "column",
+            "scope": {"source": "customers"},
+            "statement": "Tenure protects against churn.",
+        }
+    ]
+"""
+
+_FACTS_BAD = """
+def facts(ctx):
+    "Not an ORC component."
+    return [{"id": "no-namespace", "statement": "x"}]
+"""
+
+_FACTS_EMPTY = """
+def facts(ctx):
+    "Nothing to say."
+    return []
+"""
+
+
+def test_verify_components_checks_evidence_per_component(registry: Registry) -> None:
+    d = propose("facts", _FACTS, serve=serve.components(), registry=registry)
+    result = verify(_runner(registry), d)
+    assert result.ok and result.oracle_verdict == "sound"
+    assert result.oracle_detail == "2 of 2 components carry evidence"
+    assert result.oracle_attestation is not None
+    checks = result.oracle_attestation["checks"]
+    assert [(c["name"], c["verdict"]) for c in checks] == [
+        ("t/churn_rule", "sound"),
+        ("t/note", "sound"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "verdict", "detail"),
+    [
+        (_FACTS_BARE, "unsound", "0 of 1 components carry evidence; without: t/bare"),
+        (_FACTS_BAD, "invalid", "item 0:"),
+        (_FACTS_EMPTY, "inconclusive", "no components to check"),
+    ],
+)
+def test_verify_components_blocks_bare_malformed_or_empty(
+    registry: Registry, source: str, verdict: str, detail: str
+) -> None:
+    d = propose("facts", source, serve=serve.components(), registry=registry)
+    result = verify(_runner(registry), d)
+    assert not result.ok
+    assert result.oracle_verdict == verdict
+    assert detail in (result.oracle_detail or "")
+
+
+def test_verify_components_row_claim_is_inconclusive(registry: Registry) -> None:
+    d = propose(
+        "facts",
+        _FACTS,
+        serve=serve.components(),
+        claim={"x": "a", "y": "b"},
+        registry=registry,
+    )
+    result = verify(_runner(registry), d)
+    assert not result.ok and result.oracle_verdict == "inconclusive"
+
+
 def test_verify_matches_prediction(registry: Registry) -> None:
     d = propose("revenue", _SOURCE, serve=serve.table(), registry=registry)
     result = verify(_runner(registry), d, predicted=[{"total": 42}])
