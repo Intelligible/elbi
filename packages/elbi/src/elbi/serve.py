@@ -166,6 +166,26 @@ def _aggregate_values(agg: str, values: list[float]) -> float:
     return sum(values)
 
 
+def _breach_keys(rows: list[dict[str, Any]], column: str, key: str) -> tuple[str, ...]:
+    """The ``key`` of every row whose ``column`` is positive: a keyed monitor's breach.
+
+    Raises:
+        ModelError: if there are rows and none has ``key``, which only a misnamed key
+            explains; naming nothing instead would quietly turn the feature off.
+    """
+    if rows and not any(key in r for r in rows):
+        raise ModelError(f"no row has the monitor's key column {key!r}")
+    return tuple(
+        sorted(
+            {
+                "(blank)" if r.get(key) in (None, "") else str(r[key])
+                for r in rows
+                if isinstance(r.get(column), (int, float)) and r[column] > 0
+            }
+        )
+    )
+
+
 @dataclass(frozen=True)
 class _RequestBindings(DataBindings):
     """Dataset bindings backed by request rows instead of files or SQL.
@@ -1080,17 +1100,7 @@ def build(
         key = measure.get("key") if isinstance(measure, dict) else None
         if not key or not column:
             return value
-        # The rows whose measure is positive are the breach; name them by `key`.
-        breaching = tuple(
-            sorted(
-                str(r[key])
-                for r in rows
-                if key in r
-                and isinstance(r.get(column), (int, float))
-                and float(r[column]) > 0
-            )
-        )
-        return Reading(value, breaching)
+        return Reading(value, _breach_keys(rows, column, key))
 
     def monitor_source_certified(kind: str, target: str) -> bool:
         """Whether a monitor's target is a certified metric or derivation."""

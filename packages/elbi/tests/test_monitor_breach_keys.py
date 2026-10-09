@@ -17,6 +17,8 @@ import pytest
 from elbi import notifications
 from elbi.db import Store, open_store
 from elbi.monitoring import BREACH_WIDENED, MonitorService, Reading
+from elbi.serve import _breach_keys
+from elbi_core.errors import ModelError
 
 READING: dict[str, Any] = {"value": Reading(0.0, ())}
 ALERTS: list[dict[str, Any]] = []
@@ -171,3 +173,88 @@ def test_the_opening_notification_names_the_breaching_rows(store: Store) -> None
     )
     [row] = store.list_notifications()
     assert row.body == "1 is above the ceiling 0. Breaching: compactor"
+
+
+def test_a_row_that_flaps_is_announced_once_per_incident(store: Store) -> None:
+    service = _service(store)
+    monitor_id = _monitor(service)
+    _read(service, monitor_id)
+    _read(service, monitor_id, "compactor")
+    for _ in range(3):  # lead_capture breaks, recovers, and breaks again
+        _read(service, monitor_id, "compactor", "lead_capture")
+        _read(service, monitor_id, "compactor")
+    assert [a["event"] for a in ALERTS] == ["metric.anomaly_detected", BREACH_WIDENED]
+    # A new incident keeps its own record, so a widening inside it alerts again.
+    _read(service, monitor_id)
+    _read(service, monitor_id, "compactor")
+    _read(service, monitor_id, "compactor", "lead_capture")
+    assert [a["event"] for a in ALERTS][2:] == [
+        "metric.recovered",
+        "metric.anomaly_detected",
+        BREACH_WIDENED,
+    ]
+
+
+def test_changing_the_key_column_does_not_announce_every_row_as_new(
+    store: Store,
+) -> None:
+    service = _service(store)
+    monitor_id = _monitor(service)
+    _read(service, monitor_id)
+    _read(service, monitor_id, "wf-1")
+    service.update(
+        monitor_id,
+        config={"measure": {"column": "error_breach", "agg": "sum", "key": "name"}},
+        max_value=0,
+    )
+    _read(service, monitor_id, "Compactor")  # the same row, named by its new key
+    _read(service, monitor_id, "Compactor", "Lead capture")
+    assert [a["event"] for a in ALERTS] == ["metric.anomaly_detected", BREACH_WIDENED]
+    assert ALERTS[1]["new_keys"] == ["Lead capture"]
+
+
+def test_only_rows_with_a_positive_numeric_measure_breach() -> None:
+    rows = [
+        {"id": "b", "breach": 1},
+        {"id": "a", "breach": 2.5},
+        {"id": "a", "breach": 1},
+        {"id": "c", "breach": 0},
+        {"id": "d", "breach": -1},
+        {"id": "e", "breach": "1"},
+        {"id": "f"},
+    ]
+    assert _breach_keys(rows, "breach", "id") == ("a", "b")
+
+
+def test_a_breaching_row_without_a_key_is_named_blank() -> None:
+    rows = [
+        {"id": None, "breach": 1},
+        {"id": "", "breach": 1},
+        {"id": "a", "breach": 1},
+    ]
+    assert _breach_keys(rows, "breach", "id") == ("(blank)", "a")
+
+
+def test_a_key_column_no_row_has_is_an_error_not_an_empty_breach() -> None:
+    with pytest.raises(ModelError, match="'workflow_id'"):
+        _breach_keys([{"id": "a", "breach": 1}], "breach", "workflow_id")
+    assert _breach_keys([], "breach", "workflow_id") == ()
+
+
+def test_a_long_breach_list_names_whole_keys_and_counts_the_rest(store: Store) -> None:
+    keys = [f"workflow-{i:03d}" for i in range(200)]
+    notifications.create_notifications(
+        store,
+        BREACH_WIDENED,
+        {
+            "event": BREACH_WIDENED,
+            "monitor_id": "m1",
+            "monitor": "workflow errors",
+            "new_keys": keys,
+        },
+    )
+    [row] = store.list_notifications()
+    *named, rest = row.body.removeprefix("Newly breaching: ").split(", ")
+    assert 0 < len(named) < len(keys)
+    assert named == keys[: len(named)]
+    assert rest == f"{len(keys) - len(named)} more"

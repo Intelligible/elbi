@@ -54,6 +54,20 @@ def effective_prefs(store: Store) -> dict[str, tuple[bool, bool]]:
     }
 
 
+def _name_keys(keys: Any) -> str:
+    """A monitor's breaching keys for a body: whole names to the cap, then a count."""
+    names = [str(k) for k in keys or []]
+    shown: list[str] = []
+    length = 0
+    for name in names:
+        length += len(name) + 2  # the ", " that joins it
+        if length > _ERROR_CAP:
+            break
+        shown.append(name)
+    hidden = len(names) - len(shown)
+    return ", ".join([*shown, f"{hidden} more"] if hidden else shown)
+
+
 def _render(action: str, data: Mapping[str, Any]) -> tuple[str, str, str, str]:
     """A notification's (title, body, target_type, target_id) for an event.
 
@@ -62,10 +76,10 @@ def _render(action: str, data: Mapping[str, Any]) -> tuple[str, str, str, str]:
     """
     if action == "metric.anomaly_detected":
         reason = str(data.get("reason") or "")
-        keys = ", ".join(str(k) for k in (data.get("breach_keys") or []))
+        keys = _name_keys(data.get("breach_keys"))
         return (
             f"Monitor {data.get('monitor', '')!r} detected an anomaly",
-            (f"{reason}. Breaching: {keys}" if keys else reason)[:_ERROR_CAP],
+            f"{reason}. Breaching: {keys}" if keys else reason,
             "metric_monitor",
             str(data.get("monitor_id") or ""),
         )
@@ -77,10 +91,9 @@ def _render(action: str, data: Mapping[str, Any]) -> tuple[str, str, str, str]:
             str(data.get("monitor_id") or ""),
         )
     if action == "metric.breach_widened":
-        added = ", ".join(str(k) for k in (data.get("new_keys") or []))
         return (
             f"Monitor {data.get('monitor', '')!r} has new breaching rows",
-            f"Newly breaching: {added}"[:_ERROR_CAP],
+            f"Newly breaching: {_name_keys(data.get('new_keys'))}",
             "metric_monitor",
             str(data.get("monitor_id") or ""),
         )

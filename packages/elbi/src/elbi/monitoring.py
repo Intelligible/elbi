@@ -81,10 +81,12 @@ class MonitorService:
         self._read_value = read_value
         self._source_certified = source_certified
         self._on_alert = on_alert
-        # The breaching keys each keyed monitor last read, to tell a widened breach from
-        # one already reported. In memory: after a restart the first reading inside an
-        # open incident only re-seeds it, so a restart never re-alerts on old keys.
-        self._last_keys: dict[str, frozenset[str]] = {}
+        # The breaching keys each keyed monitor has announced in its current incident,
+        # so a row is named once per incident however often it flaps. An alert that
+        # opens or closes the incident starts the record afresh. In memory: after a
+        # restart the first reading inside an open incident only re-seeds it, without
+        # alerting.
+        self._announced_keys: dict[str, frozenset[str]] = {}
 
     def create(
         self,
@@ -170,6 +172,7 @@ class MonitorService:
                 f"{kind} {watched!r} is not certified; a monitor watches "
                 "only verified numbers"
             )
+        watched_before = (row.target_kind, row.target, row.config_json)
         row.name = (name.strip() or watched) if name is not None else row.name
         row.target_kind = kind
         row.target = watched
@@ -187,6 +190,9 @@ class MonitorService:
         # threshold somebody removed from the file has to come off the monitor too.
         row.min_value = min_value
         row.max_value = max_value
+        if (row.target_kind, row.target, row.config_json) != watched_before:
+            # Keys read before the edit may name the same rows by another column.
+            self._announced_keys.pop(monitor_id, None)
         self._store.update_metric_monitor(row)
         saved = self._store.get_metric_monitor(monitor_id)
         return self._view(saved) if saved is not None else None
@@ -202,6 +208,7 @@ class MonitorService:
 
     def delete(self, monitor_id: str) -> bool:
         """Delete a monitor and its history; return whether it existed."""
+        self._announced_keys.pop(monitor_id, None)
         return self._store.delete_metric_monitor(monitor_id)
 
     def history(self, monitor_id: str) -> WireMonitorHistory:
@@ -248,6 +255,9 @@ class MonitorService:
             # escaping here would also stop the scheduler's pass over later monitors.
             error = MonitorError(f"could not read {monitor.target!r}: {exc}")
             failure = self._source_failed(monitor, str(error))
+            # A failed read is still this interval's check: the scheduler waits the
+            # interval before retrying, and the monitor shows when it last tried.
+            self._store.touch_metric_monitor(monitor.id, _now())
             if failure is not None and self._on_alert is not None:
                 self._on_alert(failure)
             raise error from exc
@@ -357,16 +367,17 @@ class MonitorService:
     ) -> dict[str, Any] | None:
         """Attach the breaching keys to ``alert``, or raise one for a widened breach."""
         current = frozenset(keys)
-        previous = self._last_keys.get(monitor.id)
-        self._last_keys[monitor.id] = current
-        if alert is not None:
-            alert["breach_keys"] = sorted(current)
+        announced = self._announced_keys.get(monitor.id)
+        if alert is not None or not verdict.anomalous or announced is None:
+            # No open incident to compare with, or this alert opens or closes one.
+            self._announced_keys[monitor.id] = current
+            if alert is not None:
+                alert["breach_keys"] = sorted(current)
             return alert
-        if not verdict.anomalous or previous is None:
-            return None
-        added = current - previous
+        added = current - announced
         if not added:
             return None
+        self._announced_keys[monitor.id] = announced | current
         widened = self._alert(monitor, BREACH_WIDENED, verdict, value, source_verdict)
         widened["breach_keys"] = sorted(current)
         widened["new_keys"] = sorted(added)
@@ -466,11 +477,14 @@ def _snapshot_view(snapshot: MetricSnapshot) -> WireMonitorSnapshot:
 
 
 def _incident_view(incident: MonitorIncident) -> WireMonitorIncident:
+    # A source failure never read a value; its stored peak is only the column default.
+    failed = incident.cause == _SOURCE_FAILED_CAUSE
     return WireMonitorIncident(
         id=incident.id,
         opened_at=_iso(incident.opened_at),
         closed_at=_iso(incident.closed_at),
-        peak_value=incident.peak_value,
+        cause=incident.cause,
+        peak_value=None if failed else incident.peak_value,
         peak_score=incident.peak_score,
         reason=incident.reason,
         snapshots=incident.snapshots,
