@@ -1239,6 +1239,7 @@ def build(
         derivation_on_trash=derivation_on_trash,
         derivation_on_restore=derivation_on_restore,
         derivation_on_erase=derivation_on_erase,
+        invalidate_cache=LocalCacheStore(project.cache_dir).invalidate_tag,
         scratch_root=project.workspaces_dir,
         sandbox=project.config.sandbox,
         egress=project.config.egress,

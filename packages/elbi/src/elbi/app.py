@@ -63,6 +63,7 @@ from elbi_core import (
     submit_code_job,
     verify_certificate,
 )
+from elbi_core.cache import derivation_from_tag, derivation_tag
 from elbi_core.errors import CertificateError, ElbiError, ModelError
 from elbi_core.executor import _DEP_RE
 from elbi_core.sandbox import ComputeProfileError
@@ -115,6 +116,7 @@ from .wire import DataSource as WireDataSource
 from .wire import DerivationDetail as WireDerivationDetail
 from .wire import DerivationSummary as WireDerivationSummary
 from .wire import Install as WireInstall
+from .wire import Invalidated as WireInvalidated
 from .wire import Job as WireJob
 from .wire import LineageGraph as WireLineageGraph
 from .wire import MlflowSettings as WireMlflowSettings
@@ -547,6 +549,7 @@ def create_app(
     derivation_on_trash: Callable[[str], bool] | None = None,
     derivation_on_restore: Callable[[str], bool] | None = None,
     derivation_on_erase: Callable[[str], bool] | None = None,
+    invalidate_cache: Callable[[str], int] | None = None,
 ) -> FastAPI:
     """Build the app over a dataset loader and an LLM client.
 
@@ -563,6 +566,10 @@ def create_app(
     conversation gets ``scratch_root/<conversation_id>``, so a chat's exploration
     files persist across its calls but never leak into another chat. It needs a
     ``store`` (a conversation to key on); ``None`` keeps every call ephemeral.
+
+    ``invalidate_cache`` removes the derivation cache entries carrying a tag and returns
+    how many went; it backs ``POST /api/cache/invalidate``, the HTTP form of
+    ``elbi cache clear --tag``. ``None`` answers that route with 503.
 
     ``model_service`` (the ml extra) powers the chat's model-lifecycle tools, the
     registry API under ``/api/registry``, and MLflow-protocol scoring under
@@ -5607,6 +5614,60 @@ def create_app(
         if not hook(name):
             raise HTTPException(status_code=404, detail=f"no derivation named {name!r}")
         return WireOk()
+
+    @app.post("/api/cache/invalidate")
+    async def invalidate_cache_route(request: Request) -> WireInvalidated:
+        """Drop derivation cache entries by ``tag``, by ``derivation`` name, or both.
+
+        The HTTP form of ``elbi cache clear --tag``, so a deployment's cache can be
+        busted without a shell on the host. Either field alone suffices; given both,
+        entries carrying either are removed. A derivation's entries carry its
+        :func:`~elbi_core.cache.derivation_tag`, which is how a name selects them;
+        a derivation the caller cannot reach is a 404 whichever field named it.
+        Clearing the whole cache is deliberately not offered here: that stays a
+        decision made on the host.
+        """
+        if invalidate_cache is None:
+            raise HTTPException(
+                status_code=503, detail="the derivation cache is not available"
+            )
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="expected a JSON object")
+        tags: list[str] = []
+        for field, to_tag in (("tag", str), ("derivation", derivation_tag)):
+            value = body.get(field)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value.strip():
+                raise HTTPException(
+                    status_code=400, detail=f"{field} must be a non-empty string"
+                )
+            tags.append(to_tag(value.strip()))
+        if not tags:
+            raise HTTPException(
+                status_code=400, detail="name a tag or a derivation to invalidate"
+            )
+        # A derivation's entries are reachable through its tag as well as its name, so
+        # the check runs on the tag: whichever field named it, the caller has to reach
+        # the derivation the way the detail and delete routes require. Every tag is
+        # checked before the first deletion, so a refused request clears nothing.
+        for tag in tags:
+            name = derivation_from_tag(tag)
+            if name is None:
+                continue
+            if store is None or store.get_derivation(name) is None:
+                raise HTTPException(
+                    status_code=404, detail=f"no derivation named {name!r}"
+                )
+        removed = 0
+        for tag in tags:
+            removed += await run_in_threadpool(invalidate_cache, tag)
+            if store is not None:
+                store.record_audit(
+                    "cache.invalidate", target_type="cache", target_id=tag
+                )
+        return WireInvalidated(removed=removed)
 
     if certificate_issuer is not None:
 

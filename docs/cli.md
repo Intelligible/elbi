@@ -6,7 +6,8 @@ elbi serve           Serve the chat UI and MCP together on localhost.
 elbi mcp             Serve derivations over MCP only, no chat UI.
 elbi validate        Validate the project and derivations against the spec.
 elbi cache status    Show the local cache location and entry count.
-elbi cache clear     Clear the cache (optionally --tag <tag>).
+elbi cache clear     Clear the cache (optionally --tag <tag> or --derivation <name>,
+                     locally or on a running app with --url).
 elbi --version       Print the version.
 ```
 
