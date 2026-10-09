@@ -65,7 +65,7 @@ def _registry() -> Registry:
 
 def _dashboard(bind: str = "revenue") -> dict[str, Any]:
     return {
-        "specVersion": "1.0",
+        "specVersion": "2.0",
         "kind": "Dashboard",
         "name": "sales",
         "title": "Sales",
@@ -260,7 +260,7 @@ def test_delete_dashboard(client: TestClient) -> None:
 
 def _metric_dashboard(metric: str = "region_revenue") -> dict[str, Any]:
     return {
-        "specVersion": "1.0",
+        "specVersion": "2.0",
         "kind": "Dashboard",
         "name": "metric_board",
         "title": "Metric board",
@@ -353,11 +353,12 @@ def test_metric_tile_bound_to_a_derivation_is_refused(client: TestClient) -> Non
     assert "binds a shared metric, not a derivation" in response.text
 
 
-def test_a_metric_tile_stored_before_2_0_is_refused_not_a_crash(
+def test_a_stored_2_0_spec_that_no_longer_validates_is_refused_not_a_crash(
     client: TestClient, tmp_path: Path
 ) -> None:
-    # A dashboard saved before the metric-tile rule existed: write the old shape
-    # behind the API's back, since `create` and `save` now refuse it.
+    # A row claiming the current spec but breaking its rules (written by hand, or by a
+    # pre-release build): write it behind the API's back, since `create` and `save`
+    # refuse it. There is nothing to upgrade, so it is refused, not served half-read.
     created = client.post(
         "/api/dashboards", json=_kpi_tile({"metric": "region_revenue"})
     )
@@ -373,6 +374,64 @@ def test_a_metric_tile_stored_before_2_0_is_refused_not_a_crash(
     ):
         assert response.status_code == 404, response.text
         assert "binds a shared metric, not a derivation" in response.text
+
+
+def test_a_dashboard_saved_by_0_1_0_opens_publishes_and_resolves(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """The row as 0.1.0 left it: Spec 1.0, with a KPI summing a derivation's column."""
+    created = client.post(
+        "/api/dashboards", json=_kpi_tile({"metric": "region_revenue"})
+    )
+    dashboard_id = created.json()["id"]
+    stored = _kpi_tile({"derivation": "revenue"}) | {"specVersion": "1.0"}
+    stored["pages"][0]["widgets"][0]["viz"] = {"field": "revenue", "agg": "sum"}
+    open_store(f"sqlite:{tmp_path / 'app.db'}").save_dashboard(
+        dashboard_id, json.dumps(stored)
+    )
+
+    spec = client.get(f"/api/dashboards/{dashboard_id}").json()["spec"]
+    assert spec["specVersion"] == "2.0"
+    kpi, rows = spec["pages"][0]["widgets"]
+    assert kpi["type"] == "text"
+    assert "the sum of `revenue`" in kpi["content"]
+    assert rows["gridPos"] == {"x": 6, "y": 0, "w": 12, "h": 8}
+
+    resolved = client.post(
+        f"/api/dashboards/{dashboard_id}/pages/main/data", json={"variables": {}}
+    )
+    assert resolved.status_code == 200, resolved.text
+    widgets = {w["widgetId"]: w for w in resolved.json()["widgets"]}
+    assert widgets["rows"]["error"] is None
+    published = client.post(f"/api/dashboards/{dashboard_id}/publish")
+    assert published.status_code == 200, published.text
+
+
+def test_a_tile_bound_to_a_missing_metric_shows_an_error_not_a_500(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Through the real app's metric resolver, not the stub the fixture above wires in.
+
+    A deleted (or never defined) metric fails only the tile bound to it; the page and
+    its other tiles still load.
+    """
+    pytest.importorskip("duckdb")
+    from elbi.serve import build
+
+    monkeypatch.setenv("STORAGE_URI", f"file://{tmp_path / 'warehouse'}")
+    (tmp_path / "elbi.yaml").write_text("project: t\n")
+    with TestClient(build(tmp_path, with_mcp=False)) as http:
+        created = http.post("/api/dashboards", json=_kpi_tile({"metric": "deleted"}))
+        assert created.status_code == 200, created.text
+        resolved = http.post(
+            f"/api/dashboards/{created.json()['id']}/pages/main/data",
+            json={"variables": {}},
+        )
+
+    assert resolved.status_code == 200, resolved.text
+    widgets = {w["widgetId"]: w for w in resolved.json()["widgets"]}
+    assert "deleted" in widgets["kpi"]["error"]
+    assert widgets["rows"]["error"]  # its derivation is missing too, on its own tile
 
 
 def test_the_dashboard_schema_is_served_for_an_editor(client: TestClient) -> None:

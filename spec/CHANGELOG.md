@@ -12,10 +12,13 @@ Makes the shared metric the one definition of a dashboard number. Breaking.
   value and display format from the metric, and MUST NOT set `groupBy` or `grain`.
 - A metric binding's filter `value` MAY reference a dashboard variable as `$name`, so a
   metric tile follows the page's filters. A clause with no selection is dropped.
-- Migration: define each tile's figure as a metric over the derivation it bound
-  (`viz.agg` becomes the measure's `agg`, with `mean` spelled `average`; `viz.field`
-  becomes its `column`), then bind the tile as `{"metric": name}`. A derivation
-  `param` a tile passed becomes a metric `filter` or a dimension.
+- Migration: a reader upgrades a stored 1.x manifest instead of rejecting it
+  (`dashboard.md` §9). A `metric` tile bound to a derivation becomes a `text` note
+  saying what it showed, and one slicing its metric becomes a `table`. To restore the
+  number, define each tile's figure as a metric over the derivation it
+  bound (`viz.agg` becomes the measure's `agg`, with `mean` spelled `average`;
+  `viz.field` becomes its `column`), then bind the tile as `{"metric": name}`. A
+  derivation `param` a tile passed becomes a metric `filter` or a dimension.
 
 ## Dashboard 1.0 (unreleased)
 

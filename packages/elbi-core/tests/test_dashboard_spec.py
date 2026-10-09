@@ -9,17 +9,24 @@ specific violation is reported.
 
 from __future__ import annotations
 
+import copy
+import re
+
 import pytest
 
 from elbi_core import DashboardSpec
-from elbi_core.dashboard import is_valid_dashboard, validate_dashboard
+from elbi_core.dashboard import (
+    is_valid_dashboard,
+    upgrade_dashboard,
+    validate_dashboard,
+)
 from elbi_core.dashboard.spec import Bind, GridPos, Widget
 from elbi_core.errors import SpecValidationError
 
 
 def _manifest() -> dict:
     return {
-        "specVersion": "1.0",
+        "specVersion": "2.0",
         "kind": "Dashboard",
         "name": "revenue_health",
         "title": "Revenue Health",
@@ -275,3 +282,115 @@ def test_a_text_widget_with_both_bodies_is_rejected() -> None:
     with pytest.raises(SpecValidationError) as excinfo:
         validate_dashboard(manifest)
     assert "not both" in str(excinfo.value)
+
+
+# -- dashboards saved under Dashboard Spec 1.x ----------------------------------------
+#
+# 0.1.0 saved Spec 1.0, with KPI tiles that summed a derivation's column. A stored
+# dashboard is upgraded on every read, so these pin down what an upgrading user sees.
+
+
+def _v1(*widgets: dict) -> dict:
+    manifest = _manifest()
+    manifest["specVersion"] = "1.0"
+    manifest["pages"][0]["widgets"] = list(widgets)
+    return manifest
+
+
+#: What a text tile substitutes with a variable's value (``TextBody`` in the web app).
+_INTERPOLATED = re.compile(r"\$[a-z][a-z0-9_]*")
+
+
+def _derivation_kpi(**viz: object) -> dict:
+    return {
+        "id": "kpi",
+        "type": "metric",
+        "title": "MRR",
+        "gridPos": {"x": 2, "y": 3, "w": 6, "h": 4},
+        "bind": {"derivation": "monthly_revenue", "params": {"region": "$region"}},
+        "viz": viz,
+    }
+
+
+@pytest.mark.parametrize(
+    ("viz", "showed"),
+    [
+        ({"field": "mrr", "agg": "sum"}, "the sum of `mrr`"),
+        ({"field": "mrr", "agg": "mean"}, "the average of `mrr`"),
+        ({"field": "mrr", "agg": "max"}, "the maximum of `mrr`"),
+        ({"agg": "count"}, "the row count"),
+        ({"field": "mrr"}, "`mrr` from the first row"),
+        ({}, "the value"),
+    ],
+)
+def test_a_1_x_kpi_over_a_derivation_becomes_a_note_on_what_it_showed(
+    viz: dict, showed: str
+) -> None:
+    """2.0 refuses it, and refusing the stored dashboard would lose the whole page."""
+    spec = DashboardSpec.from_manifest(_v1(_derivation_kpi(**viz)))
+    tile = spec.pages[0].widgets[0]
+
+    assert (tile.type, tile.bind, tile.title) == ("text", None, "MRR")
+    assert tile.content is not None
+    assert showed in tile.content
+    assert "`monthly_revenue`" in tile.content
+    assert "the variable `region`" in tile.content
+    assert _INTERPOLATED.search(tile.content) is None
+
+
+def test_a_literal_with_a_dollar_sign_is_not_substituted_in_the_note() -> None:
+    kpi = _derivation_kpi(field="mrr")
+    kpi["bind"]["params"] = {"tag": "$$region"}  # a literal, not a reference
+    tile = DashboardSpec.from_manifest(_v1(kpi)).pages[0].widgets[0]
+
+    assert tile.content is not None
+    assert _INTERPOLATED.search(tile.content) is None
+
+
+def test_a_note_too_long_for_a_text_tile_is_cut_and_keeps_its_instruction() -> None:
+    kpi = _derivation_kpi(field="mrr")
+    kpi["bind"]["params"] = {"ids": list(range(4000))}
+    tile = DashboardSpec.from_manifest(_v1(kpi)).pages[0].widgets[0]
+
+    assert tile.content is not None
+    assert tile.content.endswith("replace this note with a metric tile bound to it.")
+
+
+@pytest.mark.parametrize(
+    ("key", "value"), [("groupBy", ["region"]), ("grain", "month")]
+)
+def test_a_1_x_kpi_slicing_a_metric_becomes_a_table(key: str, value: object) -> None:
+    kpi = {
+        "id": "kpi",
+        "type": "metric",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "bind": {"metric": "mrr", key: value},
+        "viz": {"field": "mrr"},
+    }
+    tile = DashboardSpec.from_manifest(_v1(kpi)).pages[0].widgets[0]
+
+    assert tile.type == "table"
+    assert tile.bind is not None
+    assert tile.bind.metric == "mrr"
+
+
+def test_upgrading_twice_is_upgrading_once_and_the_input_is_left_alone() -> None:
+    stored = _v1(_derivation_kpi(field="mrr", agg="sum"))
+    before = copy.deepcopy(stored)
+
+    once = upgrade_dashboard(stored)
+
+    assert stored == before
+    assert once["specVersion"] == "2.0"
+    assert upgrade_dashboard(once) == once
+
+
+def test_a_2_0_dashboard_is_not_upgraded() -> None:
+    assert upgrade_dashboard(_manifest()) == _manifest()
+
+
+def test_a_malformed_1_x_dashboard_fails_validation_not_the_upgrade() -> None:
+    junk = {"specVersion": "1.0", "pages": [7, {"widgets": ["x", {"gridPos": "?"}]}]}
+
+    with pytest.raises(SpecValidationError):
+        DashboardSpec.from_manifest(junk)

@@ -44,7 +44,13 @@ from elbi_core.cache import LocalCacheStore, derivation_tag
 from elbi_core.config import DataBindings, DatasetSpec, SourceSpec
 from elbi_core.data import Table
 from elbi_core.derivation import Derivation
-from elbi_core.errors import ConfigError, DataBindingError, ElbiError, ModelError
+from elbi_core.errors import (
+    ConfigError,
+    DataBindingError,
+    ElbiError,
+    MetricError,
+    ModelError,
+)
 from elbi_core.retrieval import OnnxEmbedder
 from elbi_core.sandbox import ComputeProfile
 from elbi_core.versioning import hash_file, hash_json
@@ -69,7 +75,7 @@ from .explore import WAREHOUSE_SOURCE, ExploreService
 from .extensions import service_class
 from .features import FeatureStoreService
 from .lineage import LineageService
-from .metrics import MetricService
+from .metrics import MetricService, MetricServiceError
 from .ml import kernel_tracking_env, make_model_service
 from .monitoring import MonitorService
 from .notebooks import NotebookService
@@ -1045,10 +1051,17 @@ def build(
         grain: str | None,
         filters: Sequence[Mapping[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Resolve a dashboard tile bound to a metric, to its rows."""
-        result = metric_service.query(
-            name, group_by=group_by, grain=grain, filters=[dict(f) for f in filters]
-        )
+        """Resolve a dashboard tile bound to a metric, to its rows.
+
+        A metric that is gone (deleted, or never defined) is the tile's error, not the
+        page's: the resolver shows an ``ElbiError`` on its tile.
+        """
+        try:
+            result = metric_service.query(
+                name, group_by=group_by, grain=grain, filters=[dict(f) for f in filters]
+            )
+        except MetricServiceError as exc:
+            raise MetricError(str(exc)) from exc
         return list(result["rows"])
 
     def read_monitor_value(monitor: Any) -> float:

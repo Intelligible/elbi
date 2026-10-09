@@ -114,6 +114,10 @@ of `"$name"` follows a dashboard variable; clearing that control drops the filte
 slice a metric by a dimension or over time, bind it to a `chart` or `table` with
 `groupBy` and `grain`; a `metric` tile is one number.
 
+A dashboard saved before 0.2.0 may have number tiles that added up a derivation's rows
+themselves. Those open as notes saying what each one showed, until you define the
+metric and bind a tile to it; see [Upgrading](upgrading.md#dashboards-saved-before-020).
+
 ## Filters, variables, and interactions
 
 - **Variables** are the dashboard's inputs. A `filter` widget renders a control for one;
