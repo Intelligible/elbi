@@ -133,7 +133,7 @@ per component: sound when it carries `evidence` (a `domain_knowledge` note is
 exempt), `invalid` when an item fails the schema. That check is structural, so an
 agent-proposed components derivation is held for a human by default; see
 [Certification policy](authoring.md#certification-policy). A worked example is
-`examples/05_components`.
+`examples/04_components`.
 
 ## Artifacts
 

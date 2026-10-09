@@ -6,7 +6,7 @@ A derivation whose artifact is a list of
 committed and CI-tested like the other examples.
 
 ```bash
-cd examples/05_components
+cd examples/04_components
 elbi validate
 elbi mcp          # serve at http://localhost:7878/mcp
 uv run pytest             # from the repo root, runs as part of the suite
