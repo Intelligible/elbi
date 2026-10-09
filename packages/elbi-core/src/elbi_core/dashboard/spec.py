@@ -27,7 +27,7 @@ import jsonschema
 from ..errors import SpecValidationError
 
 #: The Dashboard Spec version this SDK implements (MAJOR.MINOR).
-DASHBOARD_SPEC_VERSION = "1.0"
+DASHBOARD_SPEC_VERSION = "2.0"
 
 #: The value types a variable selection produces.
 VARIABLE_TYPES = ("string", "integer", "number", "boolean", "date")
@@ -299,7 +299,8 @@ class Interactions:
 class Widget:
     """A single tile on a page.
 
-    ``metric``/``chart``/``map``/``table`` widgets carry a :class:`Bind`; a ``text``
+    ``metric``/``chart``/``map``/``table`` widgets carry a :class:`Bind`, and a
+    ``metric`` widget's names a shared metric, never a derivation; a ``text``
     widget carries markdown ``content``, or a :class:`Bind` naming a derivation that
     returns markdown; a ``filter`` widget names the ``variable`` whose control it
     renders.
@@ -597,6 +598,10 @@ def _widget_errors(
         messages.append(f"{where}: a {wtype!r} widget requires 'bind'")
     if wtype == "filter" and "bind" in widget:
         messages.append(f"{where}: a 'filter' widget may not have 'bind'")
+    # A number shown on a tile is defined once, as a shared metric, so the same figure
+    # cannot be aggregated two ways on two surfaces.
+    if wtype == "metric" and "bind" in widget:
+        messages.extend(_metric_tile_errors(where, widget["bind"]))
     # A text tile's body is its own prose or a derivation returning markdown. Both
     # would leave which one renders decided somewhere other than the spec.
     if wtype == "text":
@@ -620,6 +625,10 @@ def _widget_errors(
             ref = _variable_ref(value)
             if ref is not None and ref not in variables:
                 messages.append(f"{where}: param references unknown variable ${ref}")
+        for clause in bind.get("filters", []):
+            ref = _variable_ref(clause.get("value"))
+            if ref is not None and ref not in variables:
+                messages.append(f"{where}: filter references unknown variable ${ref}")
 
     interactions = widget.get("interactions", {})
     cross = interactions.get("crossFilter")
@@ -648,6 +657,20 @@ def _widget_errors(
         )
 
     return messages
+
+
+def _metric_tile_errors(where: str, bind: dict[str, Any]) -> list[str]:
+    if "metric" not in bind:
+        return [
+            f"{where}: a 'metric' widget binds a shared metric, not a derivation; "
+            "define the metric, then bind it as {'metric': name}"
+        ]
+    return [
+        f"{where}: a 'metric' widget shows one number and may not set {key!r}; "
+        "use a chart or table to slice a metric"
+        for key in ("groupBy", "grain")
+        if key in bind
+    ]
 
 
 def _duplicate_errors(label: str, items: list[Any], key: str) -> list[str]:

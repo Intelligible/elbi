@@ -6,7 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getDatasets } from "@/lib/chat"
 import type { Catalog, SourceDetail, SourceSummary } from "@/lib/warehouse"
-import { deleteSource, getCatalog, getSource, listSources, updateSchema } from "@/lib/warehouse"
+import {
+  deleteSource,
+  getCatalog,
+  getSource,
+  listSources,
+  syncSource,
+  updateSchema,
+} from "@/lib/warehouse"
 import { NewSourcePage, SourceDetailPage, WarehousePage } from "./WarehousePage"
 
 vi.mock("@/lib/chat", () => ({ getDatasets: vi.fn() }))
@@ -175,5 +182,131 @@ describe("SourceDetailPage", () => {
     await userEvent.click(toggle)
     expect(updateSchema).toHaveBeenCalledWith("sch1", { should_sync: true })
     expect(await screen.findByRole("switch")).toHaveAttribute("aria-checked", "true")
+  })
+
+  const schema = (s: Partial<SourceDetail["schemas"][number]>) =>
+    ({
+      id: "sch1",
+      name: "activation_funnel",
+      table: "custom__activation_funnel",
+      shouldSync: true,
+      syncType: "full_refresh",
+      incrementalField: null,
+      incrementalFields: [],
+      status: "synced",
+      rowCount: 0,
+      lastError: null,
+      lastSyncedAt: "2026-10-01T09:00:00",
+      ...s,
+    }) as SourceDetail["schemas"][number]
+
+  const open = (schemas: SourceDetail["schemas"], s: Partial<SourceSummary> = {}) => {
+    vi.mocked(getSource).mockResolvedValue({
+      ...summary({
+        id: "a",
+        name: "posthog",
+        prefix: "custom",
+        lastSyncedAt: "2026-10-01T09:00:00",
+        ...s,
+      }),
+      schemas,
+    })
+    renderAt("/warehouse/sources/a")
+  }
+
+  const help = (about: string, scope: HTMLElement = document.body) =>
+    within(scope).getByRole("link", { name: `What “${about}” means` })
+
+  const tooltipOn = async (trigger: HTMLElement) => {
+    await userEvent.hover(trigger)
+    return screen.findByRole("tooltip")
+  }
+
+  it("a sync that landed no rows reads as a warning, not as idle and synced", async () => {
+    open([schema({ rowCount: 0 })])
+    const headline = await screen.findByText("Synced, but no rows")
+    expect(headline).toHaveAttribute("data-variant", "warning")
+    expect(screen.queryByText("idle")).toBeNull()
+    const row = screen.getByText("custom__activation_funnel").closest("tr") as HTMLElement
+    expect(within(row).getByText("No rows")).toHaveAttribute("data-variant", "warning")
+    expect(await tooltipOn(help("Synced, but no rows"))).toHaveTextContent(
+      "The last sync succeeded, but 1 table got no rows: custom__activation_funnel.",
+    )
+  })
+
+  it("a failed last run is the headline and is marked on the table that failed", async () => {
+    open(
+      [
+        schema({ status: "error", rowCount: 233, lastError: "cannot merge line items" }),
+        schema({ id: "sch2", table: "custom__charges", rowCount: 5 }),
+      ],
+      { status: "error", lastError: "cannot merge line items" },
+    )
+    expect(
+      await screen.findByText("Failed", { selector: "[data-slot=badge]:not(td *)" }),
+    ).toHaveAttribute("data-variant", "danger")
+    const failed = screen.getByText("custom__activation_funnel").closest("tr") as HTMLElement
+    const badge = within(failed).getByText("Failed")
+    expect(badge).toHaveAttribute("data-variant", "danger")
+    expect(await tooltipOn(help("Failed", failed))).toHaveTextContent(
+      "The last sync of this table failed: cannot merge line items",
+    )
+    const ok = screen.getByText("custom__charges").closest("tr") as HTMLElement
+    expect(within(ok).getByText("Synced")).toHaveAttribute("data-variant", "success")
+  })
+
+  it("an incremental sync with nothing new agrees with the table's Synced badge", async () => {
+    // An incremental table's rowCount is its running total; the outcome's rows are this run's.
+    open([schema({ syncType: "incremental", incrementalField: "updated_at", rowCount: 500 })])
+    const button = await screen.findByRole("button", { name: "Sync now" })
+    vi.mocked(syncSource).mockResolvedValue({
+      outcomes: [{ table: "custom__activation_funnel", rows: 0, ok: true, error: null }],
+      source: await vi.mocked(getSource).mock.results[0].value, // the page's loaded detail
+    })
+    await userEvent.click(button)
+    const last = (await screen.findByText("Last sync")).parentElement as HTMLElement
+    expect(within(last).getByText("No new rows")).toHaveAttribute("data-variant", "success")
+    const row = screen.getByText("custom__activation_funnel", { selector: "td *" }).closest("tr")
+    expect(within(row as HTMLElement).getByText("Synced")).toHaveAttribute(
+      "data-variant",
+      "success",
+    )
+    expect(screen.queryByText("No rows")).toBeNull()
+  })
+
+  it.each([
+    ["Method", "Full refresh reads every row and replaces the table on each sync."],
+    ["Rows", "Rows in this table as of its last successful sync"],
+    ["tables enabled", "Enabled tables are the ones a sync reads"],
+    ["last synced", "When a sync last finished with every enabled table succeeding."],
+  ])("%s explains itself from its help icon", async (about, text) => {
+    open([schema({ rowCount: 10 })])
+    await screen.findByText("Synced · 10 rows")
+    const tip = await tooltipOn(help(about))
+    expect(tip).toHaveTextContent(text)
+  })
+
+  it("the schedule explains what Manual only means", async () => {
+    open([schema({ rowCount: 10 })])
+    await screen.findByRole("combobox", { name: "Sync frequency" })
+    const tip = await tooltipOn(help("Sync frequency"))
+    expect(tip).toHaveTextContent("How often the app syncs this source on its own.")
+    expect(tip).toHaveTextContent("Manual only means it syncs only when you click Sync now.")
+  })
+
+  it("a help icon links to its docs section", async () => {
+    open([schema({ rowCount: 10 })])
+    await screen.findByText("Synced · 10 rows")
+    expect(help("Method")).toHaveAttribute(
+      "href",
+      "https://docs.elbi.ai/data-sources/#incremental-sync",
+    )
+  })
+
+  it("a help tip opens from the keyboard", async () => {
+    open([schema({ rowCount: 10 })])
+    await screen.findByText("Synced · 10 rows")
+    help("Rows").focus()
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Rows in this table")
   })
 })

@@ -83,7 +83,7 @@ cannot version, its result is not cached.
 Under the workbench is a small SDK function, usable on its own:
 
 ```python
-from elbi import query_datasets
+from elbi_core import query_datasets
 
 result = query_datasets(
     {"sales": sales_rows, "regions": region_rows},

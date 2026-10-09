@@ -20,7 +20,7 @@ vi.mock("@/lib/dashboards", async (importOriginal) => ({
   saveDashboard: vi.fn(),
 }))
 
-import { getDashboard, saveDashboard } from "@/lib/dashboards"
+import { getDashboard, resolvePage, saveDashboard } from "@/lib/dashboards"
 import { DashboardPage } from "./DashboardPage"
 
 const DASHBOARD: Dashboard = {
@@ -54,6 +54,7 @@ const DASHBOARD: Dashboard = {
 
 afterEach(() => {
   vi.clearAllMocks()
+  vi.mocked(resolvePage).mockResolvedValue([])
 })
 
 describe("DashboardPage", () => {
@@ -140,5 +141,114 @@ describe("DashboardPage", () => {
 
     expect(saveDashboard).not.toHaveBeenCalled()
     expect(screen.queryByLabelText("Tile actions: Caveat")).toBeNull()
+  })
+
+  it("says why the tiles did not load when the server refuses the page", async () => {
+    vi.mocked(getDashboard).mockResolvedValue(DASHBOARD)
+    // What post() throws for a stored dashboard the current spec refuses.
+    vi.mocked(resolvePage).mockRejectedValue(
+      new Error(
+        'POST /api/dashboards/d1/pages/main/data failed: 404 {"detail": "manifest failed spec validation:\\n' +
+          "  - pages/main/widgets/kpi: a 'metric' widget binds a shared metric, not a derivation; " +
+          "define the metric, then bind it as {'metric': name}\"}",
+      ),
+    )
+    render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/dashboards/d1"]}>
+          <Routes>
+            <Route path="/dashboards/:id" element={<DashboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>,
+    )
+
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent("Tiles not loaded:")
+    expect(alert).toHaveTextContent("binds a shared metric, not a derivation")
+  })
+
+  describe("when the tiles are fetched again", () => {
+    const BOUND: Dashboard = {
+      ...DASHBOARD,
+      spec: {
+        ...DASHBOARD.spec,
+        pages: [
+          {
+            ...DASHBOARD.spec.pages[0],
+            widgets: [
+              {
+                id: "note",
+                type: "text",
+                title: "Caveat",
+                bind: { derivation: "notes" },
+                gridPos: { x: 0, y: 0, w: 12, h: 6 },
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const figure = (value: string) => [
+      {
+        widgetId: "note",
+        derivation: "notes",
+        kind: "text",
+        value,
+        dataVersion: null,
+        error: null,
+      },
+    ]
+
+    function renderBoard() {
+      const { container } = render(
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/dashboards/d1"]}>
+            <Routes>
+              <Route path="/dashboards/:id" element={<DashboardPage />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>,
+      )
+      const refresh = () => {
+        const button = container.querySelector(".lucide-refresh-cw")?.closest("button")
+        if (!button) throw new Error("no refresh button")
+        return button
+      }
+      return { refresh }
+    }
+
+    it("drops the old figures when the new ones are refused", async () => {
+      const user = userEvent.setup()
+      vi.mocked(getDashboard).mockResolvedValue(BOUND)
+      vi.mocked(resolvePage).mockResolvedValueOnce(figure("old figure"))
+      const { refresh } = renderBoard()
+      expect(await screen.findByText("old figure")).toBeInTheDocument()
+
+      vi.mocked(resolvePage).mockRejectedValueOnce(new Error("503"))
+      await user.click(refresh())
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Tiles not loaded: 503")
+      expect(screen.queryByText("old figure")).toBeNull()
+    })
+
+    it("ignores an older fetch that finishes after a newer one", async () => {
+      const user = userEvent.setup()
+      vi.mocked(getDashboard).mockResolvedValue(BOUND)
+      let failFirst: (err: Error) => void = () => {}
+      vi.mocked(resolvePage)
+        .mockReturnValueOnce(new Promise((_, reject) => (failFirst = reject)))
+        .mockResolvedValueOnce(figure("new figure"))
+      const { refresh } = renderBoard()
+      await waitFor(() => expect(resolvePage).toHaveBeenCalledTimes(1))
+      await user.click(refresh())
+      expect(await screen.findByText("new figure")).toBeInTheDocument()
+
+      failFirst(new Error("stale"))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(screen.queryByRole("alert")).toBeNull()
+      expect(screen.getByText("new figure")).toBeInTheDocument()
+    })
   })
 })

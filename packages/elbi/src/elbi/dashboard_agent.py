@@ -72,7 +72,8 @@ class DashboardAgent:
             parts.append(f"\n## page {page['name']}")
             for widget in page.get("widgets", []):
                 bind = widget.get("bind", {})
-                target = f" → {bind['derivation']}" if bind else ""
+                bound = bind.get("metric") or bind.get("derivation")
+                target = f" → {bound}" if bound else ""
                 pos = widget["gridPos"]
                 parts.append(
                     f"- {widget['id']} ({widget['type']}){target} "

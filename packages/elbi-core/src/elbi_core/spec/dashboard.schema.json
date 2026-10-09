@@ -280,7 +280,7 @@
           "maxLength": 128
         },
         "type": {
-          "description": "The kind of widget. 'metric', 'chart', 'map', and 'table' bind to a derivation; 'text' renders markdown; 'filter' renders a control for a variable.",
+          "description": "The kind of widget. 'metric' shows one number from a shared semantic-layer metric; 'chart', 'map', and 'table' bind to a derivation or a metric; 'text' renders markdown; 'filter' renders a control for a variable.",
           "enum": [
             "metric",
             "chart",
@@ -301,7 +301,7 @@
           "$ref": "#/$defs/bind"
         },
         "viz": {
-          "description": "Rendering spec for the widget. For 'chart'/'map' this is a grammar-of-graphics spec; for 'metric' it selects the field and format; for 'table' it configures columns and paging.",
+          "description": "Rendering spec for the widget. For 'chart'/'map' this is a grammar-of-graphics spec; 'metric' takes its value and format from the bound metric; for 'table' it configures columns and paging.",
           "type": "object"
         },
         "content": {
