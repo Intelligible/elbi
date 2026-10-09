@@ -23,12 +23,21 @@ from elbi.monitoring import MonitorService
 # The current value the stub source returns; a test mutates it between checks.
 NEXT: dict[str, float] = {"value": 100.0}
 ALERTS: list[dict[str, Any]] = []
+# Targets whose source cannot be read, and what reading one raises.
+FAILING: dict[str, Exception] = {}
 
 
 @pytest.fixture(autouse=True)
 def _reset() -> None:
     NEXT["value"] = 100.0
     ALERTS.clear()
+    FAILING.clear()
+
+
+def _read(monitor: Any) -> float:
+    if monitor.target in FAILING:
+        raise FAILING[monitor.target]
+    return NEXT["value"]
 
 
 @pytest.fixture
@@ -36,7 +45,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
     store = open_store(f"sqlite:{tmp_path / 'app.db'}")
     service = MonitorService(
         store=store,
-        read_value=lambda monitor: NEXT["value"],
+        read_value=_read,
         source_certified=lambda kind, target: target != "uncertified",
         on_alert=ALERTS.append,
     )
@@ -50,13 +59,13 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
         yield http
 
 
-def _create(client: TestClient) -> str:
+def _create(client: TestClient, target: str = "revenue") -> str:
     response = client.post(
         "/api/monitors",
         json={
-            "name": "revenue watch",
+            "name": f"{target} watch",
             "target_kind": "metric",
-            "target": "revenue",
+            "target": target,
             "sensitivity": 3.0,
             "window": 30,
         },
@@ -224,3 +233,96 @@ def test_scheduler_tick_runs_due_monitors(client: TestClient) -> None:
     client.app.state.monitor_tick()
     detail = client.get(f"/api/monitors/{monitor_id}").json()
     assert detail["snapshots"][-1]["value"] == 42.0
+
+
+class _QueryFailed(Exception):
+    """Stands in for a source's own error type, which is not an ``ElbiError``."""
+
+
+def _baseline(client: TestClient, monitor_id: str) -> None:
+    for value in (100.0, 101.0, 99.0, 100.0, 102.0, 98.0, 100.0, 101.0):
+        _check(client, monitor_id, value)
+
+
+def _incidents(client: TestClient, monitor_id: str) -> list[dict[str, Any]]:
+    return client.get(f"/api/monitors/{monitor_id}").json()["incidents"]
+
+
+def test_an_unreadable_source_alerts_once_then_recovers(client: TestClient) -> None:
+    monitor_id = _create(client)
+    _baseline(client, monitor_id)
+    FAILING["revenue"] = _QueryFailed("warehouse unreachable")
+
+    # The check still reports the failure to its caller, and now alerts on it too.
+    response = client.post(f"/api/monitors/{monitor_id}/check")
+    assert response.status_code == 400
+    assert "warehouse unreachable" in response.json()["detail"]
+    assert [a["event"] for a in ALERTS] == ["metric.source_failed"]
+    assert ALERTS[0]["monitor_id"] == monitor_id
+    assert ALERTS[0]["target"] == "revenue"
+    assert "warehouse unreachable" in ALERTS[0]["reason"]
+    assert client.get("/api/monitors").json()[0]["status"] == "alerting"
+
+    # A run of failures is one incident and one alert, not one per check.
+    assert client.post(f"/api/monitors/{monitor_id}/check").status_code == 400
+    assert len(ALERTS) == 1
+    incidents = _incidents(client, monitor_id)
+    assert len(incidents) == 1
+    assert incidents[0]["open"] is True
+    assert incidents[0]["snapshots"] == 2
+
+    # The source reads again at a normal value: the failure closes as a recovery.
+    del FAILING["revenue"]
+    recovered = _check(client, monitor_id, 100.0)
+    assert recovered["alerted"] is True
+    assert [a["event"] for a in ALERTS] == ["metric.source_failed", "metric.recovered"]
+    assert _incidents(client, monitor_id)[0]["open"] is False
+    assert client.get("/api/monitors").json()[0]["status"] == "ok"
+
+
+def test_a_source_returning_anomalous_alerts_as_an_anomaly(client: TestClient) -> None:
+    monitor_id = _create(client)
+    _baseline(client, monitor_id)
+    FAILING["revenue"] = _QueryFailed("timeout")
+    client.post(f"/api/monitors/{monitor_id}/check")
+    del FAILING["revenue"]
+
+    spike = _check(client, monitor_id, 5000.0)
+    assert spike["anomalous"] is True
+    assert spike["alerted"] is True
+    assert [a["event"] for a in ALERTS] == [
+        "metric.source_failed",
+        "metric.anomaly_detected",
+    ]
+    assert [i["open"] for i in _incidents(client, monitor_id)] == [True, False]
+
+
+def test_a_failure_during_an_anomaly_is_alerted_rather_than_folded(
+    client: TestClient,
+) -> None:
+    monitor_id = _create(client)
+    _baseline(client, monitor_id)
+    _check(client, monitor_id, 5000.0)
+    FAILING["revenue"] = _QueryFailed("table dropped")
+    client.post(f"/api/monitors/{monitor_id}/check")
+    assert [a["event"] for a in ALERTS] == [
+        "metric.anomaly_detected",
+        "metric.source_failed",
+    ]
+    # The anomaly's incident closes; the failure is the one left open.
+    assert [i["open"] for i in _incidents(client, monitor_id)] == [True, False]
+
+
+def test_the_tick_alerts_on_a_failing_monitor_and_still_runs_the_rest(
+    client: TestClient,
+) -> None:
+    broken = _create(client, "broken")
+    healthy = _create(client, "healthy")
+    FAILING["broken"] = _QueryFailed("no such column")
+    NEXT["value"] = 7.0
+    client.app.state.monitor_tick()
+    assert [(a["event"], a["monitor_id"]) for a in ALERTS] == [
+        ("metric.source_failed", broken)
+    ]
+    snapshots = client.get(f"/api/monitors/{healthy}").json()["snapshots"]
+    assert [s["value"] for s in snapshots] == [7.0]

@@ -32,6 +32,7 @@ EVENT_TYPES: dict[str, bool] = {
     TRAINING_FAILED: True,
     "metric.anomaly_detected": True,
     "metric.recovered": False,
+    "metric.source_failed": True,
     "run.failed": True,
     "run.slow": False,
     "drift.detected": False,
@@ -69,6 +70,13 @@ def _render(action: str, data: Mapping[str, Any]) -> tuple[str, str, str, str]:
         return (
             f"Monitor {data.get('monitor', '')!r} recovered",
             str(data.get("reason") or ""),
+            "metric_monitor",
+            str(data.get("monitor_id") or ""),
+        )
+    if action == "metric.source_failed":
+        return (
+            f"Monitor {data.get('monitor', '')!r} could not read its source",
+            str(data.get("reason") or "")[:_ERROR_CAP],
             "metric_monitor",
             str(data.get("monitor_id") or ""),
         )

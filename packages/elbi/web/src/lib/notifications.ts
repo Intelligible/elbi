@@ -49,6 +49,10 @@ export const EVENT_TYPE_LABELS: Record<string, { label: string; description: str
     label: "Monitor recovered",
     description: "A monitor you configured returned to normal",
   },
+  "metric.source_failed": {
+    label: "Monitor source failed",
+    description: "A monitor you configured could not read the value it watches",
+  },
   "run.failed": {
     label: "Run failed",
     description: "An orchestration run you own failed",

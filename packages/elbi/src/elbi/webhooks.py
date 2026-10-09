@@ -51,7 +51,8 @@ def fire_model_event(store: Store | None, action: str, data: dict[str, Any]) -> 
     ``action`` is the event name (``model_version.created``, ``alias.updated``,
     ``model_version.deleted``, ``registered_model.deleted``, ``drift.detected``,
     ``feature.drift_detected``, ``feature.expectations_failed``,
-    ``metric.anomaly_detected``, ``metric.recovered``, ``run.failed``, ``run.slow``);
+    ``metric.anomaly_detected``, ``metric.recovered``, ``metric.source_failed``,
+    ``run.failed``, ``run.slow``);
     ``data`` is the event's payload (model, feature-view, or monitor name, version,
     value, run id, and the like).
     """

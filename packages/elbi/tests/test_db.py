@@ -143,6 +143,7 @@ def test_migrating_an_older_postgres_database_forward() -> None:
         # an older row simply has no entity column rather than a bad default.
         "retrainpolicy": ["groups"],
         "orchestration_run": ["parent_run_id", "workflow_id", "workflow_steps_json"],
+        "monitor_incident": ["cause"],
     }
     engine = create_engine(sqlalchemy_url(uri))
     try:
@@ -715,3 +716,27 @@ def test_derivation_origin_and_repo_refusal(store: Store) -> None:
     # confirms a normal, non-repo row still trashes cleanly on its own.
     assert store.trash_derivation("agent_one") is True
     assert store.get_derivation("agent_one") is None
+
+
+def test_an_incident_table_predating_its_cause_gains_it(tmp_path: Path) -> None:
+    """An older SQLite store opens with the column added and its incidents intact."""
+    from sqlalchemy import inspect, text
+
+    from elbi.db import MonitorIncident
+
+    path = tmp_path / "older.db"
+    with open_store(f"sqlite:{path}") as older:
+        older.save_incident(MonitorIncident(monitor_id="m1", reason="spike"))
+    engine = create_engine(sqlalchemy_url(f"sqlite:{path}"))
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE monitor_incident DROP COLUMN cause"))
+        migrate(engine)
+        present = {c["name"] for c in inspect(engine).get_columns("monitor_incident")}
+    finally:
+        engine.dispose()
+    assert "cause" in present
+    with open_store(f"sqlite:{path}") as reopened:
+        incident = reopened.open_incident("m1")
+    assert incident is not None
+    assert (incident.reason, incident.cause) == ("spike", None)
