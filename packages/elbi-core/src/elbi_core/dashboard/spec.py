@@ -16,6 +16,7 @@ render time.
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -487,9 +488,13 @@ class DashboardSpec:
     def from_manifest(cls, data: dict[str, Any]) -> DashboardSpec:
         """Parse and validate a Dashboard manifest.
 
+        A manifest written against Spec 1.x is upgraded first, by
+        :func:`upgrade_dashboard`, so a dashboard saved by an older release still opens.
+
         Raises:
             SpecValidationError: if the manifest does not conform to the spec.
         """
+        data = upgrade_dashboard(data)
         validate_dashboard(data)
         refresh = data.get("refresh", {})
         return cls(
@@ -548,6 +553,106 @@ def is_valid_dashboard(manifest: dict[str, Any]) -> bool:
     except SpecValidationError:
         return False
     return True
+
+
+#: What a 1.x KPI tile's ``viz.agg`` did to its ``viz.field``, as a note words it.
+_V1_AGG_WORDS = {"sum": "sum", "mean": "average", "min": "minimum", "max": "maximum"}
+
+
+def upgrade_dashboard(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Bring a manifest written against Dashboard Spec 1.x up to 2.0.
+
+    A stored dashboard outlives the release that saved it, so it is upgraded when read
+    rather than refused.
+
+    From 1.x:
+
+    * A ``metric`` tile bound to a derivation, which 2.0 refuses, becomes a ``text``
+      tile saying what it showed and which shared metric would replace it.
+    * A ``metric`` tile slicing its metric by ``groupBy`` or ``grain`` becomes a
+      ``table``, which 2.0 allows to slice one.
+    """
+    version = manifest.get("specVersion")
+    if not (isinstance(version, str) and version.startswith("1.")):
+        return manifest
+    upgraded = copy.deepcopy(manifest)
+    for page in _dicts(upgraded.get("pages")):
+        for widget in _dicts(page.get("widgets")):
+            _upgrade_widget_from_1(widget)
+    upgraded["specVersion"] = "2.0"
+    return upgraded
+
+
+def _dicts(value: Any) -> list[dict[str, Any]]:
+    """The objects in a list, skipping anything else (validation reports it)."""
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def _upgrade_widget_from_1(widget: dict[str, Any]) -> None:
+    bind = widget.get("bind")
+    if widget.get("type") != "metric" or not isinstance(bind, dict):
+        return
+    if "derivation" in bind:
+        viz = widget.pop("viz", None)
+        del widget["bind"]
+        widget["type"] = "text"
+        widget["content"] = _retired_kpi_note(
+            bind, viz if isinstance(viz, dict) else {}
+        )
+    elif "groupBy" in bind or "grain" in bind:
+        widget.pop("viz", None)  # a KPI's field and agg mean nothing to a table
+        widget["type"] = "table"
+
+
+def _retired_kpi_note(bind: dict[str, Any], viz: dict[str, Any]) -> str:
+    """Markdown for a 1.x KPI that aggregated a derivation's rows itself.
+
+    It follows the 1.x tile's own reading of ``viz``: a row count, an aggregate of a
+    field, a field of the first row, or the derivation's single value. A variable is
+    named in words, and a ``$`` in any value is kept from reading as ``$name``, which
+    a text tile replaces with the variable's value. The note is cut to fit a text tile,
+    keeping the closing instruction.
+    """
+    field_, agg = viz.get("field"), viz.get("agg")
+    word = _V1_AGG_WORDS.get(agg) if isinstance(agg, str) else None
+    if agg == "count":
+        showed = "the row count"
+    elif word and field_:
+        showed = f"the {word} of `{field_}`"
+    elif field_:
+        showed = f"`{field_}` from the first row"
+    else:
+        showed = "the value"
+    params = bind.get("params")
+    inputs = [
+        f"`{name}` from the variable `{ref}`"
+        if (ref := _variable_ref(value)) is not None
+        else f"`{name}` set to `{value}`"
+        for name, value in (params.items() if isinstance(params, dict) else ())
+    ]
+    source = f"the derivation `{bind['derivation']}`"
+    if inputs:
+        source += " with " + ", ".join(inputs)
+    fmt = viz.get("format")
+    formatted = f", formatted as {fmt}" if isinstance(fmt, str) else ""
+    # A zero-width space after each `$` stops the text tile's `$name` substitution.
+    head = f"It showed {showed} from {source}{formatted}.".replace("$", "$\u200b")
+    lead = "**This tile needs a shared metric.** "
+    tail = (
+        " A metric tile now reads a metric defined once, so the number is the same "
+        "everywhere it appears. Define it on the Metrics page, then replace this note "
+        "with a metric tile bound to it."
+    )
+    room = _content_max() - len(lead) - len(tail)
+    if len(head) > room:
+        head = head[: room - 1] + "\u2026"
+    return lead + head + tail
+
+
+def _content_max() -> int:
+    """The longest ``content`` a text widget may hold, per the bundled schema."""
+    widget = load_dashboard_schema()["$defs"]["widget"]
+    return int(widget["properties"]["content"]["maxLength"])
 
 
 def _reference_errors(manifest: dict[str, Any]) -> list[str]:

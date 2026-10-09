@@ -89,6 +89,25 @@ about, because the migration is one-way and downgrading afterwards will not undo
 Nothing else moves. Your warehouse tables, your derivations and their cached results,
 and your project files are untouched by an upgrade; they live outside the package.
 
+### Dashboards saved before 0.2.0
+
+0.2.0 reads dashboards as Dashboard Spec 2.0 and converts one saved by 0.1.0 when it
+opens, or when `elbi sync` or `elbi import` brings one in. Nothing is rewritten until
+you save it.
+
+- **Tiles open shorter.** Grid rows are half as tall, so drag a tile taller in the
+  editor, or double its `y` and `h` in the spec.
+- **A number tile that added up a derivation's column becomes a note.** A number tile
+  now shows a [shared metric](dashboards.md#metric-tiles-bind-shared-metrics). The note
+  says what the tile showed: define that figure as a metric on the Metrics page, then
+  put a metric tile where the note is.
+- **A number tile that broke its metric down** by a dimension or a time grain becomes a
+  table.
+
+If you keep dashboards in a repository with `elbi sync`, run `elbi pull` once after
+upgrading. It rewrites the files in the new format; until then `elbi plan` lists each
+one as changed.
+
 ## Pre-releases
 
 `elbi update` ignores pre-releases unless the version you are running is itself a

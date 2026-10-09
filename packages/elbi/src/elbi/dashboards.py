@@ -21,7 +21,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from elbi_core import DashboardSpec, Runner
-from elbi_core.dashboard import MetricResolver, resolve_options, resolve_page
+from elbi_core.dashboard import (
+    MetricResolver,
+    resolve_options,
+    resolve_page,
+    upgrade_dashboard,
+)
 from elbi_core.errors import ElbiError, SpecValidationError
 
 from .db import Dashboard, DashboardSubscription, Store
@@ -397,7 +402,11 @@ def _dump(spec: DashboardSpec) -> str:
 
 
 def _load(spec_json: str) -> dict[str, Any]:
+    """A stored spec, upgraded to the current spec if an older release saved it.
+
+    Every reader goes through here, so the editor, ``elbi pull`` and an export see the
+    same manifest the page renders from, and the next save stores it upgraded.
+    """
     import json
 
-    data: dict[str, Any] = json.loads(spec_json)
-    return data
+    return upgrade_dashboard(json.loads(spec_json))
