@@ -31,10 +31,10 @@ export function downloadText(filename: string, text: string, mime: string): void
   const a = document.createElement("a")
   a.href = url
   a.download = filename
-  // In the document, and the URL kept until the click is handled: some browsers
-  // otherwise skip the download or save an empty file.
+  // In the document, and the URL kept while the browser reads it: some browsers
+  // otherwise skip the download or save an empty file. 40 s is FileSaver.js's delay.
   document.body.appendChild(a)
   a.click()
   a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 0)
+  setTimeout(() => URL.revokeObjectURL(url), 40_000)
 }

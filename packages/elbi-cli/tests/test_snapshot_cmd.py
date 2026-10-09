@@ -128,6 +128,33 @@ def test_filter_and_text_tiles_get_the_defaults_the_page_was_resolved_at() -> No
     assert payload["pages"][0]["widgets"][0]["variable"] == "region"
 
 
+def test_a_later_draft_leaves_the_header_on_the_published_version() -> None:
+    # The row moves with every draft save; ``versions`` is newest first.
+    document = _document(
+        title="Draft title",
+        version=5,
+        versions=[
+            {"version": 5, "label": "saved", "created_at": "2026-09-24T09:00:00+00:00"},
+            {
+                "version": 4,
+                "label": "published",
+                "created_at": "2026-09-23T12:00:00+00:00",
+            },
+        ],
+    )
+    # Untitled when published, so the row's title then was the spec's name.
+    del document["published_spec"]["title"]
+    document["published_spec"]["name"] = "revenue"
+    payload = build(document)
+    assert (payload["title"], payload["version"], payload["updatedAt"]) == (
+        "revenue",
+        4,
+        "2026-09-23T12:00:00+00:00",
+    )
+    # With no published entry in the history, the row's own version stands.
+    assert build(_document())["version"] == 3
+
+
 def test_version_history_never_reaches_the_page() -> None:
     page = render(_document())
     assert "old draft" not in page

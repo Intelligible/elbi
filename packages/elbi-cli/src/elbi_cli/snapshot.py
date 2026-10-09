@@ -90,7 +90,7 @@ def build(document: dict[str, Any]) -> dict[str, Any]:
     if published:
         # A draft save moves the row's title, version and edit time, but the page shows
         # the published spec, so it names that version (``versions`` is newest first).
-        title = spec.get("title") or title
+        title = spec.get("title") or spec.get("name") or title
         shown = next(
             (
                 v

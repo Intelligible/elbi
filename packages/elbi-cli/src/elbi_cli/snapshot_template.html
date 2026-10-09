@@ -206,7 +206,9 @@
   // the same). A bare YYYY-MM-DD parses as UTC midnight, the day before west of UTC, so it
   // is read as local midnight instead.
   const fmtTime = (v) => {
-    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(v) ? v + "T00:00" : v);
+    // A date-only string parses as UTC, so west of UTC it shows the day before; with a
+    // time added it parses as local midnight, the day it names.
+    const d = new Date(/^\d{4}(-\d{2}){0,2}$/.test(v) ? v + "T00:00" : v);
     if (isNaN(d)) return String(v);
     const day = { year: "numeric", month: "short", day: "numeric" };
     return d.getHours() || d.getMinutes() ? d.toLocaleString(undefined, { ...day, hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString(undefined, day);
@@ -346,7 +348,7 @@
     if (spec.mark !== "bar" && spec.enc.color?.field) return tableBody(w, rows, "A chart with a line per series is not drawn in snapshots; its data is shown instead.");
     if (rows.some((r) => Number(r[spec.val.field]) < 0)) return tableBody(w, rows, "A chart with negative values is not drawn in snapshots; its data is shown instead.");
     const { enc, cat, val, valCh, horizontal, mark } = spec;
-    const catLabel = (k) => (cat.type === "temporal" ? fmtTime(k) : String(k));
+    const catLabel = (k) => (k == null || k === "" ? EMPTY : cat.type === "temporal" ? fmtTime(k) : String(k));
     const colorField = enc.color?.field;
 
     // Categories, each with its stacked segments, in the encoding's sort order.
