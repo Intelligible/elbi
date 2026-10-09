@@ -8,6 +8,12 @@ import { describe, expect, it, vi } from "vitest"
 import type { Widget, WidgetData } from "@/lib/dashboards"
 
 vi.mock("@/components/viz/VizView", () => ({ VizView: () => <div data-testid="viz" /> }))
+// The real CSV encoder; only the file save is replaced, since jsdom cannot save files.
+const downloadText = vi.fn()
+vi.mock("@/lib/download", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/download")>()),
+  downloadText: (...args: unknown[]) => downloadText(...args),
+}))
 
 import { DashboardWidget } from "./DashboardWidget"
 
@@ -185,6 +191,46 @@ describe("tile actions", () => {
     await user.click(trigger)
     await user.click(await screen.findByRole("menuitem", { name: "Delete" }))
     expect(onDelete).toHaveBeenCalledOnce()
+  })
+
+  it("downloads a data tile's rows as CSV, on a dashboard that cannot be edited too", async () => {
+    const user = userEvent.setup()
+    render(<DashboardWidget widget={WIDGET} data={DATA} variables={{}} />)
+
+    const trigger = screen.getByLabelText(/Tile actions/)
+    trigger.focus()
+    await user.click(trigger)
+    await user.click(await screen.findByRole("menuitem", { name: "Download CSV" }))
+    expect(downloadText).toHaveBeenCalledWith(
+      "by_region.csv",
+      "region,revenue\nwest,12\neast,9",
+      "text/csv",
+    )
+  })
+
+  it("downloads the columns the tile shows, in its order, and keys the first row lacks", async () => {
+    const user = userEvent.setup()
+    const download = async (widget: Widget, value: unknown) => {
+      downloadText.mockClear()
+      const { unmount } = render(
+        <DashboardWidget widget={widget} data={{ ...DATA, value } as WidgetData} variables={{}} />,
+      )
+      const trigger = screen.getByLabelText(/Tile actions/)
+      trigger.focus()
+      await user.click(trigger)
+      await user.click(await screen.findByRole("menuitem", { name: "Download CSV" }))
+      unmount()
+      return downloadText.mock.calls[0][1]
+    }
+    const rows = [
+      { region: "west", revenue: 12 },
+      { region: "east", revenue: 9, note: "late" },
+    ]
+
+    expect(await download({ ...WIDGET, viz: { columns: ["revenue", "region"] } }, rows)).toBe(
+      "revenue,region\n12,west\n9,east",
+    )
+    expect(await download(WIDGET, rows)).toBe("region,revenue,note\nwest,12,\neast,9,late")
   })
 
   it("keeps the menu from starting a drag", () => {

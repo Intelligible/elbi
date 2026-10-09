@@ -63,6 +63,18 @@ def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
+def _iso_utc(dt: datetime) -> str:
+    """ISO 8601 with an explicit UTC offset.
+
+    Timestamps are written UTC-aware, but SQLite returns them naive on read, so a bare
+    ``isoformat()`` omits the zone and a browser parses the value as *local* time:
+    shifting every conversation into the future, which the sidebar's relative clock
+    clamps to "just now". Stamp a naive value as UTC so the client reads the instant it
+    was actually recorded.
+    """
+    return _as_utc(dt).isoformat()
+
+
 def _trash_entry(kind: str, item_id: str, name: str, row: Any) -> dict[str, Any]:
     """One trash listing row, the same shape regardless of the artifact kind.
 
