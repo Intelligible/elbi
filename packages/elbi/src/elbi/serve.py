@@ -70,7 +70,7 @@ from .extensions import service_class
 from .features import FeatureStoreService
 from .lineage import LineageService
 from .metrics import MetricService
-from .ml import kernel_tracking_env, make_model_service, upgrade_tracking_store
+from .ml import kernel_tracking_env, make_model_service
 from .monitoring import MonitorService
 from .notebooks import NotebookService
 from .notifications import monitor_alert_handler, orchestration_alert_handler
@@ -896,9 +896,6 @@ def build(
             (lambda name: store.training_set_rows(name)) if store is not None else None
         ),
     )
-    if model_service is not None:
-        # Before anything opens it: MLflow refuses a store whose schema is behind.
-        upgrade_tracking_store(model_service.tracking_uri())
 
     def explore_resolve_source(name: str) -> Any:
         """A dataset's queryable rows for the workbench, read from the warehouse."""

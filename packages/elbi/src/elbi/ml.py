@@ -160,9 +160,10 @@ def upgrade_tracking_store(uri: str) -> None:
     would otherwise leave every model surface broken until someone ran it on the host.
     It uses the same functions that command does.
 
-    Only a SQLite file is upgraded. That is the store this app creates for itself under
-    the project cache; a server database named by ``MLFLOW_TRACKING_URI`` may be shared
-    with an MLflow of another version, and migrating it is its operator's decision. A
+    Only a SQLite file is upgraded, and :func:`make_model_service` passes only the one
+    this app creates for itself under the project cache: a store named by
+    ``MLFLOW_TRACKING_URI`` or the setting, a SQLite file included, may be shared with
+    an MLflow of another version, and migrating it is its operator's decision. A
     missing or empty file is left for MLflow to create at the current schema, and one
     already current is not touched.
 
@@ -181,9 +182,10 @@ def upgrade_tracking_store(uri: str) -> None:
         from mlflow.store.db import utils as db_utils
     except ImportError:
         return
-    engine = db_utils.create_sqlalchemy_engine(uri)
+    engine = None
     backup: Path | None = None
     try:
+        engine = db_utils.create_sqlalchemy_engine(uri)
         if db_utils._is_empty_database(engine):
             return
         current = db_utils._get_schema_version(engine)
@@ -212,7 +214,8 @@ def upgrade_tracking_store(uri: str) -> None:
             uri,
         )
     finally:
-        engine.dispose()
+        if engine is not None:
+            engine.dispose()
 
 
 def _copy_sqlite(source: Path, destination: Path) -> None:
@@ -257,9 +260,15 @@ def make_model_service(
     except ModelError:
         return None
 
+    own_store = f"sqlite:///{cache_dir / 'mlflow.db'}"
+
     def resolve_uri() -> str:
         configured = configured_tracking_uri(store) if store is not None else None
-        return _store_uri(configured) or f"sqlite:///{cache_dir / 'mlflow.db'}"
+        return _store_uri(configured) or own_store
+
+    if resolve_uri() == own_store:
+        # Before anything opens it: MLflow refuses a store whose schema is behind.
+        upgrade_tracking_store(own_store)
 
     return ModelService(
         resolve_tracking_uri=resolve_uri,

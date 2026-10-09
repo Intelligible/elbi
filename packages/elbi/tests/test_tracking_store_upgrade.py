@@ -168,13 +168,10 @@ def test_a_failed_upgrade_is_logged_not_raised(
 _SALES = "customer_id,amount\nc1,100\nc2,5\n"
 
 
-def test_serving_a_project_upgrades_its_store_before_use(
-    tmp_path: Path, behind_template: tuple[Path, str]
-) -> None:
-    """``elbi serve`` upgrades the store under the project cache as it builds."""
+def _project(tmp_path: Path, store: Path) -> tuple[Path, Path]:
+    """A one-source project whose own tracking store starts as a copy of ``store``."""
     pytest.importorskip("deltalake")
     pytest.importorskip("duckdb")
-    from elbi.serve import build
     from elbi_cli.project import load_project
 
     root = tmp_path / "project"
@@ -187,9 +184,65 @@ def test_serving_a_project_upgrades_its_store_before_use(
     )
     cache_dir = load_project(root).cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
-    store = cache_dir / "mlflow.db"
-    store.write_bytes(behind_template[0].read_bytes())
+    own = cache_dir / "mlflow.db"
+    own.write_bytes(store.read_bytes())
+    return root, own
+
+
+def test_serving_a_project_upgrades_its_store_before_use(
+    tmp_path: Path, behind_template: tuple[Path, str]
+) -> None:
+    """``elbi serve`` upgrades the store under the project cache as it builds."""
+    root, own = _project(tmp_path, behind_template[0])
+    from elbi.serve import build
 
     build(root, with_mcp=False)
 
-    assert _revision(store) == _head()
+    assert _revision(own) == _head()
+
+
+def test_a_sqlite_store_named_by_the_tracking_uri_is_left_alone(
+    tmp_path: Path,
+    behind_template: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A store the operator names is theirs to migrate, a SQLite file included.
+
+    docs/upgrading.md promises a database named by ``MLFLOW_TRACKING_URI`` is never
+    migrated by the app: another MLflow, of another version, may share it.
+    """
+    template, previous = behind_template
+    root, _ = _project(tmp_path, template)
+    from elbi.serve import build
+
+    shared = tmp_path / "team" / "mlflow.db"
+    shared.parent.mkdir()
+    shared.write_bytes(template.read_bytes())
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", _uri(shared))
+
+    build(root, with_mcp=False)
+
+    assert _revision(shared) == previous
+    assert list(shared.parent.glob("*.bak")) == []
+
+
+def test_a_store_mlflow_cannot_open_is_logged_not_raised(
+    behind: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failure before the upgrade starts still must not stop the app from starting.
+
+    MLflow's own engine factory raises ``ValueError`` for an unknown pool class
+    (``create_sqlalchemy_engine`` in ``mlflow/store/db/utils.py``).
+    """
+    path, _ = behind
+    before = path.read_bytes()
+    monkeypatch.setenv("MLFLOW_SQLALCHEMYSTORE_POOLCLASS", "NoSuchPool")
+
+    with caplog.at_level(logging.ERROR, logger="elbi"):
+        upgrade_tracking_store(_uri(path))
+
+    assert path.read_bytes() == before
+    [record] = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert "could not upgrade the MLflow tracking store" in record.getMessage()
