@@ -35,7 +35,9 @@ export interface Incident {
   id: string
   openedAt: string | null
   closedAt: string | null
-  peakValue: number
+  // "source_failed" for a run of failed reads, which have no peak value.
+  cause: string | null
+  peakValue: number | null
   peakScore: number | null
   reason: string
   snapshots: number

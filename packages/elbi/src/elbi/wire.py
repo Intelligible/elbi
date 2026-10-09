@@ -286,12 +286,16 @@ class MonitorSnapshot(Wire):
 
 
 class MonitorIncident(Wire):
-    """A run of anomalous values, from the first to the one that closed it."""
+    """A run of anomalous values or failed reads, from the first to the one closing it.
+
+    ``cause`` is ``"source_failed"`` for failed reads, which have no ``peak_value``.
+    """
 
     id: str
     opened_at: str | None = None
     closed_at: str | None = None
-    peak_value: float
+    cause: str | None = None
+    peak_value: float | None = None
     peak_score: float | None = None
     reason: str
     snapshots: int

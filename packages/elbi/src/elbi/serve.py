@@ -71,7 +71,7 @@ from .features import FeatureStoreService
 from .lineage import LineageService
 from .metrics import MetricService
 from .ml import kernel_tracking_env, make_model_service
-from .monitoring import MonitorService
+from .monitoring import MonitorService, Reading
 from .notebooks import NotebookService
 from .notifications import monitor_alert_handler, orchestration_alert_handler
 from .orchestration import OrchestrationService
@@ -164,6 +164,26 @@ def _aggregate_values(agg: str, values: list[float]) -> float:
     if agg == "count":
         return float(len(values))
     return sum(values)
+
+
+def _breach_keys(rows: list[dict[str, Any]], column: str, key: str) -> tuple[str, ...]:
+    """The ``key`` of every row whose ``column`` is positive: a keyed monitor's breach.
+
+    Raises:
+        ModelError: if there are rows and none has ``key``, which only a misnamed key
+            explains; naming nothing instead would quietly turn the feature off.
+    """
+    if rows and not any(key in r for r in rows):
+        raise ModelError(f"no row has the monitor's key column {key!r}")
+    return tuple(
+        sorted(
+            {
+                "(blank)" if r.get(key) in (None, "") else str(r[key])
+                for r in rows
+                if isinstance(r.get(column), (int, float)) and r[column] > 0
+            }
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -1051,7 +1071,7 @@ def build(
         )
         return list(result["rows"])
 
-    def read_monitor_value(monitor: Any) -> float:
+    def read_monitor_value(monitor: Any) -> float | Reading:
         """The scalar a monitor watches: a metric's total or a derivation stat."""
         config = json.loads(monitor.config_json or "{}")
         if monitor.target_kind == "metric":
@@ -1076,7 +1096,11 @@ def build(
             for r in rows
             if column in r and isinstance(r[column], (int, float))
         ]
-        return _aggregate_values(agg, values)
+        value = _aggregate_values(agg, values)
+        key = measure.get("key") if isinstance(measure, dict) else None
+        if not key or not column:
+            return value
+        return Reading(value, _breach_keys(rows, column, key))
 
     def monitor_source_certified(kind: str, target: str) -> bool:
         """Whether a monitor's target is a certified metric or derivation."""
