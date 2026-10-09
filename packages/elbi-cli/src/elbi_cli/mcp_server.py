@@ -869,18 +869,21 @@ def _register_component_search(
     Retrieval over every served, certified ``components``-format derivation's
     current facts. A thin, rebuild-every-call index (see
     :func:`elbi_core.components.search_components`'s docstring for why): each call
-    re-serves every eligible derivation through the same :class:`Serving` cache
-    ``run_<name>`` uses, so it costs nothing beyond what is already cached, then
-    ranks the combined corpus off the event loop, with statement vectors memoized
-    by text across calls. There is no persistence across restarts and no
+    serves every eligible derivation concurrently through the same :class:`Serving`
+    cache ``run_<name>`` uses. A fresh cached derivation costs nothing, but one with
+    caching off recomputes on every search, and a cache miss holds the search until
+    it finishes. The combined corpus is ranked off the event loop, with the vectors
+    of statements still being served memoized across calls. There is no persistence
+    across restarts and no
     incremental re-indexing; :mod:`elbi.search`'s chunked, persisted index (already
     used for a derivation's own fields) is the right home once this needs to run at
     real scale.
     """
     # Wrapped once, outside the handler, so statement vectors survive across calls:
     # a corpus of N statements costs N embeddings the first time and only the
-    # query's after.
-    cached = None if embedder is None else CachedEmbedder(embedder)
+    # query's after. Latest-only, because a statement carries data values: when a
+    # refresh rewrites one, its old vector is dropped instead of kept forever.
+    cached = None if embedder is None else CachedEmbedder(embedder, latest_only=True)
 
     async def search_components_tool(query: str, limit: int = 5) -> CallToolResult:
         # Recomputed per call, like search_derivations: a derivation can be authored
@@ -893,17 +896,19 @@ def _register_component_search(
             and derivation.serve is not None
             and derivation.serve.format == "components"
         ]
+        outcomes = await asyncio.gather(
+            *(serving.serve(derivation.name) for derivation in candidates),
+            return_exceptions=True,
+        )
         corpus: list[dict[str, Any]] = []
-        for derivation in candidates:
-            try:
-                outcome = await serving.serve(derivation.name)
-            except Exception:
+        for derivation, outcome in zip(candidates, outcomes, strict=True):
+            if isinstance(outcome, BaseException):
                 # One derivation failing to serve (e.g. a required param with no
                 # default, a transient error) must not sink the whole search.
                 logger.warning(
                     "search_components: could not serve %r",
                     derivation.name,
-                    exc_info=True,
+                    exc_info=outcome,
                 )
                 continue
             if outcome.structured is not None:

@@ -1471,6 +1471,33 @@ def test_propose_components_certifies_under_an_explicit_policy() -> None:
     assert "run_facts" in {t.name for t in asyncio.run(server.list_tools())}
 
 
+def test_search_components_skips_a_derivation_that_fails_to_serve() -> None:
+    registry = Registry()
+
+    @derivation(name="good", serve=serve.components(), registry=registry)
+    def good(ctx: Context) -> Artifact:
+        return Artifact.components(
+            [
+                {
+                    "id": "t/rule",
+                    "type": "column",
+                    "scope": {"source": "s"},
+                    "statement": "Discounts above 20% raise churn.",
+                }
+            ]
+        )
+
+    @derivation(name="broken", serve=serve.components(), registry=registry)
+    def broken(ctx: Context) -> Artifact:
+        raise ValueError("upstream is down")
+
+    server = build_server(registry, lambda: Runner(registry))
+    out = asyncio.run(
+        server.call_tool("search_components", {"query": "discount churn"})
+    )
+    assert [c["id"] for c in out.structured_content["components"]] == ["t/rule"]
+
+
 def test_search_components_embeds_each_statement_once_across_calls() -> None:
     class _CountingEmbedder:
         def __init__(self) -> None:

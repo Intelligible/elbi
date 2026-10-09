@@ -234,6 +234,25 @@ def test_cached_embedder_memoizes_documents_but_not_queries() -> None:
     assert inner.calls == ["a", "b", "q", "q"]  # queries go straight through
 
 
+def test_cached_embedder_latest_only_drops_texts_the_last_call_left_out() -> None:
+    """For text that changes with its data, the memo tracks the live corpus."""
+
+    class _Counting:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
+            self.calls.extend(texts)
+            return [[1.0, float(len(text))] for text in texts]
+
+    inner = _Counting()
+    cached = CachedEmbedder(inner, latest_only=True)
+    cached.embed(["a", "b"])
+    cached.embed(["b", "c"])  # "b" is reused; "a" was left out, so it is dropped
+    cached.embed(["a"])
+    assert inner.calls == ["a", "b", "c", "a"]
+
+
 def test_embedding_finds_synonym_that_lexical_misses() -> None:
     corpus = [_derivation("revenue_by_region", "Total revenue grouped by region.")]
     # "income per zone" shares NO tokens with the derivation: lexical abstains.

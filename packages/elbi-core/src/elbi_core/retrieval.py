@@ -253,12 +253,18 @@ class CachedEmbedder:
     Text alone is a sufficient key: the memo is in-memory and bound to one
     embedder. Wrap a model once and share the wrapper, so a derivation's text or a
     component's statement is embedded the first time it is seen and never again.
-    Query vectors go through :meth:`embed_query` and are never kept, so a
-    long-running server's memo grows with its corpus, not with its traffic.
+    Query vectors go through :meth:`embed_query` and are never kept.
+
+    By default every distinct text stays in the memo, which suits text that rarely
+    changes, like a derivation's name and description. For text that carries data
+    values, like a component's statement, pass ``latest_only=True``: each call then
+    keeps only its own texts, so memory tracks the live corpus rather than the
+    history of the data. That relies on every call passing the whole corpus.
     """
 
-    def __init__(self, embedder: Embedder) -> None:
+    def __init__(self, embedder: Embedder, *, latest_only: bool = False) -> None:
         self._embedder = embedder
+        self._latest_only = latest_only
         self._cache: dict[str, list[float]] = {}
 
     def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
@@ -268,6 +274,8 @@ class CachedEmbedder:
             vectors = self._embedder.embed(missing)
             for text, vector in zip(missing, vectors, strict=True):
                 self._cache[text] = list(vector)
+        if self._latest_only:
+            self._cache = {text: self._cache[text] for text in texts}
         return [self._cache[text] for text in texts]
 
     def embed_query(self, text: str) -> list[float]:

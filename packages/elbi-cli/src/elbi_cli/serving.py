@@ -122,14 +122,16 @@ class Serving:
 
         if not cache.enabled:
             runner = self._make_runner()
-            artifact = await self._compute(runner, name, params)
             # Caching is off, so no version is computed for anything else here --
             # except a `components` contract, which needs one to stamp provenance.
+            # Read before computing, as the cached path does, so the stamp never
+            # names a newer version than the one the artifact was computed under.
             data_version = (
                 await _run(runner.data_version, name, params)
                 if contract.format == "components"
                 else None
             )
+            artifact = await self._compute(runner, name, params)
             outcome = self._present(name, contract, artifact, "uncached", data_version)
             return outcome, None
 

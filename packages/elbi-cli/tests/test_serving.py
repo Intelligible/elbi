@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -420,6 +421,35 @@ def test_components_uncached_still_gets_a_version_stamped(tmp_path: Path) -> Non
     outcome = asyncio.run(scenario())
     assert outcome.status == "uncached"
     assert _stamped(outcome)["provenance"]["derivation_version"]
+
+
+def test_components_uncached_stamps_the_version_it_was_computed_from(
+    tmp_path: Path,
+) -> None:
+    """The version is read before computing, so an input that changes mid-run can
+    only make the stamp look older than the data, never newer.
+    """
+    serving, base = _build_components(tmp_path, never=True)
+    make_runner = serving._make_runner
+    before = make_runner().data_version("facts", {})
+
+    def runner_whose_input_changes_mid_run() -> Runner:
+        runner = make_runner()
+        compute = runner.run
+
+        def run(name: str, params: Any = None, **kwargs: Any) -> Artifact:
+            artifact = compute(name, params, **kwargs)
+            (base / "n.csv").write_text("value\n9\n", encoding="utf-8")
+            return artifact
+
+        runner.run = run  # type: ignore[method-assign]
+        return runner
+
+    serving._make_runner = runner_whose_input_changes_mid_run
+    outcome = asyncio.run(serving.serve("facts"))
+    assert "- n is 2." in outcome.text  # computed from the old input
+    assert make_runner().data_version("facts", {}) != before  # the input did change
+    assert _stamped(outcome)["provenance"]["derivation_version"] == before
 
 
 def test_components_author_fields_are_kept_around_the_stamp(tmp_path: Path) -> None:
