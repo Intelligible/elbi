@@ -845,3 +845,194 @@ def test_a_notebook_can_be_scheduled_on_a_calendar_time(
     assert view["schedule"]["cron"] == "0 6 1 * *"
     assert view["schedule"]["timezone"] == "America/Phoenix"
     _round_trips(client, repo)
+
+
+def _plan_after_sync(client: httpx.Client, repo: Path) -> list[config_sync.Change]:
+    """What ``plan`` reports straight after a successful ``sync``, with no pull between.
+
+    Pulling first rewrites every file into the app's own spelling, which hides any
+    difference between how a file says something and how the app stores it.
+    """
+    config_sync.sync(client, repo)
+    return [c for c in config_sync.plan(client, repo) if c.action != "unchanged"]
+
+
+def test_a_synced_metric_plans_unchanged_whether_or_not_its_file_names_it(
+    client: httpx.Client, tmp_path: Path
+) -> None:
+    """A metric file is the same object as the metric it created.
+
+    The file stem names it, so the file may leave ``name`` out, and its keys come in
+    whatever order its author wrote them; the app returns the name and its own order.
+    Compared as text, every such metric planned as an update after every sync.
+    """
+    repo = tmp_path / "repo"
+    _write(
+        repo,
+        "metrics/total_risk.yaml",
+        "type: simple\nlabel: Risk\nsource: churn_risk\n"
+        "measure: {agg: sum, column: risk}\nformat: {kind: number, precision: 2}\n",
+    )
+    _write(
+        repo,
+        "metrics/scored.yaml",
+        "name: scored\ntype: simple\ndescription: Rows scored.\nsource: churn_risk\n"
+        "measure: {agg: count}\nformat: {kind: number, precision: 0}\n",
+    )
+    _write(
+        repo,
+        "metrics/grouped.yaml",
+        "metrics:\n  - name: peak_risk\n    type: simple\n    source: churn_risk\n"
+        "    measure: {agg: max, column: risk}\n",
+    )
+
+    assert _plan_after_sync(client, repo) == []
+
+    # ...and a real edit is still seen.
+    _write(
+        repo,
+        "metrics/total_risk.yaml",
+        "type: simple\nlabel: Total risk\nsource: churn_risk\n"
+        "measure: {agg: sum, column: risk}\nformat: {kind: number, precision: 2}\n",
+    )
+    assert {c.name: c.action for c in config_sync.plan(client, repo)} == {
+        "total_risk": "update",
+        "scored": "unchanged",
+        "peak_risk": "unchanged",
+    }
+
+
+def test_every_surface_plans_unchanged_right_after_sync(
+    client: httpx.Client, tmp_path: Path
+) -> None:
+    """Each surface's file, written the short way, matches what the app stores for it.
+
+    Files leave fields to the app's defaults, order keys as their author likes, and
+    spell numbers loosely; the app answers in camelCase. None of that is a change.
+    """
+    import json
+
+    import yaml
+
+    repo = tmp_path / "repo"
+    _write(repo, "dashboards/sales.yaml", yaml.safe_dump(_DASHBOARD))
+    _write(
+        repo,
+        "features/store.yaml",
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "name": "customer",
+                        "joinKey": "customer_id",
+                        "valueType": "string",
+                    }
+                ],
+                "featureViews": [
+                    {
+                        "name": "customer_risk",
+                        "entities": ["customer"],
+                        "source": "churn_risk",
+                        "ttlSeconds": 86400,
+                        "features": [{"name": "risk"}],
+                    }
+                ],
+            }
+        ),
+    )
+    _write(
+        repo,
+        "monitors/risk.yaml",
+        yaml.safe_dump({"target_kind": "derivation", "target": "churn_risk"}),
+    )
+    _write(repo, "schedules/nightly.yaml", yaml.safe_dump({"cron": "0 * * * *"}))
+    _write(
+        repo,
+        "workflows/nightly.yaml",
+        yaml.safe_dump(
+            {"steps": [{"id": "build"}, {"id": "ship", "dependsOn": ["build"]}]}
+        ),
+    )
+    _write(
+        repo,
+        "checks/big_spenders.nonneg.yaml",
+        yaml.safe_dump(
+            {"asset": "big_spenders", "name": "nonneg", "expr": "total_spend >= 0"}
+        ),
+    )
+    _write(
+        repo,
+        "models/spend.yaml",
+        yaml.safe_dump(
+            {
+                "dataset": "sales",
+                "target": "amount",
+                "mode": "interval",
+                "interval_hours": 12,
+            }
+        ),
+    )
+    _write(repo, "queries/crm.sql", "-- source: crm\nSELECT 1\n")
+    notebook = {
+        **_MINIMAL_IPYNB,
+        "metadata": {"elbi": {"deps": ["pandas"]}},
+    }
+    _write(repo, "notebooks/demo.ipynb", json.dumps(notebook))
+
+    assert _plan_after_sync(client, repo) == []
+
+
+def test_a_synced_model_policy_keeps_the_defaults_its_file_left_out(
+    client: httpx.Client, tmp_path: Path
+) -> None:
+    """A field the file omits is the app's default, not an explicit null.
+
+    Sending ``enabled: null`` read as false, so syncing a policy that did not mention
+    ``enabled`` switched it off. Pull then wrote that back, losing the policy's source
+    and cadence too, because they arrive camelCased.
+    """
+    import yaml
+
+    repo = tmp_path / "repo"
+    _write(
+        repo,
+        "models/spend.yaml",
+        yaml.safe_dump(
+            {
+                "dataset": "sales",
+                "target": "amount",
+                "mode": "interval",
+                "interval_hours": 6,
+            }
+        ),
+    )
+    config_sync.sync(client, repo)
+    assert client.get("/api/registry/models/spend/retrain").json()["enabled"] is True
+
+    config_sync.pull(client, repo)
+    pulled = yaml.safe_load((repo / "models" / "spend.yaml").read_text())
+    assert pulled["source_kind"] == "dataset"
+    assert pulled["interval_hours"] == 6.0
+    assert pulled["enabled"] is True
+
+
+def test_a_monitor_field_deleted_from_its_file_goes_back_to_the_default(
+    client: httpx.Client, tmp_path: Path
+) -> None:
+    """Deleting a defaulted field from a monitor file resets it in the app.
+
+    The update route keeps any field it is not sent, so a push of only the file's keys
+    left the old value in place while the file compared as the default: plan reported
+    an update after every sync, and the app never changed.
+    """
+    import yaml
+
+    repo = tmp_path / "repo"
+    monitor = {"target_kind": "derivation", "target": "churn_risk", "sensitivity": 2.0}
+    _write(repo, "monitors/risk.yaml", yaml.safe_dump(monitor))
+    config_sync.sync(client, repo)
+
+    del monitor["sensitivity"]
+    _write(repo, "monitors/risk.yaml", yaml.safe_dump(monitor))
+    assert _plan_after_sync(client, repo) == []
+    assert client.get("/api/monitors").json()[0]["sensitivity"] == 3.0
