@@ -122,8 +122,16 @@ def _clear_remote(
             f"{host} refused the invalidation ({response.status_code}): {response.text}"
         )
         raise typer.Exit(code=1)
-    removed = response.json().get("removed", 0)
-    ok(f"invalidated {removed} entry(ies) on {host}")
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if not isinstance(payload, dict):
+        # A 200 from something other than the app, most often a sign-in page sitting
+        # in front of it.
+        fail(f"{host} did not answer as an elbi app: {response.text[:200]!r}")
+        raise typer.Exit(code=1)
+    ok(f"invalidated {payload.get('removed', 0)} entry(ies) on {host}")
 
 
 @cache_app.command("gc")

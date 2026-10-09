@@ -63,7 +63,7 @@ from elbi_core import (
     submit_code_job,
     verify_certificate,
 )
-from elbi_core.cache import derivation_tag
+from elbi_core.cache import derivation_from_tag, derivation_tag
 from elbi_core.errors import CertificateError, ElbiError, ModelError
 from elbi_core.executor import _DEP_RE
 from elbi_core.sandbox import ComputeProfileError
@@ -5618,7 +5618,8 @@ def create_app(
         The HTTP form of ``elbi cache clear --tag``, so a deployment's cache can be
         busted without a shell on the host. Either field alone suffices; given both,
         entries carrying either are removed. A derivation's entries carry its
-        :func:`~elbi_core.cache.derivation_tag`, which is how a name selects them.
+        :func:`~elbi_core.cache.derivation_tag`, which is how a name selects them;
+        a derivation the caller cannot reach is a 404 whichever field named it.
         Clearing the whole cache is deliberately not offered here: that stays a
         decision made on the host.
         """
@@ -5643,6 +5644,18 @@ def create_app(
             raise HTTPException(
                 status_code=400, detail="name a tag or a derivation to invalidate"
             )
+        # A derivation's entries are reachable through its tag as well as its name, so
+        # the check runs on the tag: whichever field named it, the caller has to reach
+        # the derivation the way the detail and delete routes require. Every tag is
+        # checked before the first deletion, so a refused request clears nothing.
+        for tag in tags:
+            name = derivation_from_tag(tag)
+            if name is None:
+                continue
+            if store is None or store.get_derivation(name) is None:
+                raise HTTPException(
+                    status_code=404, detail=f"no derivation named {name!r}"
+                )
         removed = 0
         for tag in tags:
             removed += await run_in_threadpool(invalidate_cache, tag)

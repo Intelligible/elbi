@@ -208,3 +208,23 @@ def test_an_unreachable_app_fails_cleanly(
     )
     assert result.exit_code == 1
     assert "connection refused" in result.output
+
+
+def test_a_200_that_is_not_from_the_app_fails_cleanly(
+    scaffold: Callable[[str], Path],
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sign-in page in front of the app answers 200 with HTML, not a count."""
+    project = scaffold("standard")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>sign in</html>")
+
+    _remote(monkeypatch, handler, {})
+    result = runner.invoke(
+        app,
+        ["cache", "clear", "-C", str(project), "--tag", "x", "--url", "http://a"],
+    )
+    assert result.exit_code == 1
+    assert "did not answer as an elbi app" in result.output

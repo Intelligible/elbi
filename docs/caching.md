@@ -134,9 +134,15 @@ curl -X POST https://elbi.example.com/api/cache/invalidate \
 # {"removed": 2}
 ```
 
-With both fields, entries carrying either are removed. Each tag invalidated is written
-to the audit log as `cache.invalidate`. Clearing a deployment's whole cache is not
-offered over HTTP; that stays a decision made on the host.
+With both fields, entries carrying either are removed. A derivation the caller cannot
+reach answers 404, whichever field named it, the same answer its own page gives. Each
+tag invalidated is written to the audit log as `cache.invalidate`. Clearing a
+deployment's whole cache is not offered over HTTP; that stays a decision made on the
+host.
+
+The cache is local to each process. On a deployment running several replicas the
+request clears the replica that answered it, and rolling the deployment is the
+reliable way to clear them all.
 
 `elbi cache clear` does the same when pointed at the app with `--url` or `-t <target>`,
 sending `--token` or `ELBI_API_KEY` as its credential:

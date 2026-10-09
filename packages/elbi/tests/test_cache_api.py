@@ -16,14 +16,21 @@ from fastapi import FastAPI, Request, Response
 from fastapi.testclient import TestClient
 
 from elbi import create_app, extensions
-from elbi.db import Store, open_store
+from elbi.db import Derivation, Store, open_store
 from elbi_core import Artifact
 from elbi_core.cache import CachedResult, LocalCacheStore, derivation_tag
 
 
 @pytest.fixture
 def store(tmp_path: Path) -> Iterator[Store]:
+    """A store knowing the three derivations the ``cache`` fixture tags.
+
+    The route refuses a derivation the store cannot reach, so each tagged entry
+    needs a derivation row behind it for a request naming it to be allowed.
+    """
     opened = open_store(f"sqlite:{tmp_path / 'app.db'}")
+    for name in ("revenue", "churn", "headcount"):
+        opened.save_derivation(Derivation(name=name))
     yield opened
     opened.close()
 
@@ -111,6 +118,28 @@ def test_an_unknown_tag_removes_nothing(
 
 @pytest.mark.parametrize(
     "body",
+    [
+        {"derivation": "secret"},
+        {"tag": derivation_tag("secret")},
+        {"tag": "finance", "derivation": "secret"},
+    ],
+)
+def test_a_derivation_the_caller_cannot_reach_is_refused_and_clears_nothing(
+    client: TestClient, cache: LocalCacheStore, body: dict[str, str]
+) -> None:
+    """Whichever field names it, a derivation the store does not reach is a 404.
+
+    The same answer the derivation's own routes give, so this one reveals nothing
+    they would not. The refusal comes before any deletion: a valid tag sent along
+    with the refused name stays cached.
+    """
+    response = client.post("/api/cache/invalidate", json=body)
+    assert response.status_code == 404, response.text
+    assert _cached(cache) == {"revenue", "churn", "headcount"}
+
+
+@pytest.mark.parametrize(
+    "body",
     [{}, {"tag": ""}, {"tag": "  "}, {"derivation": 3}, {"tag": ["a"]}, ["finance"]],
 )
 def test_a_request_naming_nothing_usable_is_refused_and_clears_nothing(
@@ -182,6 +211,19 @@ def test_an_installed_authenticator_gates_the_route(
 
 _SALES = "customer_id,amount\nc1,100\nc2,5\n"
 
+#: A repo derivation, so the served app's store knows ``revenue`` and lets a request
+#: name it. ``churn`` stays a tag with no derivation behind it.
+_REVENUE = '''
+from elbi_core import Artifact, Context, Dataset, derivation
+
+
+@derivation(inputs={"sales": Dataset("sales")})
+def revenue(ctx: Context) -> Artifact:
+    """Total sales."""
+    rows = ctx.input("sales").rows
+    return Artifact.table([{"total": sum(float(row["amount"]) for row in rows)}])
+'''
+
 
 def _served(root: Path) -> FastAPI:
     """The app as ``elbi serve`` assembles it, over a one-source project."""
@@ -191,6 +233,8 @@ def _served(root: Path) -> FastAPI:
 
     (root / "fixtures").mkdir(parents=True)
     (root / "fixtures" / "sales.csv").write_text(_SALES, encoding="utf-8")
+    (root / "derivations").mkdir()
+    (root / "derivations" / "revenue.py").write_text(_REVENUE, encoding="utf-8")
     (root / "elbi.yaml").write_text(
         "project: cachebust\nsources:\n  - name: sales\n    type: csv\n"
         "    path: ./fixtures/sales.csv\n",
