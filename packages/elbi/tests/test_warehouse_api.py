@@ -107,6 +107,7 @@ def test_catalog_lists_every_connector(client: TestClient) -> None:
         "vercel",
         "airtable",
         "mixpanel",
+        "posthog",
     } <= names
     assert "Databases" in catalog["categories"]
     # Nothing is a "coming soon" placeholder anymore: every tile is a real connector.
