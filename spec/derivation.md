@@ -126,6 +126,25 @@ pretty-printing.
 
 The artifact is served as plain text.
 
+### 4.5 `components`
+
+The artifact is served as a list of OpenReasoningComponents (ORC) components: a
+self-contained natural-language `statement` about the data per item, each optionally
+carrying `structure`, `evidence`, `relations` to other components, and `provenance`.
+A component's `statement` is composed directly into an agent's reasoning, the way a
+`text` artifact is; unlike `text`, each item also carries the machine-checkable fields
+(`structure`/`evidence`/`relations`/`provenance`) that support retrieval and validation,
+exposed to an agent as structured content alongside the rendered statements.
+
+The component payload's shape is defined by ORC's own schema, not this one — this spec
+takes no position on it beyond "an array of components," the same way §3 treats a
+`semantic_model` input's document format as external. A runner SHOULD attach
+`provenance.derivation` and `provenance.derivation_version` (this derivation's `name`
+and its current content-hash version) to each component that doesn't already declare
+its own provenance, so a consumer can decide whether a component is still current by
+comparing that version against the derivation's current one — the same versioning this
+spec already uses for caching, without any component-level refresh machinery of its own.
+
 Each format permits an optional `title`. No other fields are permitted: the
 `serve` object declares its shared fields (`format`, `title`) and its
 format-specific fields across a `oneOf`, and closes the object with
