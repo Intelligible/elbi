@@ -18,6 +18,7 @@ from elbi_cli.mcp_server import (
 )
 from elbi_core import (
     Artifact,
+    AutoCertifyOnVerify,
     Bm25Retriever,
     Context,
     Dataset,
@@ -1210,6 +1211,72 @@ def test_search_derivations_tool_returns_matches() -> None:
     assert "No derivations match" in _tool_text(miss)
 
 
+def _server_with_components() -> MCPServer:
+    registry = Registry(retriever=Bm25Retriever())
+
+    @derivation(name="facts", serve=serve.components(), registry=registry)
+    def facts(ctx: Context) -> Artifact:
+        return Artifact.components(
+            [
+                {
+                    "id": "test/discount_threshold",
+                    "type": "threshold_rule",
+                    "scope": {"source": "customers"},
+                    "statement": "Discounts above 20% correlate with higher churn.",
+                },
+                {
+                    "id": "test/tenure_shape",
+                    "type": "model_component",
+                    "scope": {"source": "customers"},
+                    "statement": "Tenure has a protective, nonlinear effect on churn.",
+                },
+            ]
+        )
+
+    @derivation(name="hello", serve=serve.text(), registry=registry)
+    def hello(ctx: Context) -> Artifact:  # a non-components derivation, must be ignored
+        return Artifact.text("hi")
+
+    return build_server(registry, lambda: Runner(registry))
+
+
+def test_search_components_tool_returns_matches_with_provenance() -> None:
+    server = _server_with_components()
+    out = asyncio.run(
+        server.call_tool("search_components", {"query": "discount churn"})
+    )
+    text = _tool_text(out)
+    assert "Discounts above 20%" in text
+    matches = out.structured_content["components"]
+    assert matches[0]["provenance"]["derivation"] == "facts"
+    assert matches[0]["provenance"]["derivation_version"]
+
+
+def test_search_components_tool_ignores_non_components_derivations() -> None:
+    server = _server_with_components()
+    out = asyncio.run(server.call_tool("search_components", {"query": "hi hello"}))
+    assert out.structured_content["components"] == []
+    assert "No components match" in _tool_text(out)
+
+
+def test_search_components_tool_registered_on_every_server() -> None:
+    server = _server_with_one()  # no components-format derivation at all
+    tools = asyncio.run(server.list_tools())
+    assert "search_components" in {tool.name for tool in tools}
+    out = asyncio.run(server.call_tool("search_components", {"query": "anything"}))
+    assert out.structured_content["components"] == []
+
+
+def test_components_resource_is_served_as_markdown() -> None:
+    # A resource read returns the rendered bullets, one per statement, so the
+    # resource must say markdown; the full component objects reach a client through
+    # the run tool's structured content instead.
+    server = _server_with_components()
+    resources = {r.name: r for r in asyncio.run(server.list_resources())}
+    assert resources["facts"].mime_type == "text/markdown"
+    assert resources["hello"].mime_type == "text/plain"
+
+
 def test_propose_persists_to_store_and_delete_removes_it(tmp_path: Path) -> None:
     registry = Registry()
     store = AuthoredStore(tmp_path / "authored")
@@ -1345,6 +1412,128 @@ def test_propose_derivation_tool_rejects_unknown_format() -> None:
         )
     )
     assert "unknown serve format" in _tool_text(out)
+
+
+_BACKED_FACTS = (
+    "def facts(ctx):\n"
+    "    return [{'id': 't/rule', 'type': 'threshold_rule', "
+    "'scope': {'source': 's'}, 'statement': 'Discounts above 20% raise churn.', "
+    "'evidence': {'churn_rate_above': 0.4}}]\n"
+)
+
+
+def test_propose_components_is_held_for_a_human_by_default(tmp_path: Path) -> None:
+    registry = Registry()
+    store = AuthoredStore(tmp_path / "authored")
+    server = build_server(
+        registry,
+        lambda: _routing_runner(registry),
+        enable_propose=True,
+        authored_store=store,
+    )
+    out = _tool_text(
+        asyncio.run(
+            server.call_tool(
+                "propose_derivation",
+                {"name": "facts", "source": _BACKED_FACTS, "format": "components"},
+            )
+        )
+    )
+    # Structurally sound, yet held: the check cannot speak to truth.
+    assert "held" in out and "run_facts" not in {
+        t.name for t in asyncio.run(server.list_tools())
+    }
+    proposed = registry.get("facts")
+    assert not proposed.is_certified
+    assert proposed.serve is not None and proposed.serve.format == "components"
+    # And the sidecar rebuilds it on the next start instead of raising.
+    reloaded = Registry()
+    assert store.load_into(reloaded) == ("facts",)
+    reloaded_contract = reloaded.get("facts").serve
+    assert reloaded_contract is not None and reloaded_contract.format == "components"
+
+
+def test_propose_components_certifies_under_an_explicit_policy() -> None:
+    registry = Registry()
+    server = build_server(
+        registry,
+        lambda: _routing_runner(registry),
+        enable_propose=True,
+        certification=AutoCertifyOnVerify(),
+    )
+    asyncio.run(
+        server.call_tool(
+            "propose_derivation",
+            {"name": "facts", "source": _BACKED_FACTS, "format": "components"},
+        )
+    )
+    assert registry.get("facts").is_certified
+    assert "run_facts" in {t.name for t in asyncio.run(server.list_tools())}
+
+
+def test_search_components_skips_a_derivation_that_fails_to_serve() -> None:
+    registry = Registry()
+
+    @derivation(name="good", serve=serve.components(), registry=registry)
+    def good(ctx: Context) -> Artifact:
+        return Artifact.components(
+            [
+                {
+                    "id": "t/rule",
+                    "type": "column",
+                    "scope": {"source": "s"},
+                    "statement": "Discounts above 20% raise churn.",
+                }
+            ]
+        )
+
+    @derivation(name="broken", serve=serve.components(), registry=registry)
+    def broken(ctx: Context) -> Artifact:
+        raise ValueError("upstream is down")
+
+    server = build_server(registry, lambda: Runner(registry))
+    out = asyncio.run(
+        server.call_tool("search_components", {"query": "discount churn"})
+    )
+    assert [c["id"] for c in out.structured_content["components"]] == ["t/rule"]
+
+
+def test_search_components_embeds_each_statement_once_across_calls() -> None:
+    class _CountingEmbedder:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            self.calls.extend(texts)
+            return [[1.0, float(len(text))] for text in texts]
+
+    registry = Registry()
+
+    @derivation(name="facts", serve=serve.components(), registry=registry)
+    def facts(ctx: Context) -> Artifact:
+        return Artifact.components(
+            [
+                {
+                    "id": "t/discount",
+                    "type": "column",
+                    "scope": {"source": "s"},
+                    "statement": "Discounts above 20% raise churn.",
+                },
+                {
+                    "id": "t/tenure",
+                    "type": "column",
+                    "scope": {"source": "s"},
+                    "statement": "Tenure protects against churn.",
+                },
+            ]
+        )
+
+    embedder = _CountingEmbedder()
+    server = build_server(registry, lambda: Runner(registry), embedder=embedder)
+    for query in ("discount churn", "tenure"):
+        asyncio.run(server.call_tool("search_components", {"query": query}))
+    statements = [text for text in embedder.calls if text.endswith(".")]
+    assert len(statements) == 2  # two statements, two searches, embedded once each
 
 
 def test_every_tool_declares_what_it_does_to_the_world() -> None:

@@ -10,6 +10,7 @@ each was checked to actually fail on the obvious regression.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar
@@ -22,6 +23,7 @@ from elbi_core import serve
 from elbi_core.derivation import Derivation
 from elbi_core.retrieval import (
     Bm25Retriever,
+    CachedEmbedder,
     EmbeddingRetriever,
     HybridRetriever,
     OnnxEmbedder,
@@ -214,6 +216,81 @@ class _StubEmbedder:
                     vector[concept] += 1.0
             vectors.append(vector)
         return vectors
+
+
+def test_cached_embedder_memoizes_documents_but_not_queries() -> None:
+    class _Counting:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
+            self.calls.extend(texts)
+            return [[1.0, float(len(text))] for text in texts]
+
+    inner = _Counting()
+    cached = CachedEmbedder(inner)
+    assert cached.embed(["a", "b", "a"]) == cached.embed(["a", "b", "a"])
+    assert inner.calls == ["a", "b"]  # deduplicated within a call, memoized across
+    assert cached.embed_query("q") == cached.embed_query("q")
+    assert inner.calls == ["a", "b", "q", "q"]  # queries go straight through
+
+
+def test_cached_embedder_latest_only_drops_texts_the_last_call_left_out() -> None:
+    """For text that changes with its data, the memo tracks the live corpus."""
+
+    class _Counting:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
+            self.calls.extend(texts)
+            return [[1.0, float(len(text))] for text in texts]
+
+    inner = _Counting()
+    cached = CachedEmbedder(inner, latest_only=True)
+    cached.embed(["a", "b"])
+    cached.embed(["b", "c"])  # "b" is reused; "a" was left out, so it is dropped
+    cached.embed(["a"])
+    assert inner.calls == ["a", "b", "c", "a"]
+
+
+def test_cached_embedder_latest_only_is_safe_across_threads() -> None:
+    """A prune in one search must not pull a vector out from under another.
+
+    Search ranks in worker threads, so two can overlap: here A parks inside the
+    model while B prunes the memo to its own corpus, which lacks A's memo hit.
+    """
+    a_inside, b_done = threading.Event(), threading.Event()
+
+    class _Parking:
+        def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
+            if list(texts) == ["a"]:
+                a_inside.set()
+                b_done.wait(timeout=0.2)  # bounded, so a lock cannot deadlock here
+            return [[1.0, float(len(text))] for text in texts]
+
+    cached = CachedEmbedder(_Parking(), latest_only=True)
+    cached.embed(["s"])  # "s" is a memo hit for A and absent from B's corpus
+    errors: list[Exception] = []
+
+    def search(texts: list[str]) -> None:
+        try:
+            cached.embed(texts)
+        except Exception as exc:
+            errors.append(exc)
+
+    def search_b() -> None:
+        search(["b"])
+        b_done.set()
+
+    a = threading.Thread(target=search, args=(["s", "a"],))
+    a.start()
+    assert a_inside.wait(timeout=1)
+    b = threading.Thread(target=search_b)
+    b.start()
+    a.join()
+    b.join()
+    assert errors == []
 
 
 def test_embedding_finds_synonym_that_lexical_misses() -> None:

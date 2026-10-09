@@ -47,6 +47,18 @@ def test_save_then_reload_certified(tmp_path: Path) -> None:
     assert loaded.source is not None  # source kept; it runs only via the sandbox
 
 
+def test_components_serve_record_roundtrips(tmp_path: Path) -> None:
+    reg = Registry()
+    store = AuthoredStore(tmp_path / "authored")
+    store.save(_agent(reg, "facts", serve=serve.components(title="Facts")))
+
+    fresh = Registry()
+    assert store.load_into(fresh) == ("facts",)
+    loaded = fresh.get("facts").serve
+    assert loaded is not None
+    assert (loaded.format, loaded.title) == ("components", "Facts")
+
+
 def test_reload_preserves_proposed_status(tmp_path: Path) -> None:
     reg = Registry()
     store = AuthoredStore(tmp_path / "authored")
