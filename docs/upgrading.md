@@ -86,6 +86,14 @@ through the migration before scaling back up.
 The database schema migrates forward on start. Take a backup first for anything you care
 about, because the migration is one-way and downgrading afterwards will not undo it.
 
+The MLflow tracking store the app keeps for itself (`mlflow.db` under the project's
+`.elbi/cache`) migrates forward on start too, when a release brings a newer MLflow whose
+schema it is behind. The file is first copied to `mlflow.db.<revision>.bak` beside it. A
+migration that fails is logged with that backup's path and the manual command
+(`mlflow db upgrade <uri>`), and the app starts anyway: only the model surfaces depend on
+that store. A tracking server's own database, named by `MLFLOW_TRACKING_URI`, is never
+migrated by the app; upgrade it the way that server's operator does.
+
 Nothing else moves. Your warehouse tables, your derivations and their cached results,
 and your project files are untouched by an upgrade; they live outside the package.
 

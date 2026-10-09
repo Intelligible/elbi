@@ -14,10 +14,12 @@ works with no configuration.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import warnings
@@ -146,6 +148,85 @@ def _store_uri(uri: str | None) -> str | None:
     return uri
 
 
+#: The URI prefix of a SQLite tracking store, the only kind upgraded on start.
+_SQLITE_PREFIX = "sqlite:///"
+
+
+def upgrade_tracking_store(uri: str) -> None:
+    """Bring a SQLite tracking store up to the installed MLflow's schema when behind.
+
+    What ``mlflow db upgrade <uri>`` does by hand, run before anything opens the store:
+    MLflow refuses an out-of-date database outright, so an image carrying a newer MLflow
+    would otherwise leave every model surface broken until someone ran it on the host.
+    It uses the same functions that command does.
+
+    Only a SQLite file is upgraded, and :func:`make_model_service` passes only the one
+    this app creates for itself under the project cache: a store named by
+    ``MLFLOW_TRACKING_URI`` or the setting, a SQLite file included, may be shared with
+    an MLflow of another version, and migrating it is its operator's decision. A
+    missing or empty file is left for MLflow to create at the current schema, and one
+    already current is not touched.
+
+    Migrations are not guaranteed to be transactional, so the file is first copied to
+    ``<name>.<revision>.bak`` beside it, keeping the first copy taken from a revision.
+    A failure is logged rather than raised: the tracking store backs the model surfaces
+    alone, and MLflow already refuses to use a store it cannot read, so failing here
+    would take chat, derivations and MCP down with it for no gain.
+    """
+    if not uri.startswith(_SQLITE_PREFIX):
+        return
+    path = Path(uri.removeprefix(_SQLITE_PREFIX))
+    if not path.is_file():
+        return
+    try:
+        from mlflow.store.db import utils as db_utils
+    except ImportError:
+        return
+    engine = None
+    backup: Path | None = None
+    try:
+        engine = db_utils.create_sqlalchemy_engine(uri)
+        if db_utils._is_empty_database(engine):
+            return
+        current = db_utils._get_schema_version(engine)
+        head = db_utils._get_latest_schema_revision()
+        if current == head:
+            return
+        backup = path.with_name(f"{path.name}.{current or 'unversioned'}.bak")
+        if not backup.exists():
+            _copy_sqlite(path, backup)
+        logger.info(
+            "upgrading the MLflow tracking store %s from schema %s to %s "
+            "(backup at %s)",
+            path,
+            current,
+            head,
+            backup,
+        )
+        db_utils._upgrade_db(engine)
+    except Exception:
+        logger.exception(
+            "could not upgrade the MLflow tracking store %s; model surfaces will "
+            "refuse it until it is upgraded. Restore %s if the file is damaged, then "
+            "run `mlflow db upgrade %s`",
+            path,
+            backup or "(no backup taken)",
+            uri,
+        )
+    finally:
+        if engine is not None:
+            engine.dispose()
+
+
+def _copy_sqlite(source: Path, destination: Path) -> None:
+    """Copy a SQLite database through its own backup API, so the copy is consistent."""
+    with (
+        contextlib.closing(sqlite3.connect(source)) as src,
+        contextlib.closing(sqlite3.connect(destination)) as dst,
+    ):
+        src.backup(dst)
+
+
 def make_model_service(
     *,
     store: Store | None,
@@ -179,9 +260,15 @@ def make_model_service(
     except ModelError:
         return None
 
+    own_store = f"sqlite:///{cache_dir / 'mlflow.db'}"
+
     def resolve_uri() -> str:
         configured = configured_tracking_uri(store) if store is not None else None
-        return _store_uri(configured) or f"sqlite:///{cache_dir / 'mlflow.db'}"
+        return _store_uri(configured) or own_store
+
+    if resolve_uri() == own_store:
+        # Before anything opens it: MLflow refuses a store whose schema is behind.
+        upgrade_tracking_store(own_store)
 
     return ModelService(
         resolve_tracking_uri=resolve_uri,
