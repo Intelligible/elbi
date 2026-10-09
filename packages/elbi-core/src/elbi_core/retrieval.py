@@ -29,6 +29,7 @@ install. Any other embedding model fits the same protocol.
 from __future__ import annotations
 
 import math
+import threading
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
@@ -266,17 +267,19 @@ class CachedEmbedder:
         self._embedder = embedder
         self._latest_only = latest_only
         self._cache: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
 
     def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
         """One vector per text, computing only the texts not seen before."""
-        missing = [text for text in dict.fromkeys(texts) if text not in self._cache]
-        if missing:
-            vectors = self._embedder.embed(missing)
-            for text, vector in zip(missing, vectors, strict=True):
-                self._cache[text] = list(vector)
-        if self._latest_only:
-            self._cache = {text: self._cache[text] for text in texts}
-        return [self._cache[text] for text in texts]
+        with self._lock:
+            missing = [text for text in dict.fromkeys(texts) if text not in self._cache]
+            if missing:
+                vectors = self._embedder.embed(missing)
+                for text, vector in zip(missing, vectors, strict=True):
+                    self._cache[text] = list(vector)
+            if self._latest_only:
+                self._cache = {text: self._cache[text] for text in texts}
+            return [self._cache[text] for text in texts]
 
     def embed_query(self, text: str) -> list[float]:
         """The vector for one query, straight through: never memoized."""

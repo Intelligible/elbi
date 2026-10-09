@@ -10,6 +10,7 @@ each was checked to actually fail on the obvious regression.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar
@@ -251,6 +252,45 @@ def test_cached_embedder_latest_only_drops_texts_the_last_call_left_out() -> Non
     cached.embed(["b", "c"])  # "b" is reused; "a" was left out, so it is dropped
     cached.embed(["a"])
     assert inner.calls == ["a", "b", "c", "a"]
+
+
+def test_cached_embedder_latest_only_is_safe_across_threads() -> None:
+    """A prune in one search must not pull a vector out from under another.
+
+    Search ranks in worker threads, so two can overlap: here A parks inside the
+    model while B prunes the memo to its own corpus, which lacks A's memo hit.
+    """
+    a_inside, b_done = threading.Event(), threading.Event()
+
+    class _Parking:
+        def embed(self, texts: Sequence[str]) -> list[Sequence[float]]:
+            if list(texts) == ["a"]:
+                a_inside.set()
+                b_done.wait(timeout=0.2)  # bounded, so a lock cannot deadlock here
+            return [[1.0, float(len(text))] for text in texts]
+
+    cached = CachedEmbedder(_Parking(), latest_only=True)
+    cached.embed(["s"])  # "s" is a memo hit for A and absent from B's corpus
+    errors: list[Exception] = []
+
+    def search(texts: list[str]) -> None:
+        try:
+            cached.embed(texts)
+        except Exception as exc:
+            errors.append(exc)
+
+    def search_b() -> None:
+        search(["b"])
+        b_done.set()
+
+    a = threading.Thread(target=search, args=(["s", "a"],))
+    a.start()
+    assert a_inside.wait(timeout=1)
+    b = threading.Thread(target=search_b)
+    b.start()
+    a.join()
+    b.join()
+    assert errors == []
 
 
 def test_embedding_finds_synonym_that_lexical_misses() -> None:
