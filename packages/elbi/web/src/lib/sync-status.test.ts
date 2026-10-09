@@ -51,9 +51,7 @@ describe("sourceSyncStatus", () => {
       }),
     )
     expect(st).toMatchObject({ health: "failed", label: "Failed", variant: "danger" })
-    expect(st.explanation).toMatch(
-      /^The last sync failed for 1 of 2 enabled tables: cannot merge\. /,
-    )
+    expect(st.explanation).toBe("The last sync failed for 1 of 2 enabled tables: cannot merge.")
   })
 
   it("is failed when an enabled table failed even if the job reads idle", () => {
@@ -127,25 +125,26 @@ describe("sourceSyncStatus", () => {
 })
 
 describe("tableSyncStatus", () => {
-  it("marks a failed table with its own error and the partial-write caveat", () => {
+  // Syncs are atomic, so a failure leaves the table as it was: no partial-write caveat.
+  it("marks a failed table with its own error", () => {
     const st = tableSyncStatus(table({ status: "error", lastError: "cannot merge" }))
     expect(st).toMatchObject({ health: "failed", variant: "danger" })
-    expect(st.explanation).toContain("failed: cannot merge")
-    expect(st.explanation).toContain("partly rewritten")
+    expect(st.explanation).toBe("The last sync of this table failed: cannot merge.")
+    expect(st.explanation).not.toContain("partly rewritten")
   })
 
   // The service stores the raw exception text, which usually has no closing period.
   it("ends the error with one period", () => {
     for (const lastError of ["connection refused", "connection refused."])
-      expect(tableSyncStatus(table({ status: "error", lastError })).explanation).toMatch(
-        /^The last sync of this table failed: connection refused\. A failed/,
+      expect(tableSyncStatus(table({ status: "error", lastError })).explanation).toBe(
+        "The last sync of this table failed: connection refused.",
       )
     expect(
       sourceSyncStatus(source([table({ status: "error", lastError: "connection refused." })]))
         .explanation,
-    ).toMatch(/^The last sync failed for 1 of 1 enabled table: connection refused\. A failed/)
-    expect(tableSyncStatus(table({ status: "error", lastError: ". " })).explanation).toMatch(
-      /^The last sync of this table failed\. A failed/,
+    ).toBe("The last sync failed for 1 of 1 enabled table: connection refused.")
+    expect(tableSyncStatus(table({ status: "error", lastError: ". " })).explanation).toBe(
+      "The last sync of this table failed.",
     )
   })
 

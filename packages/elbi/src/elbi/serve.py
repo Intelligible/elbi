@@ -18,6 +18,7 @@ import urllib.request
 import webbrowser
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -405,6 +406,8 @@ def build(
             warehouse_service.sync_source(source.id)
             store.set_config(key, fingerprint)
 
+    # A run a restart cut short would otherwise read as syncing, and never be due again.
+    warehouse_service.recover_interrupted_syncs(datetime.now(timezone.utc))
     _ensure_declared_sources()
 
     # Tables synced before there was anywhere to record their columns: an unchanged

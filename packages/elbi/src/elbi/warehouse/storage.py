@@ -16,7 +16,9 @@ locally. DuckDB, already the platform's compute backend, reads the tables direct
 from __future__ import annotations
 
 import logging
+import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -148,13 +150,16 @@ def _warehouse_filesystem() -> tuple[Any, str]:
         # Application Default Credentials -- workload identity on GKE, or
         # GOOGLE_APPLICATION_CREDENTIALS pointing at a key file.
         return pafs.GcsFileSystem(), rest
-    if scheme == "abfss":
-        # abfss://container@account.dfs.core.windows.net/prefix
-        container = rest.split("@", 1)[0]
-        prefix = rest.split("/", 1)[1] if "/" in rest else ""
+    if scheme in ("az", "abfs", "abfss"):
+        # az://container/prefix, the account in STORAGE_AZURE_ACCOUNT, or
+        # abfss://container@account.dfs.core.windows.net/prefix, which names it. The
+        # host wins when both are given, as it does in delta-rs.
+        container, _, prefix = rest.partition("/")
+        container, _, host = container.partition("@")
+        account = host.partition(".")[0] or opts.get("AZURE_STORAGE_ACCOUNT_NAME", "")
         return (
             pafs.AzureFileSystem(
-                account_name=opts.get("AZURE_STORAGE_ACCOUNT_NAME", ""),
+                account_name=account,
                 account_key=opts.get("AZURE_STORAGE_ACCOUNT_KEY") or None,
             ),
             f"{container}/{prefix}".rstrip("/"),
@@ -396,34 +401,171 @@ def _existing_schema(uri: str) -> pa.Schema | None:
 
 
 def write_arrow(table: str, data: pa.Table, *, mode: str = "append") -> str:
-    """Write an Arrow table to its Delta table; return the table URI.
+    """Write an Arrow table to its Delta table in one commit; return the table URI.
 
     ``mode="overwrite"`` replaces all rows and lets the schema change (full-refresh);
     ``mode="append"`` adds rows and merges new columns into the schema (incremental).
-    The returned URI locates
-    the table, so a freshly-synced table is immediately queryable.
+    The returned URI locates the table, so a freshly-synced table is immediately
+    queryable. A single-batch :class:`StagedWrite`, so it coerces as a sync does.
     """
-    from deltalake import write_deltalake
+    with StagedWrite(table, mode=mode) as staged:
+        staged.write(data)
+        return staged.commit() or table_uri(table)
 
-    uri = table_uri(table)
-    if _is_local():
-        Path(uri).parent.mkdir(parents=True, exist_ok=True)
-    overwrite = mode == "overwrite"
-    # Only a nested column's stored form matters to the write, so a flat batch skips
-    # reading the table's schema.
-    existing = (
-        None
-        if overwrite or not any(pa.types.is_nested(field.type) for field in data.schema)
-        else _existing_schema(uri)
+
+#: Where a sync stages its batches before publishing them, beside the tables.
+_STAGING_PREFIX = "_staging"
+
+
+class StagedWrite:
+    """One sync's writes to ``table``, published to it in a single Delta commit.
+
+    A sync extracts in batches and any batch can fail: a network error, an API error,
+    a page whose shape cannot merge. Written straight to the table, a full refresh
+    that overwrites with its first batch and then fails would leave a table holding
+    only that batch, which reads as complete. So every batch lands in a private
+    staging table first, and :meth:`commit` copies the staged rows into the real table
+    as one overwrite (``mode="overwrite"``) or one append (``mode="append"``). Readers
+    see the previous table or the new one, never a part of a run; a run that fails
+    before the commit leaves the table exactly as it was.
+
+    The copy streams from the staging table, so a large table is never held in memory,
+    and it goes through the same delta-rs and storage options as every other write, so
+    it works on a local path and on an object store alike. Use it as a context manager:
+    the staging table is deleted on the way out, committed or not.
+    """
+
+    def __init__(self, table: str, *, mode: str = "overwrite") -> None:
+        self.table = table
+        self._append = mode == "append"
+        # Staging is written, listed and removed through delta-rs alone: it reaches
+        # every store the warehouse root can name, where the upload filesystem does not.
+        self._key = f"{_STAGING_PREFIX}/{table}-{uuid.uuid4().hex}"
+        self._uri = table_uri(self._key)
+        # Touched on the first attempt, staged once a write lands: a first write that
+        # fails part way can still leave files behind to delete.
+        self._touched = False
+        self._staged = False
+        self._target_schema: pa.Schema | None = None
+        self._target_read = False
+
+    def __enter__(self) -> StagedWrite:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.discard()
+
+    def write(self, data: pa.Table) -> None:
+        """Stage one batch; nothing reaches the table until :meth:`commit`."""
+        from deltalake import write_deltalake
+
+        self._touched = True
+        if _is_local():
+            Path(self._uri).parent.mkdir(parents=True, exist_ok=True)
+        existing = (
+            self._known_schema()
+            if any(pa.types.is_nested(field.type) for field in data.schema)
+            else None
+        )
+        write_deltalake(
+            self._uri,
+            _coerce_for_delta(data, existing),
+            mode="append",
+            schema_mode="merge",
+            storage_options=storage_options() or None,
+        )
+        self._staged = True
+
+    def _known_schema(self) -> pa.Schema | None:
+        """The stored form of each column so far: the table's, then this run's.
+
+        An append keeps a column the table already has in the form it was stored in
+        (see :func:`_columns_to_encode`), so the table's schema counts as well as what
+        has been staged. An overwrite replaces the table, so only the run's own counts.
+        """
+        staged = _existing_schema(self._uri) if self._staged else None
+        if not self._append:
+            return staged
+        if not self._target_read:
+            self._target_schema = _existing_schema(table_uri(self.table))
+            self._target_read = True
+        fields = {field.name: field for field in self._target_schema or []}
+        fields.update({field.name: field for field in staged or []})
+        return pa.schema(list(fields.values())) if fields else None
+
+    def commit(self) -> str | None:
+        """Publish the staged rows in one commit; the table URI, or None if none."""
+        from deltalake import DeltaTable, write_deltalake
+
+        if not self._staged:
+            return None
+        opts = storage_options() or None
+        uri = table_uri(self.table)
+        if _is_local():
+            Path(uri).parent.mkdir(parents=True, exist_ok=True)
+        staged = DeltaTable(self._uri, storage_options=opts).to_pyarrow_dataset()
+        write_deltalake(
+            uri,
+            staged.scanner(use_threads=False).to_reader(),
+            mode="append" if self._append else "overwrite",
+            schema_mode="merge" if self._append else "overwrite",
+            storage_options=opts,
+        )
+        return uri
+
+    def discard(self) -> None:
+        """Delete the staging table; a failure to is logged, never raised."""
+        if not self._touched:
+            return
+        delete_staging(self._key)
+        self._touched = self._staged = False
+
+
+def list_staging() -> list[tuple[str, str]]:
+    """Every staging table present, as ``(table, key)``: what runs that died left.
+
+    A run that reached its cleanup has none, so anything here belongs to a run still
+    going or to one that died; the caller tells them apart by the source's status.
+    """
+    import pyarrow.fs as pafs
+
+    if _is_local() and not Path(table_uri(_STAGING_PREFIX)).is_dir():
+        return []  # delta-rs refuses a local root that does not exist yet
+    selector = pafs.FileSelector(_STAGING_PREFIX, allow_not_found=True)
+    return [
+        (info.base_name.rsplit("-", 1)[0], f"{_STAGING_PREFIX}/{info.base_name}")
+        for info in _staging_filesystem().get_file_info(selector)
+        if info.type == pafs.FileType.Directory
+    ]
+
+
+def delete_staging(key: str) -> None:
+    """Remove one staging table; a failure to is logged, never raised."""
+    try:
+        _staging_filesystem().delete_dir(key)
+        if _is_local():
+            # The objects are gone; a local disk keeps the directories they were in.
+            # rmdir, not rmtree: a file left behind must fail here, not vanish.
+            for directory, _, _ in os.walk(table_uri(key), topdown=False):
+                Path(directory).rmdir()
+    except Exception:
+        logger.warning("could not remove staging table %s", key, exc_info=True)
+
+
+def _staging_filesystem() -> Any:
+    """The warehouse root as delta-rs reaches it, with the options it writes with.
+
+    Staging is written by delta-rs, so it is listed and removed through delta-rs too.
+    The filesystem behind uploads reaches fewer stores and honours fewer credentials
+    (a GCS service-account key), and a staging table it cannot remove is a full copy
+    of the data, left by every run.
+    """
+    import pyarrow.fs as pafs
+    from deltalake.fs import DeltaStorageHandler
+
+    return pafs.PyFileSystem(
+        DeltaStorageHandler(storage_uri(), storage_options() or None)
     )
-    write_deltalake(
-        uri,
-        _coerce_for_delta(data, existing),
-        mode="overwrite" if overwrite else "append",
-        schema_mode="overwrite" if overwrite else "merge",
-        storage_options=storage_options() or None,
-    )
-    return uri
 
 
 def table_location(table: str) -> str | None:
