@@ -12,57 +12,140 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
 </p>
 
-Write a Python function. `elbi` serves it to AI agents over the
-[Model Context Protocol](https://modelcontextprotocol.io) as a versioned, cached tool.
+**Give your agent an empirical memory.**
 
-That function is a *derivation*: declared inputs, a transform, a declared output format.
+*Dig deeper. Build on what you find.*
+
+elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read exactly how a finding was computed, write your own, and check, correct, or throw out any of them. elbi comes batteries-included, with a local data-science environment for notebooks, SQL, and AutoML.
+
+## elbi in 60 seconds
+
+It runs on your machine. There's no account to create.
+
+```bash
+uv tool install elbi          # install elbi
+elbi init acme-data-context   # set up an example project
+cd acme-data-context
+elbi mcp                      # serve elbi over MCP
+```
+
+That prints `MCP server ready at http://localhost:7878/mcp`. Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer from the example's `run_churn_risk` rather than inventing SQL. The example data is three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims.
+
+## Connecting Clients
+
+<details>
+<summary><strong>Claude Code</strong></summary>
+
+```bash
+claude mcp add --transport http elbi http://localhost:7878/mcp
+claude mcp list
+```
+
+</details>
+
+<details>
+<summary><strong>Cursor</strong></summary>
+
+Add a project file at `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "elbi": {
+      "url": "http://localhost:7878/mcp"
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Codex CLI</strong></summary>
+
+```bash
+codex mcp add elbi --url http://localhost:7878/mcp
+```
+
+</details>
+
+<details>
+<summary><strong>Browser</strong></summary>
+
+`elbi serve` opens a full local data-science environment in your browser: chat with elbi's own built-in agent (bring a model key) if you'd rather not use yours, a [SQL workbench](./docs/explore.md), reactive [notebooks](./docs/notebooks.md), and [AutoML model training](./docs/models.md) with an MLflow registry, alongside a view of everything your agent has recorded. The app serves the same MCP endpoint at `http://localhost:7700/mcp`, so your own agent and the browser work on the same project.
+
+```bash
+elbi serve
+```
+
+</details>
+
+## What your agent gets
+
+**A look before it leaps.** Before analyzing, your agent can see how a dataset fits together: which columns identify a row, which are derived from others, which carry overlapping information and could confound a comparison, and how complete each one is.
+
+**Statistical checks it can run.** More than 30 `verify_*` tools let your agent test a claim with a method suited to it: regression, causal designs (instrumental variables, difference-in-differences, regression discontinuity), survival analysis, calibration, forecasting, and [more](./docs/mcp.md#what-gets-exposed). Most return an estimate, its caveats, and a verdict of *sound*, *unsound*, or *inconclusive* with the reason, so your agent can see when a confounder, a subgroup reversal, or a leaked feature undoes a pattern.
+
+**A memory that shows its work.** When a finding holds up, your agent records it as a *derivation*: the code, the data it ran on, and the result. Any agent you connect can find the derivation and call it again, and a later call recomputes the result if its data has changed, so a finding doesn't silently go stale. If the agent states a claim (an effect of `x` on `y`, or a model's target and features), elbi checks the claim before recording the finding. You can revise or delete any derivation, and [require your own sign-off](./docs/authoring.md#certification-policy) if you want a stricter gate.
+
+In SleuthBench ([arXiv:2609.34228](https://arxiv.org/abs/2609.34228)), giving six frontier models precomputed statistical artifacts alongside their Python tool raised their accuracy on questions about how features shape an outcome from 41.9% to 68.0%.
+
+## Examples
+
+- [`01_getting_started`](examples/01_getting_started): a complete project like the one `elbi init` scaffolds, where `pricing_effects` builds on `churn_risk`, so the agent reuses a churn calculation instead of reinventing it in SQL each time.
+- [`02_serving_a_model`](examples/02_serving_a_model): give elbi a trained model and let the agent query its predictions, for one customer or a batch, without writing scoring code.
+- [`03_stale_skill`](examples/03_stale_skill): a skill file written after yesterday's close tells the agent to cut a position 3%. Overnight the stock fell 21.9%, and the same question asked as an elbi tool, recomputed from this morning's prices, cuts more than twice as much. The file can't tell that its data moved.
+
+## FAQ
+
+<details>
+<summary><strong>Why not just keep notes, or use my agent's memory?</strong></summary>
+
+Keep using them for what you've told your agent: conventions, preferences, context. For what it found out from data, elbi is the memory built for the job. A derivation shows its work (its code, inputs, result, and lineage), so you can see what a finding rests on, rerun it, re-check its claim with `elbi test`, and know when the data under it has changed. And elbi keeps it in one place that every MCP client can use, instead of in one agent's notes or rules file, so a finding Claude Code recorded is there for Cursor too.
+
+The two work together rather than compete: elbi is the source of record for what your agent learned from data, and memory is one more place that knowledge can reach. Any MCP client can already read a derivation's current result as a resource.
+
+</details>
+
+<details>
+<summary><strong>Does elbi replace my semantic layer?</strong></summary>
+
+No, it builds on one. A semantic layer gives each business number one agreed definition, and a derivation can take that governed model as an input, including one described with [OSI](https://open-semantic-interchange.org/) (Open Semantic Interchange), so your agent's analysis starts from the definitions your team already owns. elbi also ships a semantic layer of its own ([Metrics](./docs/metrics.md)) that imports from and exports to OSI. What elbi adds is the work that goes beyond shared definitions: analyses and models your agent saves with the code, data, and result behind them, for any agent to build on.
+
+</details>
+
+## How it works
+
+A derivation is a Python function with declared inputs. Your agent can write one through `propose_derivation`, or you can write it yourself:
 
 ```python
 from elbi_core import Artifact, Context, Dataset, derivation, serve
 
 
 @derivation(
-    inputs={"sales": Dataset("sales")},
-    serve=serve.table(title="Churn risk", max_rows=50),
+    inputs={"customers": Dataset("customers")},
+    serve=serve.table(title="Churn rate by plan"),
 )
-def churn_risk(ctx: Context) -> Artifact:
-    """Per-customer churn-risk scores from recent sales activity."""
-    rows = ctx.input("sales").rows
-    scored = [
-        {"customer_id": r["customer_id"], "risk": 1 / (1 + float(r["amount"]))}
-        for r in rows
-    ]
-    scored.sort(key=lambda r: r["risk"], reverse=True)
-    return Artifact.table(scored)
+def churn_by_plan(ctx: Context) -> Artifact:
+    """Share of customers who churned on each plan, with the count behind it."""
+    counts: dict[str, list[int]] = {}
+    for r in ctx.input("customers").rows:
+        tally = counts.setdefault(r["plan"], [0, 0])
+        tally[0] += int(r["churned"])
+        tally[1] += 1
+    return Artifact.table(
+        [
+            {"plan": plan, "customers": n, "churn_rate": round(churned / n, 3)}
+            for plan, (churned, n) in sorted(counts.items())
+        ]
+    )
 ```
 
-`elbi serve` finds the function, runs it against whatever `elbi.dev.yaml` binds, and
-publishes it. An agent calls `run_churn_risk` and reads back:
+elbi runs it against whatever `elbi.dev.yaml` binds, records the result with its inputs and lineage, and exposes it to the agent as `run_churn_by_plan`. The result is cached, and recomputes when the code or the `customers` data changes, and not otherwise.
 
-```
-# Churn risk
+**Serving your own computations.** You don't have to wait for an agent to discover something. Write derivations yourself (a metric, a model, a piece of business logic) and elbi serves each one to every MCP client as a cached, versioned tool, so every agent and tool gets the same answer. See [Authoring derivations](./docs/derivations.md) and [Analytics as code](./docs/analytics-as-code.md).
 
-| customer_id | risk |
-| --- | --- |
-| C-1021 | 0.5 |
-| C-0820 | 0.2 |
-| C-0640 | 0.1 |
-```
-
-That result is cached. It recomputes when the code changes or the `sales` data does,
-and not otherwise.
-
-## Where this fits
-
-An agent that writes fresh SQL against raw tables on every prompt gets it wrong, and
-you find out downstream. Define the computation once instead, in Python, and hand
-agents the result as a governed tool.
-
-A derivation is any computation over data: a transform, an aggregate, a trained model.
-That reaches questions a metrics-only semantic layer can't phrase, because it isn't
-limited to metrics. It doesn't replace a semantic layer, though. A derivation can take
-one as an input, including a governed model described with
-[OSI](https://open-semantic-interchange.org/).
+Data comes from local files (CSV, JSON, Parquet) or a SQL database ([Data sources](./docs/data-sources.md)). See [agent-authored derivations](./docs/authoring.md) for how an agent proposes one.
 
 ## Installation
 
@@ -70,104 +153,17 @@ one as an input, including a governed model described with
 uv tool install elbi
 ```
 
-Later, `elbi update` tells you whether a newer release exists and prints the right
-command for however you installed it. It touches the network only when you run it;
-nothing checks at startup or on a timer. See [Upgrading](docs/upgrading.md).
-
-## Quick start
-
-```bash
-elbi init acme-data-context
-cd acme-data-context
-elbi serve
-```
-
-You don't need an API key to get going. `elbi serve` opens a chat UI at
-`http://localhost:7700` once it's ready, and serves the same derivations over MCP at
-`http://localhost:7700/mcp`. The chat needs a model to talk to, so add one in Settings
-when you send your first message, or export a key beforehand:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-The first run takes 15-20 seconds longer than the ones after it. It's loading the
-embedding model and setting up the local database, and the browser opens when the app
-is genuinely ready rather than before. (`uv sync` comes later, for `uv run pytest`.
-`serve`, `validate` and `test` all run from their own installed environment.)
-
-Want the MCP endpoint on its own? Install `elbi-cli` instead and run `elbi mcp`. Same
-derivations at `http://localhost:7878/mcp`, no chat UI, none of the heavier
-dependencies, and no model key to configure. Whichever client you point at it brings
-its own.
-
-## Connect a client
-
-Point any MCP client at the URL that gets printed, from either `serve` or `mcp`. To
-poke at it without one:
-
-```bash
-npx @modelcontextprotocol/inspector
-```
-
-Connect, then call the `run_<name>` tools. Claude Desktop, Cursor and your own agent
-all take the same URL as an MCP server.
-
-## What you get
-
-Bind data from local files (CSV, JSON, Parquet) or from a SQL database, and write
-derivations over it as plain Python. Everything caches. Any MCP client can read or run
-what you publish.
-
-An agent can also *propose* a derivation. It gets verified under isolation and only
-serves once a human certifies it; see [agent-authored derivations](./docs/authoring.md).
-You can gate a cleaning step on a machine-checkable
-[data contract](./docs/data-contracts.md), which checks types, ranges, keys and
-referential integrity before anything is served. When the data outgrows memory, push
-profiling and contract checks down to [DuckDB or Polars](./docs/compute-engines.md).
-
-Every derivation keeps its [result history](./docs/result-history.md): how the certified
-answer changed, and what moved it. Each version can go to MLflow. For any certified
-derivation you can export a signed, offline-verifiable
-[certificate](./docs/certificates.md) recording what the oracle checked and who signed
-off.
-
-There are two places to explore before you commit to anything. The
-[SQL workbench](./docs/explore.md) is deliberately ungoverned, and promotes a query to a
-certified derivation in one click. The [notebook](./docs/notebooks.md) is reactive, and
-promotes a cell the same way. Both are authoring surfaces; the derivation is the
-artifact.
-
-On top of certified derivations you can build:
-
-- [dashboards](./docs/dashboards.md), where every tile binds to one, so a published
-  dashboard can only show numbers the oracle verified;
-- a [feature store](./docs/feature-store.md) with point-in-time-correct training joins
-  and a low-latency online store, so there's no train/serve skew;
-- [metrics](./docs/metrics.md) defined once, a verified semantic layer that imports from
-  and exports to [OSI](https://open-semantic-interchange.org/), so every tool reads the
-  same sound number.
-
-[Monitor](./docs/monitoring.md) any metric or derivation against a learned baseline and
-get alerted when a verified number moves, with the source's verification verdict in the alert.
-[Lineage and the catalog](./docs/lineage.md) cover provenance, impact analysis and
-search across every artifact. [Orchestration](./docs/orchestration.md) materializes
-assets that have gone stale, on a cron schedule or a data-change sensor, and keeps
-per-asset run history. And you can validate any derivation against the
-[Open Derivation Spec](./spec/derivation.md).
-
-Elbi runs on your machine. No account, no sign-in, and nothing leaves your network
-unless you send it somewhere.
+Then connect your client (see [Connecting Clients](#connecting-clients) above). `elbi update` tells you whether a newer release exists and prints the right command for however you installed it. See [Upgrading](docs/upgrading.md).
 
 ## Documentation
 
 - [Getting started](./docs/getting-started.md)
+- [Serving over MCP](./docs/mcp.md)
 - [Authoring derivations](./docs/derivations.md)
-- [Data contracts](./docs/data-contracts.md)
-- [Compute engines](./docs/compute-engines.md)
-- [Result history](./docs/result-history.md)
+- [Agent-authored derivations](./docs/authoring.md)
 - [Data sources](./docs/data-sources.md)
 - [Caching](./docs/caching.md)
+- [Result history](./docs/result-history.md)
 - [Open Derivation Spec](./spec/derivation.md)
 
 ## Community
@@ -186,14 +182,15 @@ development setup, the test commands and our PR conventions; there's also a
 Report vulnerabilities privately; the [Security Policy](./.github/SECURITY.md) says how.
 Please don't open a public issue for one.
 
-## Running Elbi for a team
+## The Name
 
-We built Elbi for one person: your machine, your data, an install that needs no account.
-If you need it to serve several people, with single sign-on, user and group management
-and per-object permissions, write to sales@intelligible.ai.
+elbi stands for "Empirical Layer by Intelligible." An _empirical layer_ is where an agent keeps what it has learned from data. Intelligible is the company that builds elbi.
+
+## Running elbi across a team
+
+elbi is built for one person working with data already in reach: your machine, your files, no account. If you need that learning shared across people and teams, connected to your organization's data systems and kept current, that's what [Summand](https://summand.com), Intelligible's enterprise data platform, is for. Write to solutions@intelligible.ai.
 
 ## License
 
-Apache-2.0, all of it: the specification, the SDK, the CLI, the agent runtime, the MCP
-server, the web app, every verification gate. Use it for anything, commercial use
+Apache-2.0. Use it for anything, commercial use
 included. See [LICENSE](./LICENSE).
