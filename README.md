@@ -86,7 +86,7 @@ elbi serve
 
 **Statistical checks it can run.** More than 30 `verify_*` tools let your agent test a claim with a method suited to it: regression, causal designs (instrumental variables, difference-in-differences, regression discontinuity), survival analysis, calibration, forecasting, and [more](./docs/mcp.md#what-gets-exposed). Most return an estimate, its caveats, and a verdict of *sound*, *unsound*, or *inconclusive* with the reason, so your agent can see when a confounder, a subgroup reversal, or a leaked feature undoes a pattern.
 
-**A memory that shows its work.** When a finding holds up, your agent records it as a *derivation*: the code, the data it ran on, and the result. Any agent you connect can find the derivation and call it again, and a later call recomputes the result if its data has changed, so a finding doesn't silently go stale. If the agent states a claim (an effect of `x` on `y`, or a model's target and features), elbi checks the claim before recording the finding. You can revise or delete any derivation, and [require your own sign-off](./docs/authoring.md#certification-policy) if you want a stricter gate.
+**A memory that shows its work.** When a finding is worth keeping, your agent records it as a *derivation*: the code, the data it ran on, and the result. Any agent you connect can find the derivation and call it again. The result is tied to the data it ran on, and the next run of elbi after that data changes recomputes it. If the agent states a claim (an effect of `x` on `y`, or a model's target and features), elbi checks the claim before recording the finding. You can revise or delete any derivation, and [require your own sign-off](./docs/authoring.md#certification-policy) if you want a stricter gate.
 
 In SleuthBench ([arXiv:2609.34228](https://arxiv.org/abs/2609.34228)), giving six frontier models precomputed statistical artifacts alongside their Python tool raised their accuracy on questions about how features shape an outcome from 41.9% to 68.0%.
 
@@ -101,7 +101,7 @@ In SleuthBench ([arXiv:2609.34228](https://arxiv.org/abs/2609.34228)), giving si
 <details>
 <summary><strong>Why not just keep notes, or use my agent's memory?</strong></summary>
 
-Keep using them for what you've told your agent: conventions, preferences, context. For what it found out from data, elbi is the memory built for the job. A derivation shows its work (its code, inputs, result, and lineage), so you can see what a finding rests on, rerun it, re-check its claim with `elbi test`, and know when the data under it has changed. And elbi keeps it in one place that every MCP client can use, instead of in one agent's notes or rules file, so a finding Claude Code recorded is there for Cursor too.
+Keep using them for what you've told your agent: conventions, preferences, context. For what it found out from data, elbi is the memory built for the job. A derivation shows its work (its code, inputs, result, and lineage), so you can see what a finding rests on, rerun it, re-check its claim with `elbi test`, and see which version of the data it ran on. And elbi keeps it in one place that every MCP client can use, instead of in one agent's notes or rules file, so a finding Claude Code recorded is there for Cursor too.
 
 The two work together rather than compete: elbi is the source of record for what your agent learned from data, and memory is one more place that knowledge can reach. Any MCP client can already read a derivation's current result as a resource.
 
@@ -141,7 +141,7 @@ def churn_by_plan(ctx: Context) -> Artifact:
     )
 ```
 
-elbi runs it against whatever `elbi.dev.yaml` binds, records the result with its inputs and lineage, and exposes it to the agent as `run_churn_by_plan`. The result is cached, and recomputes when the code or the `customers` data changes, and not otherwise.
+elbi runs it against whatever `elbi.dev.yaml` binds, records the result with its inputs and lineage, and exposes it to the agent as `run_churn_by_plan`. The result is cached against the code and the `customers` data: a running server keeps serving it, and the next run after either changes recomputes it.
 
 **Serving your own computations.** You don't have to wait for an agent to discover something. Write derivations yourself (a metric, a model, a piece of business logic) and elbi serves each one to every MCP client as a cached, versioned tool, so every agent and tool gets the same answer. See [Authoring derivations](./docs/derivations.md) and [Analytics as code](./docs/analytics-as-code.md).
 
