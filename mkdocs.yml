@@ -29,35 +29,45 @@ theme:
 
 nav:
   - Home: index.md
-  - Getting started: getting-started.md
-  - Authoring derivations: derivations.md
-  - Agent-authored derivations: authoring.md
-  - Data contracts: data-contracts.md
-  - Compute engines: compute-engines.md
-  - Result history: result-history.md
-  - Exports and data portability: exports.md
-  - Verification certificates: certificates.md
-  - Explore (SQL & profiling): explore.md
-  - Notebooks: notebooks.md
-  - Compute: compute.md
-  - Models & AutoML: models.md
-  - Feature store: feature-store.md
-  - Metrics (semantic layer): metrics.md
-  - Monitoring & alerting: monitoring.md
-  - Dashboards: dashboards.md
-  - Lineage & catalog: lineage.md
-  - Pipelines & orchestration: orchestration.md
-  - Data sources: data-sources.md
-  - Caching & staleness: caching.md
-  - The CLI: cli.md
-  - Upgrading: upgrading.md
-  - Analytics as code: analytics-as-code.md
-  - Serving over MCP: mcp.md
-  - Searching documents: search-documents.md
-  - Running in Docker: docker.md
-  - Privacy and telemetry: privacy.md
-  - Supported browsers: browsers.md
-  - The derivation spec: spec.md
+
+  - Get started:
+      - Getting started: getting-started.md
+      - Data sources: data-sources.md
+      - Connect your AI agent (MCP): mcp.md
+      - CLI: cli.md
+
+  - Derivations:
+      - Creating derivations with agents: authoring.md
+      - Writing derivations manually: derivations.md
+      - Data contracts: data-contracts.md
+      - Verification certificates: certificates.md
+      - Result history: result-history.md
+      - Caching & staleness: caching.md
+      - Lineage & catalog: lineage.md
+      - Derivation specification: spec.md
+
+  - GUI:
+      - Explore (SQL & profiling): explore.md
+      - Search indexing: search-documents.md
+      - Notebooks: notebooks.md
+      - Models & AutoML: models.md
+      - Feature store: feature-store.md
+      - Metrics (semantic layer): metrics.md
+      - Dashboards: dashboards.md
+      - Supported browsers: browsers.md
+
+  - Automation & monitoring:
+      - Pipelines & orchestration: orchestration.md
+      - Monitoring & alerting: monitoring.md
+
+  - Configuration & deployment:
+      - Analytics as code: analytics-as-code.md
+      - Compute engines: compute-engines.md
+      - Compute: compute.md
+      - Running in Docker: docker.md
+      - Exports & data portability: exports.md
+      - Privacy & telemetry: privacy.md
+      - Upgrading: upgrading.md
 
 markdown_extensions:
   - admonition
