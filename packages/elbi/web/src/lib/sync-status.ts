@@ -37,10 +37,6 @@ const status = (health: SyncHealth, label: string, explanation: string): SyncSta
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n.toLocaleString()} ${n === 1 ? one : many}`
 
-// A sync writes batch by batch (warehouse/sync.py), so a run that fails partway keeps the earlier ones.
-const PARTIAL_WRITE =
-  "A failed sync can leave the table partly rewritten, so its row count may not match what is in it."
-
 // "<prefix>: <error>." with exactly one closing period; the service stores raw exception text.
 const withError = (prefix: string, error: string | null | undefined) => {
   const trimmed = error?.replace(/[.\s]+$/, "") ?? ""
@@ -69,7 +65,7 @@ export function tableSyncStatus(schema: SchemaView): SyncStatus {
     return status(
       "failed",
       "Failed",
-      `${withError("The last sync of this table failed", schema.lastError)} ${PARTIAL_WRITE}`,
+      withError("The last sync of this table failed", schema.lastError),
     )
   if (schema.status === "synced") {
     if (schema.rowCount === 0)
@@ -96,7 +92,7 @@ export function sourceSyncStatus(source: SourceDetail): SyncStatus {
       failed.length > 0
         ? `The last sync failed for ${failed.length} of ${plural(enabled.length, "enabled table")}`
         : "The last sync failed"
-    return status("failed", "Failed", `${withError(which, error)} ${PARTIAL_WRITE}`)
+    return status("failed", "Failed", withError(which, error))
   }
 
   if (enabled.length === 0)
