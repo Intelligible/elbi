@@ -89,6 +89,7 @@ about, because the migration is one-way and downgrading afterwards will not undo
 The MLflow tracking store the app keeps for itself (`mlflow.db` under the project's
 `.elbi/cache`) migrates forward on start too, when a release brings a newer MLflow whose
 schema it is behind. The file is first copied to `mlflow.db.<revision>.bak` beside it. A
+store a newer MLflow already migrated (an image rolled back) is left alone and logged. A
 migration that fails is logged with that backup's path and the manual command
 (`mlflow db upgrade <uri>`), and the app starts anyway: only the model surfaces depend on
 that store. A tracking server's own database, named by `MLFLOW_TRACKING_URI`, is never

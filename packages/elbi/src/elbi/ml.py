@@ -165,7 +165,9 @@ def upgrade_tracking_store(uri: str) -> None:
     ``MLFLOW_TRACKING_URI`` or the setting, a SQLite file included, may be shared with
     an MLflow of another version, and migrating it is its operator's decision. A
     missing or empty file is left for MLflow to create at the current schema, and one
-    already current is not touched.
+    already current is not touched. One at a revision this MLflow does not know was
+    migrated by a newer MLflow (an image rolled back) and is left alone too: alembic
+    cannot migrate from a revision it does not hold, so the attempt could only fail.
 
     Migrations are not guaranteed to be transactional, so the file is first copied to
     ``<name>.<revision>.bak`` beside it, keeping the first copy taken from a revision.
@@ -179,6 +181,9 @@ def upgrade_tracking_store(uri: str) -> None:
     if not path.is_file():
         return
     try:
+        import mlflow
+        from alembic.script import ScriptDirectory
+        from alembic.util.exc import CommandError
         from mlflow.store.db import utils as db_utils
     except ImportError:
         return
@@ -191,6 +196,22 @@ def upgrade_tracking_store(uri: str) -> None:
         current = db_utils._get_schema_version(engine)
         head = db_utils._get_latest_schema_revision()
         if current == head:
+            return
+        try:
+            ScriptDirectory.from_config(db_utils._get_alembic_config("")).get_revision(
+                current
+            )
+        except CommandError:
+            logger.warning(
+                "the MLflow tracking store %s is at schema %s, which the installed "
+                "MLflow %s (schema %s) does not know: it was written by a newer MLflow "
+                "and is left alone, so model surfaces will refuse it until that MLflow "
+                "is back",
+                path,
+                current,
+                mlflow.__version__,
+                head,
+            )
             return
         backup = path.with_name(f"{path.name}.{current or 'unversioned'}.bak")
         if not backup.exists():
@@ -219,12 +240,25 @@ def upgrade_tracking_store(uri: str) -> None:
 
 
 def _copy_sqlite(source: Path, destination: Path) -> None:
-    """Copy a SQLite database through its own backup API, so the copy is consistent."""
-    with (
-        contextlib.closing(sqlite3.connect(source)) as src,
-        contextlib.closing(sqlite3.connect(destination)) as dst,
-    ):
-        src.backup(dst)
+    """Copy a SQLite database through its own backup API, so the copy is consistent.
+
+    The copy lands under a temporary name and is renamed once whole: ``sqlite3.connect``
+    creates the destination before a page is copied, so a copy that died partway (disk
+    full, killed) would otherwise leave a truncated file for the next start to take as
+    the backup and skip.
+    """
+    partial = destination.with_name(destination.name + ".partial")
+    partial.unlink(missing_ok=True)
+    try:
+        with (
+            contextlib.closing(sqlite3.connect(source)) as src,
+            contextlib.closing(sqlite3.connect(partial)) as dst,
+        ):
+            src.backup(dst)
+        partial.replace(destination)
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
 
 
 def make_model_service(

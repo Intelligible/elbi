@@ -246,3 +246,72 @@ def test_a_store_mlflow_cannot_open_is_logged_not_raised(
     assert path.read_bytes() == before
     [record] = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert "could not upgrade the MLflow tracking store" in record.getMessage()
+
+
+def test_a_store_from_a_newer_mlflow_is_left_alone(
+    behind: tuple[Path, str], caplog: pytest.LogCaptureFixture
+) -> None:
+    """An image rolled back to an older MLflow meets a store the newer one migrated.
+
+    Source: alembic refuses to upgrade from a revision its script directory does not
+    hold (``CommandError: Can't locate revision``), so the attempt can only fail, and
+    the ``mlflow db upgrade`` the error log recommends fails the same way. The store
+    here is simply stamped with a revision this MLflow does not ship.
+    """
+    path, _ = behind
+    connection = sqlite3.connect(path)
+    connection.execute("update alembic_version set version_num = 'deadbeefcafe'")
+    connection.commit()
+    connection.close()
+    before = path.read_bytes()
+
+    with caplog.at_level(logging.INFO, logger="elbi"):
+        upgrade_tracking_store(_uri(path))
+
+    assert path.read_bytes() == before
+    assert list(path.parent.glob("*.bak")) == []
+    [record] = [r for r in caplog.records if r.name == "elbi"]
+    assert record.levelno == logging.WARNING
+    assert "newer MLflow" in record.getMessage()
+
+
+def test_a_copy_that_dies_partway_leaves_nothing_for_the_next_start_to_trust(
+    behind: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Source: ``sqlite3.connect`` creates the destination before the backup API copies
+    a page (a 0-byte file exists right after connect), so a copy that dies partway
+    (disk full, killed) would leave a file the next start takes for the backup and
+    skips, migrating with no safety net."""
+    import types
+
+    import elbi.ml
+
+    path, previous = behind
+
+    class Dies(sqlite3.Connection):
+        def backup(self, target: sqlite3.Connection, **kwargs: object) -> None:
+            def out_of_space(status: int, remaining: int, total: int) -> None:
+                raise OSError(28, "No space left on device")
+
+            super().backup(target, pages=1, progress=out_of_space)
+
+    monkeypatch.setattr(
+        elbi.ml,
+        "sqlite3",
+        types.SimpleNamespace(connect=lambda p: sqlite3.connect(p, factory=Dies)),
+    )
+    with caplog.at_level(logging.ERROR, logger="elbi"):
+        upgrade_tracking_store(_uri(path))
+
+    assert _revision(path) == previous
+    assert list(path.parent.glob("mlflow.db.*")) == []
+    [record] = [r for r in caplog.records if r.name == "elbi"]
+    assert "could not upgrade the MLflow tracking store" in record.getMessage()
+
+    monkeypatch.undo()
+    upgrade_tracking_store(_uri(path))
+
+    assert _revision(path) == _head()
+    assert _revision(path.with_name(f"mlflow.db.{previous}.bak")) == previous
