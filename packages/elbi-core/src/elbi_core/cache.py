@@ -36,13 +36,27 @@ _MAC_LEN = 32  # HMAC-SHA256 digest size in bytes
 _GC_GRACE = 3600.0
 
 
+_DERIVATION_TAG_PREFIX = "derivation:"
+
+
 def derivation_tag(name: str) -> str:
     """The cache tag a derivation's entries carry, so they invalidate by name.
 
     The action cache is keyed by content hash, not by name; tagging every entry
     with this gives a stable handle to purge one derivation's cache on delete.
     """
-    return f"derivation:{name}"
+    return f"{_DERIVATION_TAG_PREFIX}{name}"
+
+
+def derivation_from_tag(tag: str) -> str | None:
+    """The name a :func:`derivation_tag` carries, or ``None`` for any other tag.
+
+    Anything that invalidates by tag must know when a tag names a derivation, so it
+    can apply the same checks a request naming the derivation directly would get.
+    """
+    if not tag.startswith(_DERIVATION_TAG_PREFIX):
+        return None
+    return tag.removeprefix(_DERIVATION_TAG_PREFIX)
 
 
 @dataclass(frozen=True)

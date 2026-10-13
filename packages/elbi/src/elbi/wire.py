@@ -48,6 +48,12 @@ class Created(Bare):
     id: str
 
 
+class Invalidated(Bare):
+    """How many derivation cache entries an invalidation removed."""
+
+    removed: int
+
+
 class Budget(Wire):
     """The spend cap and what has been spent against it."""
 
