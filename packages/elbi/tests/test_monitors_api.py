@@ -326,3 +326,26 @@ def test_the_tick_alerts_on_a_failing_monitor_and_still_runs_the_rest(
     ]
     snapshots = client.get(f"/api/monitors/{healthy}").json()["snapshots"]
     assert [s["value"] for s in snapshots] == [7.0]
+
+
+def test_a_failed_check_still_counts_as_the_monitors_check(client: TestClient) -> None:
+    broken = _create(client, "broken")
+    FAILING["broken"] = _QueryFailed("no such column")
+    client.app.state.monitor_tick()
+    client.app.state.monitor_tick()  # within the hour: not due again
+    [incident] = _incidents(client, broken)
+    assert incident["snapshots"] == 1
+    assert client.get("/api/monitors").json()[0]["lastCheckedAt"] is not None
+
+
+def test_an_incident_says_whether_it_opened_on_an_anomaly_or_a_failure(
+    client: TestClient,
+) -> None:
+    monitor_id = _create(client)
+    _baseline(client, monitor_id)
+    _check(client, monitor_id, 5000.0)
+    FAILING["revenue"] = _QueryFailed("table dropped")
+    client.post(f"/api/monitors/{monitor_id}/check")
+    failure, anomaly = _incidents(client, monitor_id)
+    assert (failure["cause"], failure["peakValue"]) == ("source_failed", None)
+    assert (anomaly["cause"], anomaly["peakValue"]) == (None, 5000.0)

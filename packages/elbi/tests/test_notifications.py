@@ -9,6 +9,7 @@ the operation that produced the event.
 from __future__ import annotations
 
 import datetime as _dt
+import re
 from pathlib import Path
 from typing import Any
 
@@ -260,3 +261,12 @@ def test_a_failed_monitor_source_notifies_with_its_reason(store: Store) -> None:
     assert (row.target_type, row.target_id) == ("metric_monitor", "m1")
     # Emailed by default, as an anomaly is: a monitor that cannot read is not watching.
     assert notifications.effective_prefs(store)["metric.source_failed"] == (True, True)
+
+
+def test_every_event_type_has_a_label_in_the_web_app() -> None:
+    """Settings and the inbox name an event by its web label, else by its raw type."""
+    web = Path(__file__).resolve().parents[1] / "web" / "src" / "lib"
+    source = (web / "notifications.ts").read_text(encoding="utf-8")
+    block = source.split("EVENT_TYPE_LABELS", 1)[1].split("\n}\n", 1)[0]
+    labelled = set(re.findall(r'^  "([^"]+)": \{', block, re.M))
+    assert labelled == set(notifications.EVENT_TYPES)
