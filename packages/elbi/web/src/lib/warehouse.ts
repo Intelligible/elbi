@@ -62,6 +62,15 @@ export interface SourceSummary {
   schemaCount: number
   syncedCount: number
   rows: number
+  // The enabled tables' last-sync results, enough to derive the source's health.
+  enabledCount: number
+  enabledSyncedCount: number
+  enabledRows: number
+  failedCount: number
+  tableError: string | null
+  emptyTables: string[]
+  // True when there are empty tables and every one of them appends (incremental with a cursor).
+  emptyTablesAppend: boolean
 }
 
 export interface SchemaView {
