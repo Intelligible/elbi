@@ -1,0 +1,3 @@
+# Example data bindings: point only to committed fixtures (no credentials).
+data:
+  customers: ./fixtures/customers.csv

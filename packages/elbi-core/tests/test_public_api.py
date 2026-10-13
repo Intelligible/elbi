@@ -15,7 +15,7 @@ def test_all_names_are_importable() -> None:
 
 
 def test_serve_namespace_has_builders() -> None:
-    for builder in ("table", "markdown", "json", "text"):
+    for builder in ("table", "markdown", "json", "text", "components"):
         assert callable(getattr(elbi_core.serve, builder))
 
 

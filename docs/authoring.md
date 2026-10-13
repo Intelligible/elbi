@@ -123,6 +123,16 @@ The choice is a *deployment* decision, not a property of the derivation: the ope
 local default favors autonomy; the platform can require human endorsement where
 the cost of a wrong autonomous answer outweighs the cost of delay.
 
+Components derivations are the one exception to the default. Their check is
+structural: every component must validate against the ORC schema and, unless it is
+a `domain_knowledge` note, carry `evidence`. The verdict is `sound` or `unsound`
+with one check per component in the attestation, `invalid` when an item fails the
+schema, and `inconclusive` for an empty list or a row `claim`. A passing check says
+each statement comes with what it rests on, not that the statement is true, so
+`propose_derivation` holds a components proposal at `status=proposed` for
+`elbi certify <name>` even under the default policy. A policy passed explicitly
+applies to components like any other proposal.
+
 ## Execution isolation
 
 Agent-generated source is untrusted, so it never runs in the host process. The
@@ -236,7 +246,8 @@ per-derivation run tools:
   returns the computed result inline (so the answer needs no second call), and the
   server emits `notifications/tools/list_changed` so a connected client also
   discovers the new `run_<name>` tool. If the server runs `ManualCertification`, it
-  instead stays `proposed` until a human runs `elbi certify <name>`.
+  instead stays `proposed` until a human runs `elbi certify <name>`; a `components`
+  proposal stays `proposed` that way under the default policy too.
 
 ## Verification
 

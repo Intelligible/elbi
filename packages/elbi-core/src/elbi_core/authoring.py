@@ -16,8 +16,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from . import versioning
 from .artifact import Artifact
+from .components import validate_components
 from .derivation import Derivation, InputSpec, _refuse_in_process
-from .errors import DerivationError, ElbiError
+from .errors import ComponentError, DerivationError, ElbiError
 from .param import Param
 from .quality.contract import DataContract
 from .quality.verify import verify_contract
@@ -53,7 +54,8 @@ class VerificationResult:
     output valid. ``matched_prediction`` is whether all golden cases passed, or ``None``
     when none were given. ``cases_total`` and ``cases_passed`` report how many golden
     cases ran and passed. ``oracle_verdict`` is the result of verifying the declared
-    conclusion (``None`` when no claim was declared); ``contract_verdict`` is the
+    conclusion (``None`` when no claim was declared, except for a ``components``
+    derivation, which is always checked structurally); ``contract_verdict`` is the
     checker's verdict on the declared contract (``None`` when none was declared).
     """
 
@@ -160,7 +162,9 @@ def verify(
     (computation: did it produce the right value); ``predicted`` is the one-case
     shorthand. When the derivation declares a ``claim``, the verification oracle
     also checks that its *conclusion* is sound: the inferential check golden
-    cases cannot provide. When ``check_determinism`` is set (the default), the
+    cases cannot provide; a ``components`` derivation is instead checked
+    structurally, claim or not (see :func:`_components_check`). When
+    ``check_determinism`` is set (the default), the
     derivation is also run a second time and its output compared, so a result that is
     not reproducible (an unseeded model, a clock read) cannot certify. When the
     derivation declares a ``contract``, the output is checked against it as well,
@@ -332,8 +336,12 @@ def _oracle_check(
     returns its verdict (``sound`` / ``unsound`` / ``invalid`` / ``inconclusive``), a
     one-line detail, and a self-describing attestation record to ride with the served
     result. An output that is not row data cannot support a conclusion, so it is
-    reported ``inconclusive``, which, like ``unsound``, blocks certification.
+    reported ``inconclusive``, which, like ``unsound``, blocks certification. A
+    ``components`` derivation never reaches the row oracle: it gets the structural
+    check in :func:`_components_check`, whether or not it declares a claim.
     """
+    if derivation.serve is not None and derivation.serve.format == "components":
+        return _components_check(derivation, artifact)
     if not derivation.claim:
         return None, None, None
     from .verification import verify_all
@@ -361,6 +369,50 @@ def _oracle_check(
         "data_hash": versioning.hash_json(value),
     }
     return report.verdict, detail, attestation
+
+
+def _components_check(
+    derivation: Derivation, artifact: Artifact
+) -> tuple[str | None, str | None, dict[str, Any] | None]:
+    """The check a ``components`` artifact can support, in place of a row claim.
+
+    A statement is prose: its shape can be checked and its truth cannot, so the gate
+    is that each statement comes with what it rests on. The artifact must validate as
+    components (ORC schema, unique ids) and every component other than a
+    ``domain_knowledge`` note must carry non-empty ``evidence``. One check per
+    component, named by its id, rides in the attestation. A schema failure is
+    ``invalid``. An empty list, or a declared row ``claim`` (components are not rows),
+    is ``inconclusive``. All of these block certification like ``unsound`` does.
+    """
+    if derivation.claim:
+        return "inconclusive", "claim cannot be checked: output is not row data", None
+    try:
+        items = validate_components(artifact.value)
+    except ComponentError as exc:
+        return "invalid", " ".join(str(exc).split()), None
+    if not items:
+        return "inconclusive", "no components to check", None
+    checks: list[dict[str, str]] = []
+    for item in items:
+        if item.get("type") == "domain_knowledge":
+            verdict, detail = "sound", "domain knowledge: a note, no evidence required"
+        elif item.get("evidence"):
+            verdict, detail = "sound", "carries evidence"
+        else:
+            verdict, detail = "unsound", "no evidence"
+        checks.append({"name": item["id"], "verdict": verdict, "detail": detail})
+    failed = [check["name"] for check in checks if check["verdict"] == "unsound"]
+    verdict = "unsound" if failed else "sound"
+    detail = f"{len(items) - len(failed)} of {len(items)} components carry evidence"
+    if failed:
+        detail += f"; without: {', '.join(failed)}"
+    attestation = {
+        "schema": "elbi.verification/v1",
+        "verdict": verdict,
+        "checks": checks,
+        "data_hash": versioning.hash_json(items),
+    }
+    return verdict, detail, attestation
 
 
 def _contract_check(

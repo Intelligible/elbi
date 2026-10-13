@@ -23,9 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLISHED = ROOT / "spec"
 VENDORED = ROOT / "packages/elbi-core/src/elbi_core/spec"
 
-#: Schemas the package vendors without publishing. `osi.schema.json` is somebody else's
-#: standard, consumed for import and export, so it has no counterpart under `spec/`.
-NOT_PUBLISHED = {"osi.schema.json"}
+#: Schemas the package vendors without publishing. `osi.schema.json` and
+#: `component.schema.json` are somebody else's standards (Open Semantic Interchange and
+#: OpenReasoningComponents, respectively), consumed for import/validation, so neither
+#: has a counterpart under `spec/`.
+NOT_PUBLISHED = {"osi.schema.json", "component.schema.json"}
 
 PUBLISHED_SCHEMAS = sorted(path.name for path in PUBLISHED.glob("*.schema.json"))
 

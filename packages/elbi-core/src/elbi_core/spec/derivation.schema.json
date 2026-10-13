@@ -128,7 +128,7 @@
       "required": ["format"],
       "properties": {
         "format": {
-          "enum": ["table", "markdown", "json", "text"]
+          "enum": ["table", "markdown", "json", "text", "components"]
         },
         "title": {
           "type": "string",
@@ -178,6 +178,11 @@
         {
           "properties": {
             "format": { "const": "text" }
+          }
+        },
+        {
+          "properties": {
+            "format": { "const": "components" }
           }
         }
       ],

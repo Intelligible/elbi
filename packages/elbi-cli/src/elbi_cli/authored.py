@@ -26,11 +26,14 @@ from elbi_core.versioning import source_version
 #: Directory (under the project's ``.elbi/``) holding authored records.
 AUTHORED_DIRNAME = "authored"
 
-_SERVE_BUILDERS: dict[str, Callable[..., Serve]] = {
+#: Serve-contract builders by format name: the one list every authoring path
+#: (sidecar reload, MCP ``propose_derivation``, the app's Explore drafts) accepts.
+SERVE_BUILDERS: dict[str, Callable[..., Serve]] = {
     "table": serve_builders.table,
     "markdown": serve_builders.markdown,
     "json": serve_builders.json,
     "text": serve_builders.text,
+    "components": serve_builders.components,
 }
 
 
@@ -221,4 +224,4 @@ def _serve_record(serve: Serve | None) -> dict[str, Any] | None:
 def _serve_from_record(record: dict[str, Any] | None) -> Serve | None:
     if not record:
         return None
-    return _SERVE_BUILDERS[record["format"]](title=record.get("title"))
+    return SERVE_BUILDERS[record["format"]](title=record.get("title"))

@@ -16,6 +16,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Protocol
 
 from elbi_agent import DeriveFn, DeriveOutcome
+from elbi_cli.authored import SERVE_BUILDERS
 from elbi_cli.project import LoadedProject
 from elbi_core import DataContract, Dataset, Serve
 from elbi_core import serve as serve_builders
@@ -46,13 +47,7 @@ def _name_lock(name: str) -> threading.Lock:
 
 def _serve_for(fmt: str) -> Serve:
     """The serve contract for a format name, defaulting to a table."""
-    builders = {
-        "table": serve_builders.table,
-        "markdown": serve_builders.markdown,
-        "json": serve_builders.json,
-        "text": serve_builders.text,
-    }
-    return builders.get(fmt, serve_builders.table)(title=None)
+    return SERVE_BUILDERS.get(fmt, serve_builders.table)(title=None)
 
 
 def _output_rows(result: Any) -> tuple[dict[str, Any], ...]:
