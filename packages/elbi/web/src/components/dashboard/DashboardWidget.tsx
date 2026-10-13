@@ -25,6 +25,7 @@ import {
 import { VizView } from "@/components/viz/VizView"
 import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Widget, WidgetData } from "@/lib/dashboards"
+import { downloadText, toCsv } from "@/lib/download"
 import { formatMetricValue } from "@/lib/metrics"
 import { EMPTY } from "@/lib/utils"
 
@@ -32,6 +33,14 @@ type Row = Record<string, string | number>
 
 function asRows(value: unknown): Row[] {
   return Array.isArray(value) ? (value as Row[]) : []
+}
+
+// The columns a tile shows and downloads: the table's configured ones, else every key
+// any row has, so the CSV matches the screen and a key the first row lacks is kept.
+function columnsOf(widget: Widget, rows: Row[]): string[] {
+  const configured = widget.viz?.columns
+  if (Array.isArray(configured)) return configured as string[]
+  return [...new Set(rows.flatMap((r) => Object.keys(r)))]
 }
 
 function CenterNote({ children }: { children: ReactNode }) {
@@ -75,7 +84,7 @@ function RowsTable({
   const rows = asRows(data?.value)
   if (rows.length === 0) return <div className="text-sm text-text-tertiary">No rows.</div>
   const viz = widget.viz ?? {}
-  const columns = Array.isArray(viz.columns) ? (viz.columns as string[]) : Object.keys(rows[0])
+  const columns = columnsOf(widget, rows)
   const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50
   return (
     // Fills the tile rather than sizing to the rows: a taller tile shows more of them,
@@ -137,6 +146,8 @@ export function DashboardWidget({
   onDelete?: () => void
 }) {
   const crossFilter = widget.interactions?.crossFilter
+  // The rows a data tile already holds, offered as a CSV from the tile menu.
+  const csvRows = widget.type !== "text" && !data?.error ? asRows(data?.value) : []
   const drillThrough = widget.interactions?.drillThrough
 
   // A clicked table row emits its fields into the mapped variables (cross-filter),
@@ -213,7 +224,7 @@ export function DashboardWidget({
               Details →
             </Button>
           ) : null}
-          {onEdit || onDelete ? (
+          {csvRows.length > 0 || onEdit || onDelete ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -226,6 +237,20 @@ export function DashboardWidget({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="dash-no-drag">
+                {csvRows.length > 0 ? (
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      downloadText(
+                        // Named as ExplorePage names its downloads, after what the tile shows.
+                        `${(widget.title ?? widget.id).trim().replace(/\s+/g, "_").toLowerCase() || widget.id}.csv`,
+                        toCsv(columnsOf(widget, csvRows), csvRows),
+                        "text/csv",
+                      )
+                    }
+                  >
+                    Download CSV
+                  </DropdownMenuItem>
+                ) : null}
                 {onEdit ? <DropdownMenuItem onSelect={onEdit}>Edit…</DropdownMenuItem> : null}
                 {onDelete ? (
                   <DropdownMenuItem variant="destructive" onSelect={onDelete}>

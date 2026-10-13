@@ -36,6 +36,13 @@ uncertified derivation still exports; its `certificate` is `null` rather than a 
 because "give me everything you have" is a different question from "give me the
 certificate."
 
+`GET /api/exports/dashboards/{id}/snapshot` renders that dashboard export as one
+self-contained, read-only HTML page for someone outside the app, and
+`elbi snapshot <dashboard>` writes the same page from the CLI. It holds the same read
+gate and carries the published spec (the draft, for a dashboard never published) with
+every page's current values at default filter values. None of the saved versions reach
+it, and it loads nothing from the network when opened.
+
 ## Where these are in the app
 
 Every route above has an affordance, and which one you reach for is the question of who
@@ -44,7 +51,8 @@ the file is for:
 | You want | Go to |
 | --- | --- |
 | the proof behind one claim | a derivation's page → **Export record** |
-| what a dashboard showed, and how it is built | a dashboard's header → **Export record** |
+| what a dashboard showed, and how it is built | a dashboard's header → **Export → Record (.json)** |
+| to show someone outside the app what a dashboard shows | a dashboard's header → **Export → Shareable page (.html)**, or `elbi snapshot <dashboard>` |
 | a metric's definition and how it changed | the metric's row → **Export record** |
 | your own copy of your work | **Settings → Account → Your data** |
 | to answer someone's request for their data | **Settings → Users** → *Export data* on their row |

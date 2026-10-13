@@ -368,6 +368,45 @@ def test_dashboard_export_has_definition_and_current_values(
     assert isinstance(body["versions"], list) and body["versions"]
 
 
+def test_dashboard_snapshot_is_a_downloadable_page(client: TestClient) -> None:
+    created = client.post("/api/dashboards", json=_DASHBOARD)
+    dashboard_id = created.json()["id"]
+    resp = client.get(f"/api/exports/dashboards/{dashboard_id}/snapshot")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/html")
+    assert resp.headers["content-disposition"] == (
+        'attachment; filename="sales-snapshot.html"'
+    )
+    assert '<script id="snapshot-data"' in resp.text
+
+
+def test_a_draft_saved_after_publishing_stays_off_the_snapshot(
+    client: TestClient,
+) -> None:
+    dashboard_id = client.post("/api/dashboards", json=_DASHBOARD).json()["id"]
+    assert client.post(f"/api/dashboards/{dashboard_id}/publish").status_code == 200
+    published = client.get(f"/api/dashboards/{dashboard_id}").json()
+    draft = {**_DASHBOARD, "title": "Draft title"}
+    assert client.put(f"/api/dashboards/{dashboard_id}", json=draft).status_code == 200
+    # The draft save moved the row itself, which is what used to reach the page.
+    row = client.get(f"/api/dashboards/{dashboard_id}").json()
+    assert row["title"] == "Draft title"
+    assert row["version"] > published["version"]
+
+    page = client.get(f"/api/exports/dashboards/{dashboard_id}/snapshot").text
+    block = page.split('<script id="snapshot-data" type="application/json">')[1]
+    payload = json.loads(block.split("</script>")[0])
+    versions = client.get(f"/api/dashboards/{dashboard_id}/versions").json()
+    shown = next(v for v in versions if v["label"] == "published")
+    assert payload["title"] == "Sales"
+    assert payload["version"] == published["version"] == shown["version"]
+    assert payload["updatedAt"] == shown["createdAt"]
+
+
+def test_an_unknown_dashboard_has_no_snapshot(client: TestClient) -> None:
+    assert client.get("/api/exports/dashboards/nope/snapshot").status_code == 404
+
+
 def test_metric_export_has_manifest_and_history(client: TestClient) -> None:
     created = client.post("/api/metrics", json=_METRIC)
     assert created.status_code == 200, created.text
