@@ -9,7 +9,7 @@ request or pagination code.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import pyarrow as pa
 
@@ -29,6 +29,7 @@ class RestApiConnector(SimpleSource):
     icon: ClassVar[str] = ""
     caption: ClassVar[str] = ""
     docs_url: ClassVar[str] = ""
+    release_status: ClassVar[Literal["alpha", "beta", "ga"]] = "ga"
     fields_: ClassVar[tuple[SourceField, ...]] = ()
     #: Each: {"name", "path", "data_selector" (dot-path), optional "params", and for an
     #: API that lists over POST rather than GET, "method" and "json".
@@ -49,6 +50,7 @@ class RestApiConnector(SimpleSource):
             icon=self.icon,
             caption=self.caption,
             docs_url=self.docs_url,
+            release_status=self.release_status,
             fields=list(self.fields_),
         )
 

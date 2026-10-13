@@ -134,8 +134,8 @@ the incremental cursor: a later sync reads only the files that have changed.
 
 **Applications** are read over their APIs, each with a token you create in that
 product: Stripe, HubSpot, Salesforce, Shopify, Zendesk, Chargebee, Mailchimp,
-Klaviyo, SendGrid, Braze, Pipedrive, Front, Vercel, Airtable, Mixpanel, GitHub,
-Jira, Notion, Slack, Sentry, Typeform and Intercom. If yours is not there, the
+Klaviyo, SendGrid, Braze, Pipedrive, Front, Vercel, Airtable, Mixpanel, PostHog,
+GitHub, Jira, Notion, Slack, Sentry, Typeform and Intercom. If yours is not there, the
 **Custom REST source** takes a manifest describing any JSON API.
 
 Some APIs answer **columnar** data, with the field names given once and each row a bare
@@ -146,7 +146,9 @@ the sync. Records that are neither objects nor nameable rows also fail it, rathe
 being skipped. A response that says `hasMore: true` (or `has_more: true`) fails when no
 paginator is declared to fetch the rest; for PostHog, declare
 `"paginator": {"type": "single_page"}` and give the HogQL query an explicit `LIMIT`
-above its row count, since without one PostHog stops at 100 rows.
+above its row count, since without one PostHog stops at 100 rows. The PostHog source
+itself syncs a project's objects but not its raw events: read those this way, or, for
+the full history, through PostHog's batch export to a bucket and the object-store source.
 
 ### Deeply nested collections
 
