@@ -18,6 +18,7 @@ existing object by name and updates it, so re-running ``sync`` is idempotent.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -55,6 +56,12 @@ class SyncError(Exception):
 #: way Terraform keeps its working directory beside the configuration rather than in it.
 STATE_PATH = Path(".elbi") / "state.json"
 
+#: Bumped whenever ``_fingerprint`` changes how it digests. A v1 baseline matches no v2
+#: digest, but it still records which side moved, so it is tagged and translated rather
+#: than dropped: dropped, the first sync would push over every edit made in the app.
+_STATE_VERSION = 2
+_LEGACY = "v1:"
+
 
 @dataclass(frozen=True)
 class Change:
@@ -77,13 +84,22 @@ class Change:
     action: str
 
 
-def _fingerprint(surface: Surface, body: dict[str, Any]) -> str:
-    """A stable digest of an object, taken from the form it is written to disk in.
+def _fingerprint(surface: Surface, name: str, body: dict[str, Any]) -> str:
+    """A stable digest of an object, taken from its canonical form.
 
-    Serialized first so that the comparison is exactly what a reader of the repo would
-    see: two bodies that produce the same file are the same object, whatever their key
-    order was in transit.
+    A file and the app describe the same object in different words: the file may leave
+    out its stem-supplied name or a field the app defaults, and either may order keys
+    differently. Each surface's ``canonical`` settles those, and keys are sorted here,
+    so two bodies the app would store identically digest identically. Compared as raw
+    text, such an object would plan as changed after every sync.
     """
+    canonical = surface.canonical(name, body) if surface.canonical else body
+    text = json.dumps(canonical, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _v1_fingerprint(surface: Surface, body: dict[str, Any]) -> str:
+    """0.1.0's digest: the serialized file text, which a v1 state holds."""
     return hashlib.sha256(surface.serialize(body).encode("utf-8")).hexdigest()
 
 
@@ -99,11 +115,16 @@ def read_state(root: Path) -> dict[str, dict[str, str]]:
         loaded = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    surfaces_ = loaded.get("surfaces") if isinstance(loaded, dict) else None
+    if not isinstance(loaded, dict):
+        return {}
+    # A pre-version file holds raw-text digests: still evidence of which side moved,
+    # so tagged for classify to translate rather than dropped.
+    tag = "" if loaded.get("version") == _STATE_VERSION else _LEGACY
+    surfaces_ = loaded.get("surfaces")
     if not isinstance(surfaces_, dict):
         return {}
     return {
-        str(name): {str(k): str(v) for k, v in table.items()}
+        str(name): {str(k): tag + str(v) for k, v in table.items()}
         for name, table in surfaces_.items()
         if isinstance(table, dict)
     }
@@ -114,7 +135,13 @@ def write_state(root: Path, state: Mapping[str, Mapping[str, str]]) -> None:
     path = root / STATE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps({"surfaces": {k: dict(v) for k, v in state.items()}}, indent=2)
+        json.dumps(
+            {
+                "version": _STATE_VERSION,
+                "surfaces": {k: dict(v) for k, v in state.items()},
+            },
+            indent=2,
+        )
         + "\n",
         encoding="utf-8",
     )
@@ -148,6 +175,11 @@ class Surface:
     #: Names of other objects *in this surface* that ``body`` refers to, so pushes run
     #: in dependency order. Absent means the surface has no internal references.
     references: Callable[[dict[str, Any]], set[str]] | None = None
+    #: The form an object is compared in, given its name and body: what the app would
+    #: store for it, with the name filled in, defaults applied and server-only keys
+    #: dropped. Applied to both sides, so it must accept a file body and an app body
+    #: alike. Absent means the body is compared as it stands.
+    canonical: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None
 
     def manages(self, root: Path) -> bool:
         """Whether this repo declares this artifact type at all.
@@ -270,6 +302,47 @@ def _strip_notebook(ipynb: dict[str, Any]) -> dict[str, Any]:
             cell["metadata"] = metadata
         cells.append(cell)
     return {**ipynb, "cells": cells}
+
+
+def _canonical_notebook(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    """A notebook as the app re-exports it: list-of-lines source, kernel metadata."""
+    from elbi_core.notebook.document import Notebook
+
+    try:
+        return _strip_notebook(Notebook.from_ipynb(body).to_ipynb())
+    except Exception:  # malformed: compared as written, and validate says why
+        return body
+
+
+def _wire(obj: Mapping[str, Any], key: str) -> Any:
+    """``obj[key]``, read under either spelling of a snake_case field.
+
+    The app camelCases its JSON responses (``source_id`` arrives as ``sourceId``), so
+    reading one spelling only loses the field, and ``pull`` writes a file without it.
+    """
+    if key in obj:
+        return obj[key]
+    head, *rest = key.split("_")
+    return obj.get(head + "".join(word[:1].upper() + word[1:] for word in rest))
+
+
+def _defaulted(
+    body: Mapping[str, Any],
+    defaults: Mapping[str, Any],
+    casts: Mapping[str, Callable[[Any], Any]],
+) -> dict[str, Any]:
+    """``body`` as the app stores it: defaults filled, numbers coerced, nulls dropped.
+
+    A file may leave a field to the app's default, or write ``3`` where the app returns
+    ``3.0``; both describe the same object. A value that will not coerce stays as
+    written, so it still differs and the app's own validation reports it on push.
+    """
+    out = {**defaults, **{k: v for k, v in body.items() if v is not None}}
+    for key, coerce in casts.items():
+        if key in out:
+            with contextlib.suppress(TypeError, ValueError):
+                out[key] = coerce(out[key])
+    return out
 
 
 # -- HTTP helpers ------------------------------------------------------------------
@@ -579,6 +652,17 @@ def _metrics_surface() -> Surface:
     ) -> None:
         _post(client, "/api/metrics", {**body, "name": name})
 
+    def canonical(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        # The app parses and re-serializes every metric, so the same round trip here
+        # supplies the stem's name, fixes key order and drops wire-only keys.
+        from elbi_core.metrics.spec import Metric
+
+        manifest = {**body, "name": name}
+        try:
+            return Metric.from_manifest(manifest).to_manifest()
+        except Exception:  # malformed: compared as written, and validate says why
+            return manifest
+
     return Surface(
         name="metrics",
         folder="metrics",
@@ -592,6 +676,7 @@ def _metrics_surface() -> Surface:
         schema=_metric_file_schema(),
         explode=_explode_metrics,
         references=_metric_references,
+        canonical=canonical,
     )
 
 
@@ -603,7 +688,7 @@ def _queries_surface() -> Surface:
         # name is the map key / file stem, not part of the body.
         out = {}
         for view in _get(client, "/api/explore/queries"):
-            source = view.get("source_id") or None
+            source = _wire(view, "source_id") or None
             out[view["name"]] = {
                 "sql": (view.get("sql") or "").strip(),
                 "source_id": source,
@@ -686,6 +771,7 @@ def _notebooks_surface() -> Surface:
         push=push,
         delete=lambda c, nid: _delete(c, f"/api/notebooks/{nid}"),
         schema=_NOTEBOOKS_SCHEMA,
+        canonical=_canonical_notebook,
     )
 
 
@@ -708,6 +794,20 @@ def _dashboards_surface() -> Surface:
         else:
             _post(client, "/api/dashboards", manifest)
 
+    def canonical(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        from elbi_core.dashboard.spec import DASHBOARD_SPEC_VERSION, DashboardSpec
+
+        manifest = {
+            "specVersion": DASHBOARD_SPEC_VERSION,
+            "kind": "Dashboard",
+            **body,
+            "name": name,
+        }
+        try:
+            return DashboardSpec.from_manifest(manifest).to_manifest()
+        except Exception:  # malformed: compared as written, and validate says why
+            return manifest
+
     return Surface(
         name="dashboards",
         folder="dashboards",
@@ -719,6 +819,7 @@ def _dashboards_surface() -> Surface:
         push=push,
         delete=lambda c, did: _delete(c, f"/api/dashboards/{did}"),
         schema=_dashboard_file_schema(),
+        canonical=canonical,
     )
 
 
@@ -751,6 +852,11 @@ def _schedules_surface() -> Surface:
         push=push,
         delete=lambda c, sid: _delete(c, f"/api/orchestration/schedules/{sid}"),
         schema=_SCHEDULES_SCHEMA,
+        canonical=lambda name, body: _defaulted(
+            body,
+            {"selection": "stale", "mode": "cron", "cron": "", "enabled": True},
+            {},
+        ),
     )
 
 
@@ -815,6 +921,9 @@ def _checks_surface() -> Surface:
         push=push,
         delete=lambda c, cid: _delete(c, f"/api/orchestration/checks/{cid}"),
         schema=_CHECKS_SCHEMA,
+        canonical=lambda name, body: _defaulted(
+            body, {"severity": "warn", "enabled": True}, {}
+        ),
     )
 
 
@@ -829,7 +938,8 @@ def _features_surface() -> Surface:
     def _entity_manifest(row: dict[str, Any]) -> dict[str, Any]:
         out = {
             "name": row["name"],
-            "joinKey": row.get("join_key") or row.get("joinKey"),
+            # Defaulted to the name, as push does, so a file omitting it still matches.
+            "joinKey": row.get("join_key") or row.get("joinKey") or row["name"],
         }
         value_type = row.get("value_type") or row.get("valueType")
         if value_type and value_type != "string":
@@ -842,10 +952,10 @@ def _features_surface() -> Surface:
             "entities": list(view.get("entities", [])),
             "source": view["source"],
         }
-        if view.get("timestamp_field"):
-            out["timestampField"] = view["timestamp_field"]
-        if view.get("ttl_seconds") is not None:
-            out["ttlSeconds"] = view["ttl_seconds"]
+        if _wire(view, "timestamp_field"):
+            out["timestampField"] = _wire(view, "timestamp_field")
+        if _wire(view, "ttl_seconds") is not None:
+            out["ttlSeconds"] = _wire(view, "ttl_seconds")
         if view.get("features"):
             # Each feature already arrives as the spec's own object ({name, dtype,
             # description}), with explicit nulls for whatever is unset. Wrapping it
@@ -885,6 +995,22 @@ def _features_surface() -> Surface:
         for view in body.get("featureViews", []):
             _post(client, "/api/features/views", view)
 
+    def canonical(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        # Entities in the shape push sends (only name, join key and value type reach
+        # the app); views through the spec's own round trip, as the app stores them.
+        from elbi_core.features.spec import FeatureView
+
+        try:
+            return {
+                "entities": [_entity_manifest(e) for e in body.get("entities", [])],
+                "featureViews": [
+                    FeatureView.from_manifest(v).to_manifest()
+                    for v in body.get("featureViews", [])
+                ],
+            }
+        except Exception:  # malformed: compared as written, and validate says why
+            return body
+
     return Surface(
         name="features",
         folder="features",
@@ -896,6 +1022,7 @@ def _features_surface() -> Surface:
         push=push,
         delete=lambda c, _id: None,  # the store is one object; prune is a no-op
         schema=_feature_store_file_schema(),
+        canonical=canonical,
     )
 
 
@@ -903,9 +1030,8 @@ def _monitors_surface() -> Surface:
     """Anomaly monitors as ``monitors/<name>.yaml``, keyed by name.
 
     A monitor watches a certified metric or derivation, so the app gates its target on
-    create. The app has no update route, so ``sync`` replaces a monitor of the same name
-    (delete then create) to stay idempotent. The file carries only the monitor's
-    definition; runtime state (last value, incidents) stays app-side.
+    create. ``sync`` updates a monitor of the same name in place. The file carries only
+    the monitor's definition; runtime state (last value, incidents) stays app-side.
     """
     _FIELDS = (
         "target_kind",
@@ -918,6 +1044,16 @@ def _monitors_surface() -> Surface:
         "max_value",
         "config",
     )
+    # The app's create defaults (app.py create_monitor), shared by push and canonical
+    # so what a file leaves out is both sent and compared as the same value.
+    _DEFAULTS = {
+        "target_kind": "metric",
+        "method": "mad",
+        "sensitivity": 3.0,
+        "window": 30,
+        "interval_hours": 1.0,
+        "config": {},
+    }
 
     def remote(client: httpx.Client) -> dict[str, dict[str, Any]]:
         out = {}
@@ -938,7 +1074,11 @@ def _monitors_surface() -> Surface:
     def push(
         client: httpx.Client, name: str, body: dict[str, Any], existing: str | None
     ) -> None:
-        payload = {"name": name, **{k: body.get(k) for k in _FIELDS}}
+        # The file over the defaults: the update route keeps any field it is not sent,
+        # so a field deleted from the file must go out as its default or plan never
+        # settles. Nulls are dropped: ``sensitivity: null`` fails the app's float().
+        set_ = {k: body[k] for k in _FIELDS if body.get(k) is not None}
+        payload = {"name": name, **_DEFAULTS, **set_}
         if existing is not None:
             # Updated rather than replaced: deleting a monitor takes its snapshots and
             # incidents with it, and those snapshots are the baseline anomaly detection
@@ -959,6 +1099,17 @@ def _monitors_surface() -> Surface:
         push=push,
         delete=lambda c, mid: _delete(c, f"/api/monitors/{mid}"),
         schema=_MONITORS_SCHEMA,
+        canonical=lambda name, body: _defaulted(
+            body,
+            _DEFAULTS,
+            {
+                "sensitivity": float,
+                "window": int,
+                "interval_hours": float,
+                "min_value": float,
+                "max_value": float,
+            },
+        ),
     )
 
 
@@ -999,7 +1150,7 @@ def _models_surface() -> Surface:
         # an enum and time_budget/interval_hours are numbers, none of which admit null,
         # so emitting one makes a file this repo's own `plan` reports as invalid.
         return {
-            p["model"]: {k: v for k in _FIELDS if (v := p.get(k)) is not None}
+            p["model"]: {k: v for k in _FIELDS if (v := _wire(p, k)) is not None}
             for p in _policies(client)
         }
 
@@ -1009,7 +1160,9 @@ def _models_surface() -> Surface:
         # The app's training routes name the source by its kind (`dataset`/`derivation`/
         # `training_set`), so translate the stored `source_kind` back into that key.
         kind = body.get("source_kind") or "dataset"
-        payload = {k: body.get(k) for k in _FIELDS if k != "source_kind"}
+        # Only what the file sets, so the app's defaults apply to the rest: a null
+        # ``enabled`` is read as false, which would disable a policy that omits it.
+        payload = {k: body[k] for k in _FIELDS if k != "source_kind" and k in body}
         payload.pop("dataset", None)
         payload[kind] = body.get("dataset")
         _put(client, f"/api/registry/models/{name}/retrain", payload)
@@ -1025,6 +1178,21 @@ def _models_surface() -> Surface:
         push=push,
         delete=lambda c, name: _delete(c, f"/api/registry/models/{name}/retrain"),
         schema=_MODELS_SCHEMA,
+        canonical=lambda name, body: _defaulted(
+            body,
+            {
+                "source_kind": "dataset",
+                "features": [],
+                "task": "auto",
+                "engine": "flaml",
+                "time_budget": 300.0,
+                "ensemble": False,
+                "mode": "on_data_change",
+                "interval_hours": 24.0,
+                "enabled": True,
+            },
+            {"time_budget": float, "interval_hours": float, "horizon": int},
+        ),
     )
 
 
@@ -1166,14 +1334,24 @@ def classify(
     """
     changes: list[Change] = []
     for name, body in local.items():
-        here = _fingerprint(surface, body)
+        here = _fingerprint(surface, name, body)
         was = base.get(name)
         if name not in remote:
             # Gone from the app. Deleting it there while the repo still has it is not
             # the same as never pushing it, but both want the same act: push it back.
             changes.append(Change(surface.name, name, "create"))
             continue
-        there = _fingerprint(surface, remote[name])
+        there = _fingerprint(surface, name, remote[name])
+        if was is not None and was.startswith(_LEGACY):
+            old = was[len(_LEGACY) :]
+            # App unchanged since the pull: ours is the edit. Repo unchanged: drift.
+            # Neither: both moved, a conflict.
+            if _v1_fingerprint(surface, remote[name]) == old:
+                was = there
+            elif _v1_fingerprint(surface, body) == old:
+                was = here
+            else:
+                was = ""
         if here == there:
             changes.append(Change(surface.name, name, "unchanged"))
         elif was is None:
@@ -1336,7 +1514,7 @@ def _record(
     state: dict[str, dict[str, str]] = {}
     for surface in surfaces_ or surfaces():
         state[surface.name] = {
-            name: _fingerprint(surface, body)
+            name: _fingerprint(surface, name, body)
             for name, body in surface.remote(client).items()
         }
     # A subset run records only those surfaces, so a `--surface metrics` pull does not
