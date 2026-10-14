@@ -4,8 +4,8 @@ Each package carries its version twice: ``version =`` in its ``pyproject.toml``,
 is what the wheel is stamped with and what PyPI indexes, and ``__version__`` in its
 ``__init__.py``, which is what ``elbi --version``, the update check's User-Agent and
 ``/api/version`` report. The web app ships inside the ``elbi`` wheel and carries its own
-in ``package.json``, mirrored twice in ``package-lock.json``. Nothing else holds the
-eleven together, and RELEASING.md names only one of them.
+in ``package.json``, mirrored twice in ``package-lock.json``. RELEASING.md lists all
+eleven, but nothing else holds them together.
 
 Each package also pins its siblings with a ``>=`` floor, and those move with the
 release: the packages are tested only against each other at the same version.

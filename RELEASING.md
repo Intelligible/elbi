@@ -13,8 +13,18 @@ request.
 
 ## Steps
 
-1. Bump `__version__` in `packages/elbi-core/src/elbi_core/__init__.py`. towncrier reads the
-   version from there.
+1. Bump the version everywhere it is written down:
+
+   - `version =` in each of the four `packages/*/pyproject.toml`.
+   - `__version__` in each package's `src/<package>/__init__.py`. towncrier reads the
+     version from `elbi_core`'s.
+   - The web app, with `npm version <X.Y.Z> --no-git-tag-version` in `packages/elbi/web`,
+     which updates `package.json` and `package-lock.json` together.
+   - Every sibling floor in those `pyproject.toml` files (`elbi-core>=`, `elbi-cli>=`,
+     `elbi-agent>=`), raised to the new version.
+
+   Then run `uv lock`. [`tests/test_release_versions.py`](tests/test_release_versions.py)
+   fails if any of these was missed.
 
 2. Build the changelog:
 
