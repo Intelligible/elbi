@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elbi"
-version = "0.1.0"
+version = "0.2.0"
 description = "The FastAPI chat app and web surface over the elbi verifying runtime."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,14 +32,14 @@ dependencies = [
     # The app serves every model through LiteLLM (Anthropic included), so token usage and
     # cost are reported uniformly and any provider works out of the box; litellm is a hard
     # dependency, not an extra. The anthropic extra supplies the model catalogue defaults.
-    "elbi-agent[anthropic,litellm]>=0.1.0",
-    "elbi-cli>=0.1.0",
+    "elbi-agent[anthropic,litellm]>=0.2.0",
+    "elbi-cli>=0.2.0",
     # The core SDK with the DuckDB compute engine (the exploration SQL workbench and
     # external-source queries) and the full ML lifecycle behind the /api/models surface:
     # MLflow + FLAML (default), the accuracy-first AutoGluon engine, the Optuna tuner
     # (in ml), and TabICL, the open (BSD-3, no-token) tabular foundation model. These
     # are first-class app surfaces, so their stack ships installed rather than as hints.
-    "elbi-core[duckdb,ml,autogluon,tabicl]>=0.1.0",
+    "elbi-core[duckdb,ml,autogluon,tabicl]>=0.2.0",
     "fastapi>=0.140.13",
     "uvicorn[standard]>=0.52.3",
     "sse-starlette>=3.4",

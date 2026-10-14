@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elbi-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "The verifying analysis runtime for elbi: an LLM loop that cannot report an effect it has not verified."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "elbi-core>=0.1.0",
+    "elbi-core>=0.2.0",
 ]
 
 [project.optional-dependencies]

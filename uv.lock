@@ -2215,7 +2215,7 @@ wheels = [
 
 [[package]]
 name = "elbi"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/elbi" }
 dependencies = [
     { name = "adlfs" },
@@ -2294,7 +2294,7 @@ requires-dist = [
 
 [[package]]
 name = "elbi-agent"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/elbi-agent" }
 dependencies = [
     { name = "elbi-core" },
@@ -2318,7 +2318,7 @@ provides-extras = ["anthropic", "litellm"]
 
 [[package]]
 name = "elbi-cli"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/elbi-cli" }
 dependencies = [
     { name = "elbi-core", extra = ["certificate"] },
@@ -2345,7 +2345,7 @@ requires-dist = [
 
 [[package]]
 name = "elbi-core"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/elbi-core" }
 dependencies = [
     { name = "huggingface-hub" },

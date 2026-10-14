@@ -3,7 +3,7 @@
 This changelog tracks the Open Derivation Spec (ODS) only. It is independent of the SDK and
 CLI changelog at the repository root.
 
-## Dashboard Spec 2.0 (unreleased)
+## Dashboard Spec 2.0 (elbi 0.2.0)
 
 Makes the shared metric the one definition of a dashboard number. Breaking.
 
@@ -20,14 +20,14 @@ Makes the shared metric the one definition of a dashboard number. Breaking.
   `viz.field` becomes its `column`), then bind the tile as `{"metric": name}`. A
   derivation `param` a tile passed becomes a metric `filter` or a dimension.
 
-## Dashboard 1.0 (unreleased)
+## Dashboard 1.0 (elbi 0.2.0)
 
 - A `text` widget MAY now `bind` a derivation that returns markdown, in place of its
   own `content`; it MUST have exactly one of the two. This makes a governed derivation
   the escape hatch for a bespoke visual. Backwards compatible: a `text` widget with
   `content` is unaffected.
 
-## 1.1 (unreleased)
+## 1.1 (elbi 0.1.0)
 
 Adds provenance and lifecycle, supporting agent-authored derivations.
 
@@ -58,7 +58,7 @@ Adds provenance and lifecycle, supporting agent-authored derivations.
   content-hash versioning the spec already uses.
   Backward compatible: existing formats are unaffected.
 
-## 1.0 (unreleased)
+## 1.0 (elbi 0.1.0)
 
 Initial specification.
 

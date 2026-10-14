@@ -219,7 +219,7 @@ from .verification import (
     verify_trend,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "DASHBOARD_SPEC_VERSION",

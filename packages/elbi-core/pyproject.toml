@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elbi-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Author data context as code and serve it to agents over MCP."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -143,7 +143,7 @@ bigquery = ["sqlalchemy>=2.0", "sqlalchemy-bigquery>=1.17"]
 # Note: `uv tool install` won't work with this extra -- elbi-core itself
 # declares no entry point, so uv tool refuses it outright. Install elbi-cli
 # directly as a tool instead; this extra is for library-style installs only.
-cli = ["elbi-cli>=0.1.0"]
+cli = ["elbi-cli>=0.2.0"]
 
 [project.urls]
 Homepage = "https://github.com/Intelligible/elbi"
