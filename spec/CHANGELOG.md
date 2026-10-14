@@ -19,9 +19,6 @@ Makes the shared metric the one definition of a dashboard number. Breaking.
   bound (`viz.agg` becomes the measure's `agg`, with `mean` spelled `average`;
   `viz.field` becomes its `column`), then bind the tile as `{"metric": name}`. A
   derivation `param` a tile passed becomes a metric `filter` or a dimension.
-
-## Dashboard 1.0 (elbi 0.2.0)
-
 - A `text` widget MAY now `bind` a derivation that returns markdown, in place of its
   own `content`; it MUST have exactly one of the two. This makes a governed derivation
   the escape hatch for a bespoke visual. Backwards compatible: a `text` widget with

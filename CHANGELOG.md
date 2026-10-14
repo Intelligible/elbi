@@ -180,8 +180,7 @@ All notable changes to `elbi` are documented here. The format is driven by
   dash and a chart encoding silently found no data.
 
   A text widget now takes `content` or a `bind`, not both, and renders either as
-  markdown. (Markdown there still reads `$…$` as inline TeX, so a dollar amount in a
-  bound derivation renders as an integrand; that is fixed separately.) A derivation artifact's `value` is opaque to the casing boundary, like `rows`
+  markdown. A derivation artifact's `value` is opaque to the casing boundary, like `rows`
   already was.
 
   Separately, a page that omitted `columns` rendered on a 12-column grid while the spec,
