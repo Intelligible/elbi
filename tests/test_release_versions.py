@@ -7,6 +7,9 @@ is what the wheel is stamped with and what PyPI indexes, and ``__version__`` in 
 in ``package.json``, mirrored twice in ``package-lock.json``. Nothing else holds the
 eleven together, and RELEASING.md names only one of them.
 
+Each package also pins its siblings with a ``>=`` floor, and those move with the
+release: the packages are tested only against each other at the same version.
+
 Read as text rather than imported or parsed: CI still runs Python 3.10, which has no
 ``tomllib``, and importing ``elbi`` loads FastAPI to compare a string.
 """
@@ -44,6 +47,33 @@ def _versions() -> dict[str, str]:
     return version_by_location
 
 
+def _sibling_floors() -> dict[tuple[str, str], str]:
+    floor_by_dependency: dict[tuple[str, str], str] = {}
+    for name in PACKAGES:
+        metadata = (ROOT / "packages" / name / "pyproject.toml").read_text()
+        for match in re.finditer(
+            r'"(elbi(?:-[a-z]+)?)(?:\[[^\]]*\])?>=([^",;]+)"', metadata
+        ):
+            floor_by_dependency[(name, match.group(1))] = match.group(2)
+    return floor_by_dependency
+
+
 def test_every_version_string_agrees() -> None:
     versions = _versions()
     assert len(set(versions.values())) == 1, versions
+
+
+def test_every_sibling_floor_is_the_release_version() -> None:
+    # A stale floor resolves cleanly once the older sibling is on PyPI, so a user who
+    # upgrades one package keeps a sibling that lacks the APIs it now calls.
+    floors = _sibling_floors()
+    assert set(floors) == {
+        ("elbi", "elbi-agent"),
+        ("elbi", "elbi-cli"),
+        ("elbi", "elbi-core"),
+        ("elbi-agent", "elbi-core"),
+        ("elbi-cli", "elbi-core"),
+        ("elbi-core", "elbi-cli"),
+    }
+    release_version = _versions()["elbi-core/pyproject.toml"]
+    assert all(floor == release_version for floor in floors.values()), floors
