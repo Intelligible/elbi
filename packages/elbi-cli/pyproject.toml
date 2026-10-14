@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elbi-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "The command-line interface for the elbi framework."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,7 +27,7 @@ dependencies = [
     # The certificate extra pulls in cryptography: every certified-serve surface goes
     # through this CLI (the dev MCP server directly, the app through it), so signing
     # must be unconditionally available here.
-    "elbi-core[certificate]>=0.1.0",
+    "elbi-core[certificate]>=0.2.0",
     # The 2.0 line serves the 2026-07-28 protocol revision, which drops the initialize
     # handshake and the session header. It renamed FastMCP to MCPServer with no shim, so
     # this floor is not optional: the 1.x API this package used is gone.

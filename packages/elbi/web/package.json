@@ -1,7 +1,6 @@
 {
   "name": "elbi-web",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
   "description": "The verifying-analysis chat SPA for elbi.",
   "scripts": {
