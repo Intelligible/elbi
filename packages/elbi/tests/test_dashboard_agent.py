@@ -93,7 +93,7 @@ def _id_from(write_output: str) -> str:
 
 def _spec(bind: str = "revenue") -> dict:
     return {
-        "specVersion": "1.0",
+        "specVersion": "2.0",
         "kind": "Dashboard",
         "name": "sales",
         "title": "Sales",
@@ -177,6 +177,15 @@ def test_a_private_kpi_is_returned_with_the_fix(tmp_path: Path) -> None:
     out = _call(ws, "write_dashboard", spec=_kpi_spec({"derivation": "revenue"}))
     assert "Invalid dashboard" in out
     assert "binds a shared metric, not a derivation" in out
+
+
+def test_an_older_spec_version_is_returned_not_upgraded(tmp_path: Path) -> None:
+    # Upgrading is for stored dashboards; the agent rewrites its own work instead.
+    ws = _ws(tmp_path)
+    spec = _kpi_spec({"derivation": "revenue"}) | {"specVersion": "1.0"}
+    out = _call(ws, "write_dashboard", spec=spec)
+    assert "Invalid dashboard" in out and "specVersion '2.0'" in out
+    assert "No dashboards yet" in _call(ws, "list_dashboards")
 
 
 def test_bare_workspace_declines(tmp_path: Path) -> None:

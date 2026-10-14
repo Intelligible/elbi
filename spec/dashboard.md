@@ -120,3 +120,19 @@ agrees with the fixture's `valid` verdict when validating the fixture's `data` a
 `dashboard.schema.json`. The invariants the schema cannot express (unique widget ids,
 resolvable variable and page references, and the per-widget-type shape) are part of
 conformance and are checked by the reference implementation.
+
+## 9. Upgrading from 1.x
+
+Version 2.0 moved a `metric` widget's number into a shared metric. A dashboard is stored
+and outlives the release that saved it, so an implementation reading a 1.x manifest
+SHOULD upgrade it to 2.0 before validating it, instead of rejecting it under the MAJOR
+rule in [Versioning](./Versioning.md):
+
+1. Replace a `metric` widget whose `bind` names a `derivation` with a `text` widget
+   keeping its `id`, `title`, `gridPos` and `interactions`, whose `content` says what
+   the widget showed and asks for the shared metric that replaces it.
+2. Make a `metric` widget whose `bind` sets `groupBy` or `grain` a `table`.
+3. Set `specVersion` to `"2.0"`.
+
+The upgrade MUST be idempotent and MUST leave a manifest that is not 1.x unchanged. An
+implementation MAY store the upgraded manifest the next time the dashboard is saved.

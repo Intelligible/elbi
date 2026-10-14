@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from elbi_core.dashboard import DASHBOARD_SPEC_VERSION
+
 from .dashboards import DashboardError, DashboardService
 
 
@@ -88,6 +90,15 @@ class DashboardAgent:
         agent can fix and retry; a bound derivation need not be certified to save, only
         to publish.
         """
+        # The upgrade is for dashboards an older release stored. New work is held to
+        # the current spec, so a refused metric tile comes back for the agent to fix
+        # instead of being saved as a note.
+        version = spec.get("specVersion")
+        if isinstance(version, str) and version.startswith("1."):
+            return (
+                f"Invalid dashboard (not saved): specVersion '{version}' is an older "
+                f"spec; write specVersion '{DASHBOARD_SPEC_VERSION}'."
+            )
         manifest = dict(spec)
         try:
             if dashboard_id:

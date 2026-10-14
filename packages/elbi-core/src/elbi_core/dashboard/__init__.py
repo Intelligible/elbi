@@ -35,6 +35,7 @@ from .spec import (
     Widget,
     is_valid_dashboard,
     load_dashboard_schema,
+    upgrade_dashboard,
     validate_dashboard,
 )
 
@@ -62,5 +63,6 @@ __all__ = [
     "resolve_params",
     "resolve_value",
     "resolve_widget",
+    "upgrade_dashboard",
     "validate_dashboard",
 ]

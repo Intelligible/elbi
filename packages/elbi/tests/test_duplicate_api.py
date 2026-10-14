@@ -31,7 +31,7 @@ BOB = {"X-Test-User": "bob"}
 CAROL = {"X-Test-User": "carol"}
 
 _DASHBOARD_SPEC: dict[str, Any] = {
-    "specVersion": "1.0",
+    "specVersion": "2.0",
     "kind": "Dashboard",
     "name": "overview",
     "title": "Overview",
