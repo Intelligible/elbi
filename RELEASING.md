@@ -18,8 +18,6 @@ request.
    - `version =` in each of the four `packages/*/pyproject.toml`.
    - `__version__` in each package's `src/<package>/__init__.py`. towncrier reads the
      version from `elbi_core`'s.
-   - The web app, with `npm version <X.Y.Z> --no-git-tag-version` in `packages/elbi/web`,
-     which updates `package.json` and `package-lock.json` together.
    - Every sibling floor in those `pyproject.toml` files (`elbi-core>=`, `elbi-cli>=`,
      `elbi-agent>=`), raised to the new version.
 
