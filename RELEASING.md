@@ -21,8 +21,10 @@ request.
    - Every sibling floor in those `pyproject.toml` files (`elbi-core>=`, `elbi-cli>=`,
      `elbi-agent>=`), raised to the new version.
 
-   Then run `uv lock`. [`tests/test_release_versions.py`](tests/test_release_versions.py)
-   fails if any of these was missed.
+   Then run `uv lock` with a uv no older than the one that last wrote `uv.lock`, an older
+   uv rewrites marker lines across the file and buries the four version lines in noise.
+   [`tests/test_release_versions.py`](tests/test_release_versions.py) fails if any of
+   these was missed.
 
 2. Build the changelog:
 
