@@ -11,8 +11,8 @@ All notable changes to `elbi` are documented here. The format is driven by
 
 ### Features
 
-- A dashboard's grid became twice as fine vertically, so a vertical resize moved in 30px
-  steps instead of 60px. **The unit of `gridPos.h` changed with it:** the same height is
+- A dashboard's grid is twice as fine vertically, so a vertical resize moves in 30px
+  steps instead of 60px. **The unit of `gridPos.h` changes with it:** the same height is
   twice as many rows, so a tile written as `h: 3` is now `h: 6`. A dashboard authored
   against the old unit renders at about half its height until its `h` and `y` values are
   doubled.
@@ -24,10 +24,10 @@ All notable changes to `elbi` are documented here. The format is driven by
   the audit log.
 - A warehouse source can be edited in place, from the source page. Previously the only
   `PATCH` handled was the sync cadence, so fixing a typo in a manifest meant deleting the
-  source and rebuilding it — re-entering every secret, and destroying the tables it had
+  source and rebuilding it, re-entering every secret and destroying the tables it had
   produced on the way out. An **Edit** button now opens the connection form pre-filled with
-  the stored config. A credential left blank keeps the stored secret — including the
-  multi-line ones, an SSH private key or a Google Cloud key file — so correcting a query
+  the stored config. A credential left blank keeps the stored secret, including the
+  multi-line ones (an SSH private key or a Google Cloud key file), so correcting a query
   does not cost credentials that were already working. The new config is tested
   before anything is saved, and a resource that disappears from it is disabled rather than
   deleted, because its table holds rows the edit did not ask to destroy.
@@ -62,14 +62,13 @@ All notable changes to `elbi` are documented here. The format is driven by
   page to page. Several controls also carry clearer accessible names and labels for screen
   readers. For contributors: a set of ESLint rules plus a `npm test` conformance check now
   catch raw elements, off-palette colors and arbitrary font sizes, radii and colors before they land.
-- Dashboard tiles became editable from the dashboard itself. Each tile gained a menu
-  with **Edit…** and **Delete**, and the editor changed a tile's title, a text tile's
+- Dashboard tiles are editable from the dashboard itself. Each tile has a menu with
+  **Edit…** and **Delete**, and the editor changes a tile's title, a text tile's
   markdown, the derivation a bound tile reads, a metric's column, aggregate and number
-  format, and the tile's size. The derivation and column fields became pickers listing
-  what a tile may bind and the columns that derivation actually returns, and a value no
-  longer in the list stayed selected and was called out rather than quietly cleared. A
-  save the server refused kept the editor open with the reason, and deleting asked
-  first.
+  format, and the tile's size. The derivation and column fields are pickers listing what
+  a tile may bind and the columns that derivation actually returns, and a value no longer
+  in the list stays selected and is called out rather than quietly cleared. A save the
+  server refuses keeps the editor open with the reason, and deleting asks first.
 - Dashboards can be exported as a shareable page. `elbi snapshot <dashboard>`, or
   **Export → Shareable page** on the dashboard, writes one self-contained, read-only
   HTML file: every page of the published dashboard with its current values, sortable
@@ -80,19 +79,19 @@ All notable changes to `elbi` are documented here. The format is driven by
   status as on the source's own page. A source whose sync landed no rows used to show as
   synced in the list; it now shows **Synced, but no rows**, and a source with every table
   turned off shows **No tables enabled**. Each status has a help icon that explains it.
-- The tile editor gained a **JSON** tab holding the widget exactly as the dashboard spec
-  stores it, so a chart's `viz`, a binding's `params` and a tile's `interactions` became
-  editable without leaving the tile. It and **Edit spec** were syntax highlighted, and
-  checked what was typed against the dashboard spec's schema, so an unknown widget type,
-  a missing `gridPos` or a tile wider than the grid was underlined where it was, before
-  Save. A **Lineage** tab showed where a bound tile's numbers came from: the derivation
-  that computed them, and the derivations and warehouse tables that one reads.
-- The web app's sidebar gained a Docs link, in a new Help section below Operations, that
-  opened the documentation at docs.elbi.ai in a new tab.
+- The tile editor has a **JSON** tab holding the widget exactly as the dashboard spec
+  stores it, so a chart's `viz`, a binding's `params` and a tile's `interactions` are
+  editable without leaving the tile. It and **Edit spec** are syntax highlighted, and
+  check what is typed against the dashboard spec's schema, so an unknown widget type, a
+  missing `gridPos` or a tile wider than the grid is underlined where it is, before Save.
+  A **Lineage** tab shows where a bound tile's numbers come from: the derivation that
+  computed them, and the derivations and warehouse tables that one reads.
+- The web app's sidebar has a Docs link, in a new Help section below Operations, that
+  opens the documentation at docs.elbi.ai in a new tab.
 - `WAREHOUSE_JSON_NESTED_LISTS=1` stores any column holding a list of structs as JSON text
   rather than as typed columns. Some APIs return collections whose element shape varies
-  between records — Stripe's invoice line items differ depending on whether a line came
-  from a subscription or an invoice item — and Delta cannot evolve a list whose element
+  between records (Stripe's invoice line items differ depending on whether a line came
+  from a subscription or an invoice item), and Delta cannot evolve a list whose element
   struct diverges while also gaining a list-typed field, so the sync fails with
   "Unsupported CAST from Struct(...) to Struct(...)". Stored as text the sync cannot break
   on shape and nothing is discarded, at the cost of column-level access into that field.
@@ -100,16 +99,16 @@ All notable changes to `elbi` are documented here. The format is driven by
   decides new columns: a column the table already has keeps its stored form, so toggling
   it never breaks an incremental sync and takes effect on an existing table at its next
   full refresh.
-- ⌘Z undid a dashboard edit and ⇧⌘Z redid it, one step per drag, resize, tile save or
-  delete. The history lasted for the session only, and the dashboard's saved versions
-  remained the durable record. Inside a text field or an open dialog, the keystroke was
-  left to the browser.
+- ⌘Z undoes a dashboard edit and ⇧⌘Z redoes it, one step per drag, resize, tile save or
+  delete. The history lasts for the session only, and the dashboard's saved versions
+  remain the durable record. Inside a text field or an open dialog, the keystroke is left
+  to the browser.
 
 ### Bug Fixes
 
 - **Open in notebook** on a model page works for a model with no champion. It asked the
   server for the training script without naming a version, so the server resolved
-  `@champion` — which a model whose versions are all inconclusive does not have. The
+  `@champion`, which a model whose versions are all inconclusive does not have. The
   request 404'd, nothing was done with the rejection, and the button appeared dead. It
   now opens the champion's script where there is one and the newest version's otherwise,
   says why when a version has no script, and is not shown at all for a model with no
@@ -121,7 +120,7 @@ All notable changes to `elbi` are documented here. The format is driven by
   the spec defines them, plus `deps` when there are any.
 - A connector sync no longer fails on a page that carries nothing in a field. Each batch's
   schema is inferred from the JSON just received, so a field that was empty on that page
-  arrives as Arrow `null` or as a struct with no fields, and Delta can store neither —
+  arrives as Arrow `null` or as a struct with no fields, and Delta can store neither,
   failing the sync with "Invalid data type for Delta Lake: Null". A Stripe account whose
   customers have no `description` and no `metadata` could not sync any table at all. Such
   fields are now dropped, recursively, so nested cases are handled as well as top-level
@@ -135,10 +134,10 @@ All notable changes to `elbi` are documented here. The format is driven by
   webhook and audit path an anomaly uses, once per run of failures; the next readable
   value closes it as a recovery or as a new anomaly. A metric query that fails with its
   own error type also no longer stops the scheduled pass over later monitors.
-- Dashboard tiles resized properly. A tile could be resized from any edge or corner
-  rather than only an invisible bottom-right corner, and its handles were visible on
-  hover. A chart or table grew with its tile instead of keeping the height it first
-  rendered at, which had left the new space empty; a table filled the tile and scrolled.
+- Dashboard tiles resize properly. A tile can be resized from any edge or corner rather
+  than only an invisible bottom-right corner, and its handles are visible on hover. A
+  chart or table grows with its tile instead of keeping the height it first rendered at,
+  which had left the new space empty; a table fills the tile and scrolls.
 - Fixed **Open in notebook** giving a notebook that failed on its first line when the
   derivation used imports, constants or helpers from elsewhere in its file or project.
   A cell ending on a derivation now shows the result it returns in production and can be
@@ -159,7 +158,7 @@ All notable changes to `elbi` are documented here. The format is driven by
   The error still names the host and the cause, now with the password masked.
 - Testing a Custom REST source now fetches a record instead of only parsing the manifest.
   A manifest with no `paginator` is structurally valid, so it saved cleanly and dlt then
-  guessed a paginator — for an endpoint answering in a single response the guess chases a
+  guessed a paginator: for an endpoint answering in a single response the guess chases a
   next page that never arrives, and the sync sat in `pending` with no error and no
   timeout. The connection test runs the real resource through `rest_api` behind a
   deadline, and a hang now reports which resource stalled and that an explicit paginator
@@ -172,8 +171,8 @@ All notable changes to `elbi` are documented here. The format is driven by
   failed migration is logged with the backup's path and the app starts anyway. A tracking
   server's database named by `MLFLOW_TRACKING_URI` is left alone.
 - Three faults kept a dashboard from showing what its derivations say. A `text` widget
-  could not bind a derivation, so the documented escape hatch — a bespoke visual belongs
-  in a derivation returning markdown — did not work, and narrative tiles had to hardcode
+  could not bind a derivation, so the documented escape hatch (a bespoke visual belongs
+  in a derivation returning markdown) did not work, and narrative tiles had to hardcode
   figures that go stale. A text widget did not render markdown at all, emitting its
   source as preformatted text. And a tile's rows crossed the camelCase API boundary as
   field names, so a derivation's `mrr_usd` reached the browser as `mrrUsd` and a widget's
@@ -186,7 +185,7 @@ All notable changes to `elbi` are documented here. The format is driven by
   already was.
 
   Separately, a page that omitted `columns` rendered on a 12-column grid while the spec,
-  the schema and `Page.to_manifest` all default to 24 — so every page taking the default
+  the schema and `Page.to_manifest` all default to 24, so every page taking the default
   laid out at half width, and each widget spanned twice the intended fraction.
 
 ### Documentation
