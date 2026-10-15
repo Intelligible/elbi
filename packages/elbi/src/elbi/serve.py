@@ -176,6 +176,8 @@ def _aggregate_values(agg: str, values: list[float]) -> float:
 def _breach_keys(rows: list[dict[str, Any]], column: str, key: str) -> tuple[str, ...]:
     """The ``key`` of every row whose ``column`` is positive: a keyed monitor's breach.
 
+    A row with no key is the empty string, so it cannot collide with a real key.
+
     Raises:
         ModelError: if there are rows and none has ``key``, which only a misnamed key
             explains; naming nothing instead would quietly turn the feature off.
@@ -185,7 +187,7 @@ def _breach_keys(rows: list[dict[str, Any]], column: str, key: str) -> tuple[str
     return tuple(
         sorted(
             {
-                "(blank)" if r.get(key) in (None, "") else str(r[key])
+                "" if r.get(key) in (None, "") else str(r[key])
                 for r in rows
                 if isinstance(r.get(column), (int, float)) and r[column] > 0
             }

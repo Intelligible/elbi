@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Play, Plus, Trash2 } from "lucide-react"
+import { Activity, AlertTriangle, Pencil, Play, Plus, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { Scene, SceneHeader } from "@/components/Scene"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { VizView } from "@/components/viz/VizView"
-import { listDerivations, listMetrics } from "@/lib/metrics"
+import { type FilterClause, listDerivations, listMetrics } from "@/lib/metrics"
 import {
   type CheckResult,
   checkMonitor,
@@ -30,6 +30,7 @@ import {
   listMonitors,
   type Monitor,
   type MonitorHistory,
+  updateMonitor,
 } from "@/lib/monitors"
 
 export function MonitorsPage() {
@@ -37,6 +38,7 @@ export function MonitorsPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const refresh = useCallback(() => {
     listMonitors()
@@ -103,6 +105,7 @@ export function MonitorsPage() {
               monitor={current}
               onError={setError}
               onChanged={refresh}
+              onEdit={() => setEditing(true)}
               onDeleted={() => {
                 setSelected(null)
                 refresh()
@@ -116,10 +119,21 @@ export function MonitorsPage() {
         </div>
       </div>
 
+      {editing && current ? (
+        <MonitorDialog
+          monitor={current}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false)
+            refresh()
+          }}
+          onError={setError}
+        />
+      ) : null}
       {creating ? (
-        <NewMonitorDialog
+        <MonitorDialog
           onClose={() => setCreating(false)}
-          onCreated={(id) => {
+          onSaved={(id) => {
             setCreating(false)
             setSelected(id)
             refresh()
@@ -135,11 +149,13 @@ function MonitorDetail({
   monitor,
   onError,
   onChanged,
+  onEdit,
   onDeleted,
 }: {
   monitor: Monitor
   onError: (message: string) => void
   onChanged: () => void
+  onEdit: () => void
   onDeleted: () => void
 }) {
   const [history, setHistory] = useState<MonitorHistory | null>(null)
@@ -194,6 +210,9 @@ function MonitorDetail({
             <Play className="h-3.5 w-3.5" />
             {busy ? "Checking…" : "Run check"}
           </Button>
+          <Button size="sm" variant="ghost" aria-label="Edit monitor" onClick={onEdit}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -212,6 +231,12 @@ function MonitorDetail({
           {monitor.maxValue !== null ? ` · max ${monitor.maxValue}` : ""} · window {monitor.window}{" "}
           · every {monitor.intervalHours}h
         </p>
+        <p className="mt-1 font-mono text-xs text-text-tertiary">{describeConfig(monitor)}</p>
+        {monitor.breachKeys && monitor.breachKeys.length > 0 ? (
+          <p className="mt-2 text-sm text-danger">
+            Breaching now ({monitor.breachKeys.length}): {showKeys(monitor.breachKeys)}
+          </p>
+        ) : null}
         {last ? (
           <p className={`mt-2 text-sm ${last.anomalous ? "text-danger" : "text-text-secondary"}`}>
             Last check: {last.reason}
@@ -253,7 +278,12 @@ function MonitorDetail({
                   ) : (
                     <Badge variant="neutral">resolved</Badge>
                   )}
-                  <span className="flex-1 truncate text-text-secondary">{incident.reason}</span>
+                  <span className="flex-1 truncate text-text-secondary">
+                    {incident.reason}
+                    {incident.keys && incident.keys.length > 0
+                      ? ` · ${showKeys(incident.keys)}`
+                      : ""}
+                  </span>
                   <span className="shrink-0 text-xs text-text-tertiary tabular-nums">
                     {incident.openedAt?.slice(0, 16).replace("T", " ")}
                   </span>
@@ -267,59 +297,143 @@ function MonitorDetail({
   )
 }
 
-function NewMonitorDialog({
+const AGGS = ["mean", "sum", "min", "max", "count"] as const
+type Agg = (typeof AGGS)[number]
+const OPS: FilterClause["op"][] = ["eq", "ne", "lt", "le", "gt", "ge", "in"]
+
+interface FilterRow {
+  column: string
+  op: FilterClause["op"]
+  value: string
+}
+
+// A blank key is stored as the empty string so it cannot collide with a real key.
+const showKeys = (keys: string[]) => keys.map((k) => k || "(blank)").join(", ")
+
+interface Measure {
+  agg: Agg
+  column: string
+  key: string
+}
+
+function readMeasure(config: Record<string, unknown>): Measure {
+  const m = config.measure
+  if (m && typeof m === "object") {
+    const o = m as Record<string, unknown>
+    const agg = AGGS.includes(o.agg as Agg) ? (o.agg as Agg) : "sum"
+    return { agg, column: String(o.column ?? ""), key: String(o.key ?? "") }
+  }
+  return { agg: "mean", column: "", key: "" }
+}
+
+function readFilters(config: Record<string, unknown>): FilterRow[] {
+  const f = config.filters
+  if (!Array.isArray(f)) return []
+  return (f as FilterClause[]).map((c) => ({
+    column: c.column,
+    op: c.op,
+    value: Array.isArray(c.value) ? c.value.join(", ") : String(c.value ?? ""),
+  }))
+}
+
+function filterValue(row: FilterRow): unknown {
+  const one = (v: string) => (v.trim() !== "" && !Number.isNaN(Number(v)) ? Number(v) : v.trim())
+  return row.op === "in" ? row.value.split(",").map(one) : one(row.value)
+}
+
+function describeConfig(monitor: Monitor): string {
+  if (monitor.targetKind === "metric") {
+    const filters = readFilters(monitor.config)
+    return filters.length
+      ? `where ${filters.map((f) => `${f.column} ${f.op} ${f.value}`).join(" and ")}`
+      : "the metric's total"
+  }
+  const m = readMeasure(monitor.config)
+  if (!m.column) return "row count"
+  return `${m.agg} of ${m.column}${m.key ? `, naming rows by ${m.key}` : ""}`
+}
+
+function MonitorDialog({
+  monitor,
   onClose,
-  onCreated,
+  onSaved,
   onError,
 }: {
+  monitor?: Monitor
   onClose: () => void
-  onCreated: (id: string) => void
+  onSaved: (id: string) => void
   onError: (message: string) => void
 }) {
-  const [targetKind, setTargetKind] = useState<"metric" | "derivation">("metric")
+  const [targetKind, setTargetKind] = useState<"metric" | "derivation">(
+    monitor?.targetKind ?? "metric",
+  )
   const [targets, setTargets] = useState<string[]>([])
-  const [name, setName] = useState("")
-  const [target, setTarget] = useState("")
-  const [method, setMethod] = useState<"mad" | "zscore">("mad")
-  const [sensitivity, setSensitivity] = useState("3")
-  const [minValue, setMinValue] = useState("")
-  const [maxValue, setMaxValue] = useState("")
-  const [column, setColumn] = useState("")
+  const [name, setName] = useState(monitor?.name ?? "")
+  const [target, setTarget] = useState(monitor?.target ?? "")
+  const [method, setMethod] = useState<"mad" | "zscore">(monitor?.method ?? "mad")
+  const [sensitivity, setSensitivity] = useState(String(monitor?.sensitivity ?? 3))
+  const [minValue, setMinValue] = useState(monitor?.minValue?.toString() ?? "")
+  const [maxValue, setMaxValue] = useState(monitor?.maxValue?.toString() ?? "")
+  const [window, setWindow] = useState(String(monitor?.window ?? 30))
+  const [intervalHours, setIntervalHours] = useState(String(monitor?.intervalHours ?? 1))
+  const initial = readMeasure(monitor?.config ?? {})
+  const [agg, setAgg] = useState<Agg>(initial.agg)
+  const [column, setColumn] = useState(initial.column)
+  const [key, setKey] = useState(initial.key)
+  const [filters, setFilters] = useState<FilterRow[]>(readFilters(monitor?.config ?? {}))
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    setTarget("")
+    // Picking another kind clears the target; the monitor being edited keeps its own.
+    if (!monitor || targetKind !== monitor.targetKind) setTarget("")
+    else setTarget(monitor.target)
     const load =
       targetKind === "metric"
         ? listMetrics().then((m) => m.map((x) => x.name))
         : listDerivations().then((d) => d.map((x) => x.name))
     load.then(setTargets).catch(() => setTargets([]))
-  }, [targetKind])
+  }, [targetKind, monitor])
 
   const submit = useCallback(async () => {
     setBusy(true)
-    const config: Record<string, unknown> =
-      targetKind === "derivation" && column.trim()
-        ? { measure: { agg: "mean", column: column.trim() } }
-        : {}
+    let config: Record<string, unknown> = {}
+    if (targetKind === "derivation" && column.trim()) {
+      config = {
+        measure: {
+          agg,
+          column: column.trim(),
+          ...(key.trim() ? { key: key.trim() } : {}),
+        },
+      }
+    } else if (targetKind === "metric" && filters.some((f) => f.column.trim())) {
+      config = {
+        filters: filters
+          .filter((f) => f.column.trim())
+          .map((f) => ({ column: f.column.trim(), op: f.op, value: filterValue(f) })),
+      }
+    }
+    const spec = {
+      name: name || target,
+      targetKind,
+      target,
+      config,
+      method,
+      sensitivity: Number(sensitivity) || 3,
+      minValue: minValue ? Number(minValue) : null,
+      maxValue: maxValue ? Number(maxValue) : null,
+      window: Number(window) || 30,
+      intervalHours: Number(intervalHours) || 1,
+    }
     try {
-      const monitor = await createMonitor({
-        name: name || target,
-        targetKind,
-        target,
-        config,
-        method,
-        sensitivity: Number(sensitivity) || 3,
-        minValue: minValue ? Number(minValue) : null,
-        maxValue: maxValue ? Number(maxValue) : null,
-      })
-      onCreated(monitor.id)
+      const saved = monitor ? await updateMonitor(monitor.id, spec) : await createMonitor(spec)
+      onSaved(saved.id)
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
   }, [
+    monitor,
     targetKind,
     name,
     target,
@@ -327,16 +441,24 @@ function NewMonitorDialog({
     sensitivity,
     minValue,
     maxValue,
+    window,
+    intervalHours,
+    agg,
     column,
-    onCreated,
+    key,
+    filters,
+    onSaved,
     onError,
   ])
+
+  const setFilter = (i: number, patch: Partial<FilterRow>) =>
+    setFilters((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New monitor</DialogTitle>
+          <DialogTitle>{monitor ? "Edit monitor" : "New monitor"}</DialogTitle>
           <DialogDescription>
             Watch a certified metric or derivation. An anomaly against its learned baseline (or a
             static bound) raises one alert per incident.
@@ -375,12 +497,83 @@ function NewMonitorDialog({
             </Select>
           </div>
           {targetKind === "derivation" ? (
-            <Input
-              placeholder="numeric column to average (blank = row count)"
-              value={column}
-              onChange={(e) => setColumn(e.target.value)}
-            />
-          ) : null}
+            <>
+              <div className="flex gap-2">
+                <Select value={agg} onValueChange={(v) => setAgg(v as Agg)}>
+                  <SelectTrigger className="w-40 text-sm" aria-label="aggregation">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGGS.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {a}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="numeric column (blank = row count)"
+                  value={column}
+                  onChange={(e) => setColumn(e.target.value)}
+                />
+              </div>
+              {column.trim() ? (
+                <Input
+                  placeholder="key column naming each row (optional)"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                />
+              ) : null}
+            </>
+          ) : (
+            <div className="space-y-2">
+              {filters.map((f, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity beyond position
+                <div key={i} className="flex gap-2">
+                  <Input
+                    placeholder="filter column"
+                    value={f.column}
+                    onChange={(e) => setFilter(i, { column: e.target.value })}
+                  />
+                  <Select
+                    value={f.op}
+                    onValueChange={(v) => setFilter(i, { op: v as FilterClause["op"] })}
+                  >
+                    <SelectTrigger className="w-24 text-sm" aria-label="filter operator">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OPS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder={f.op === "in" ? "a, b, c" : "value"}
+                    value={f.value}
+                    onChange={(e) => setFilter(i, { value: e.target.value })}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Remove filter"
+                    onClick={() => setFilters((rows) => rows.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setFilters((rows) => [...rows, { column: "", op: "eq", value: "" }])}
+              >
+                <Plus className="size-4" /> Add filter
+              </Button>
+            </div>
+          )}
           <div className="flex gap-2">
             <Select value={method} onValueChange={(v) => setMethod(v as "mad" | "zscore")}>
               <SelectTrigger className="w-40 text-sm">
@@ -412,10 +605,24 @@ function NewMonitorDialog({
               onChange={(e) => setMaxValue(e.target.value)}
             />
           </div>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              placeholder="history window (checks)"
+              value={window}
+              onChange={(e) => setWindow(e.target.value)}
+            />
+            <Input
+              type="number"
+              placeholder="check every (hours)"
+              value={intervalHours}
+              onChange={(e) => setIntervalHours(e.target.value)}
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button disabled={busy || !target} onClick={submit}>
-            {busy ? "Creating…" : "Create monitor"}
+            {busy ? "Saving…" : monitor ? "Save monitor" : "Create monitor"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -17,6 +17,8 @@ export interface Monitor {
   lastValue: number | null
   lastCheckedAt: string | null
   status: "ok" | "alerting"
+  // The keys of the rows breaching at the last check; null when the monitor has no key.
+  breachKeys: string[] | null
 }
 
 export interface Snapshot {
@@ -29,6 +31,7 @@ export interface Snapshot {
   score: number | null
   reason: string
   sourceVerdict: string | null
+  breachKeys: string[] | null
 }
 
 export interface Incident {
@@ -42,6 +45,8 @@ export interface Incident {
   reason: string
   snapshots: number
   open: boolean
+  // Every key this incident has named; null when the monitor has no key.
+  keys: string[] | null
 }
 
 export interface MonitorHistory {
@@ -99,6 +104,27 @@ export const createMonitor = (spec: {
   window?: number
   intervalHours?: number
 }) => post<Monitor>("/api/monitors", spec)
+
+export const updateMonitor = (
+  monitorId: string,
+  spec: {
+    name: string
+    targetKind: "metric" | "derivation"
+    target: string
+    config: Record<string, unknown>
+    method: "mad" | "zscore"
+    sensitivity: number
+    minValue: number | null
+    maxValue: number | null
+    window: number
+    intervalHours: number
+  },
+) =>
+  json<Monitor>(`/api/monitors/${id(monitorId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(spec),
+  })
 
 export const getMonitor = (monitorId: string) =>
   json<MonitorHistory>(`/api/monitors/${id(monitorId)}`)

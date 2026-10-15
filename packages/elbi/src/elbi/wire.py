@@ -275,6 +275,7 @@ class Monitor(Wire):
     last_value: float | None = None
     last_checked_at: str | None = None
     status: str
+    breach_keys: list[str] | None = None
 
 
 class MonitorSnapshot(Wire):
@@ -289,6 +290,7 @@ class MonitorSnapshot(Wire):
     score: float | None = None
     reason: str
     source_verdict: str | None = None
+    breach_keys: list[str] | None = None
 
 
 class MonitorIncident(Wire):
@@ -306,6 +308,7 @@ class MonitorIncident(Wire):
     reason: str
     snapshots: int
     open: bool
+    keys: list[str] | None = None
 
 
 class MonitorHistory(Wire):

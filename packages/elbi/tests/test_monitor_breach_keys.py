@@ -127,6 +127,36 @@ def test_a_restart_inside_an_open_incident_does_not_realert(store: Store) -> Non
     ]
 
 
+def test_a_row_that_broke_during_a_restart_is_announced(store: Store) -> None:
+    first = _service(store)
+    monitor_id = _monitor(first)
+    _read(first, monitor_id)
+    _read(first, monitor_id, "compactor")
+    restarted = _service(store)  # the incident remembers what it announced
+    _read(restarted, monitor_id, "compactor", "lead_capture")
+    assert [a["event"] for a in ALERTS] == [
+        "metric.anomaly_detected",
+        BREACH_WIDENED,
+    ]
+    assert ALERTS[1]["new_keys"] == ["lead_capture"]
+
+
+def test_the_history_and_monitor_carry_the_breaching_keys(store: Store) -> None:
+    service = _service(store)
+    monitor_id = _monitor(service)
+    _read(service, monitor_id)
+    _read(service, monitor_id, "compactor")
+    _read(service, monitor_id, "compactor", "lead_capture")
+    history = service.history(monitor_id)
+    assert [s.breach_keys for s in history.snapshots] == [
+        [],
+        ["compactor"],
+        ["compactor", "lead_capture"],
+    ]
+    assert history.incidents[0].keys == ["compactor", "lead_capture"]
+    assert service.get(monitor_id).breach_keys == ["compactor", "lead_capture"]
+
+
 def test_an_unkeyed_monitor_behaves_as_before(store: Store) -> None:
     service = MonitorService(
         store=store,
@@ -173,6 +203,24 @@ def test_the_opening_notification_names_the_breaching_rows(store: Store) -> None
     )
     [row] = store.list_notifications()
     assert row.body == "1 is above the ceiling 0. Breaching: compactor"
+
+
+def test_a_blank_key_reads_as_blank_and_the_reason_keeps_one_stop(
+    store: Store,
+) -> None:
+    notifications.create_notifications(
+        store,
+        "metric.anomaly_detected",
+        {
+            "event": "metric.anomaly_detected",
+            "monitor_id": "m1",
+            "monitor": "workflow errors",
+            "reason": "2 is above the ceiling 0.",
+            "breach_keys": ["", "(blank)"],
+        },
+    )
+    [row] = store.list_notifications()
+    assert row.body == "2 is above the ceiling 0. Breaching: (blank), (blank)"
 
 
 def test_a_row_that_flaps_is_announced_once_per_incident(store: Store) -> None:
@@ -226,13 +274,13 @@ def test_only_rows_with_a_positive_numeric_measure_breach() -> None:
     assert _breach_keys(rows, "breach", "id") == ("a", "b")
 
 
-def test_a_breaching_row_without_a_key_is_named_blank() -> None:
+def test_a_breaching_row_without_a_key_is_the_empty_key() -> None:
     rows = [
         {"id": None, "breach": 1},
         {"id": "", "breach": 1},
         {"id": "a", "breach": 1},
     ]
-    assert _breach_keys(rows, "breach", "id") == ("(blank)", "a")
+    assert _breach_keys(rows, "breach", "id") == ("", "a")
 
 
 def test_a_key_column_no_row_has_is_an_error_not_an_empty_breach() -> None:

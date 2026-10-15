@@ -81,12 +81,6 @@ class MonitorService:
         self._read_value = read_value
         self._source_certified = source_certified
         self._on_alert = on_alert
-        # The breaching keys each keyed monitor has announced in its current incident,
-        # so a row is named once per incident however often it flaps. An alert that
-        # opens or closes the incident starts the record afresh. In memory: after a
-        # restart the first reading inside an open incident only re-seeds it, without
-        # alerting.
-        self._announced_keys: dict[str, frozenset[str]] = {}
 
     def create(
         self,
@@ -191,8 +185,12 @@ class MonitorService:
         row.min_value = min_value
         row.max_value = max_value
         if (row.target_kind, row.target, row.config_json) != watched_before:
-            # Keys read before the edit may name the same rows by another column.
-            self._announced_keys.pop(monitor_id, None)
+            # Keys read before the edit may name the same rows by another column, so
+            # the open incident re-seeds from the next reading instead of comparing.
+            open_incident = self._store.open_incident(monitor_id)
+            if open_incident is not None and open_incident.keys_json is not None:
+                open_incident.keys_json = None
+                self._store.save_incident(open_incident)
         self._store.update_metric_monitor(row)
         saved = self._store.get_metric_monitor(monitor_id)
         return self._view(saved) if saved is not None else None
@@ -208,7 +206,6 @@ class MonitorService:
 
     def delete(self, monitor_id: str) -> bool:
         """Delete a monitor and its history; return whether it existed."""
-        self._announced_keys.pop(monitor_id, None)
         return self._store.delete_metric_monitor(monitor_id)
 
     def history(self, monitor_id: str) -> WireMonitorHistory:
@@ -288,6 +285,7 @@ class MonitorService:
                 score=verdict.score,
                 reason=verdict.reason,
                 source_verdict=source_verdict,
+                breach_keys_json=None if keys is None else json.dumps(sorted(keys)),
             )
         )
         alert = self._manage_incident(monitor, verdict, value, source_verdict)
@@ -365,23 +363,37 @@ class MonitorService:
         keys: tuple[str, ...],
         alert: dict[str, Any] | None,
     ) -> dict[str, Any] | None:
-        """Attach the breaching keys to ``alert``, or raise one for a widened breach."""
+        """Attach the breaching keys to ``alert``, or raise one for a widened breach.
+
+        The keys already announced live on the open incident, so a restart keeps them.
+        """
         current = frozenset(keys)
-        announced = self._announced_keys.get(monitor.id)
-        if alert is not None or not verdict.anomalous or announced is None:
-            # No open incident to compare with, or this alert opens or closes one.
-            self._announced_keys[monitor.id] = current
+        incident = self._store.open_incident(monitor.id) if verdict.anomalous else None
+        if alert is not None or incident is None:
+            # This alert opens or closes an incident, so there is nothing to compare.
             if alert is not None:
                 alert["breach_keys"] = sorted(current)
+            self._announce(incident, current)
             return alert
+        announced = _decode_keys(incident.keys_json)
+        if announced is None:
+            # An incident that predates keys, or whose key column was just edited.
+            self._announce(incident, current)
+            return None
         added = current - announced
         if not added:
             return None
-        self._announced_keys[monitor.id] = announced | current
+        self._announce(incident, announced | current)
         widened = self._alert(monitor, BREACH_WIDENED, verdict, value, source_verdict)
         widened["breach_keys"] = sorted(current)
         widened["new_keys"] = sorted(added)
         return widened
+
+    def _announce(self, incident: MonitorIncident | None, keys: frozenset[str]) -> None:
+        """Record on an open incident which keys it has named."""
+        if incident is not None:
+            incident.keys_json = json.dumps(sorted(keys))
+            self._store.save_incident(incident)
 
     def _source_failed(
         self, monitor: MetricMonitor, reason: str
@@ -459,7 +471,18 @@ class MonitorService:
             last_value=latest.value if latest is not None else None,
             last_checked_at=_iso(monitor.last_run_at),
             status="alerting" if open_incident is not None else "ok",
+            breach_keys=_decode_list(latest.breach_keys_json if latest else None),
         )
+
+
+def _decode_list(raw: str | None) -> list[str] | None:
+    """A stored JSON list of keys, or ``None`` when the monitor is unkeyed."""
+    return None if raw is None else [str(k) for k in json.loads(raw)]
+
+
+def _decode_keys(raw: str | None) -> frozenset[str] | None:
+    keys = _decode_list(raw)
+    return None if keys is None else frozenset(keys)
 
 
 def _snapshot_view(snapshot: MetricSnapshot) -> WireMonitorSnapshot:
@@ -473,6 +496,7 @@ def _snapshot_view(snapshot: MetricSnapshot) -> WireMonitorSnapshot:
         score=snapshot.score,
         reason=snapshot.reason,
         source_verdict=snapshot.source_verdict,
+        breach_keys=_decode_list(snapshot.breach_keys_json),
     )
 
 
@@ -489,6 +513,7 @@ def _incident_view(incident: MonitorIncident) -> WireMonitorIncident:
         reason=incident.reason,
         snapshots=incident.snapshots,
         open=incident.closed_at is None,
+        keys=_decode_list(incident.keys_json),
     )
 
 
