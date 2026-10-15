@@ -109,8 +109,9 @@ export const updateMonitor = (
   monitorId: string,
   spec: {
     name: string
-    targetKind: "metric" | "derivation"
-    target: string
+    // Left out when unchanged: naming a target makes the server re-check certification.
+    targetKind?: "metric" | "derivation"
+    target?: string
     config: Record<string, unknown>
     method: "mad" | "zscore"
     sensitivity: number
@@ -125,6 +126,15 @@ export const updateMonitor = (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(spec),
   })
+
+export interface DerivationColumn {
+  name: string
+  // Whether every value is a number, so a monitor can aggregate the column.
+  numeric: boolean
+}
+
+export const listDerivationColumns = (derivation: string) =>
+  json<DerivationColumn[]>(`/api/derivations/${id(derivation)}/columns`)
 
 export const getMonitor = (monitorId: string) =>
   json<MonitorHistory>(`/api/monitors/${id(monitorId)}`)

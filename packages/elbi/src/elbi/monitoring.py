@@ -34,6 +34,7 @@ from elbi_core import detect_anomaly
 
 from .db import MetricMonitor, MetricSnapshot, MonitorIncident, Store
 from .wire import Monitor as WireMonitor
+from .wire import MonitorColumn as WireMonitorColumn
 from .wire import MonitorHistory as WireMonitorHistory
 from .wire import MonitorIncident as WireMonitorIncident
 from .wire import MonitorSnapshot as WireMonitorSnapshot
@@ -74,6 +75,7 @@ class MonitorService:
         read_value: Callable[[MetricMonitor], float | Reading],
         source_certified: Callable[[str, str], bool],
         on_alert: Callable[[dict[str, Any]], None] | None = None,
+        read_columns: Callable[[str], list[WireMonitorColumn]] | None = None,
     ) -> None:
         self._store = store
         # read_value resolves a monitor's current scalar; source_certified gates the
@@ -81,6 +83,26 @@ class MonitorService:
         self._read_value = read_value
         self._source_certified = source_certified
         self._on_alert = on_alert
+        self._read_columns = read_columns
+
+    def columns(self, derivation: str) -> list[WireMonitorColumn]:
+        """A certified derivation's output columns, to pick a measure and key from.
+
+        Raises:
+            MonitorError: if the derivation is not certified, has no tabular output,
+                or this service was built without a way to read it.
+        """
+        if self._read_columns is None:
+            raise MonitorError("this service cannot read a derivation's columns")
+        if not self._source_certified("derivation", derivation):
+            raise MonitorError(
+                f"derivation {derivation!r} is not certified; a monitor watches "
+                "only verified numbers"
+            )
+        try:
+            return self._read_columns(derivation)
+        except Exception as exc:
+            raise MonitorError(f"could not read {derivation!r}: {exc}") from exc
 
     def create(
         self,
@@ -102,6 +124,7 @@ class MonitorService:
         """
         if target_kind not in _KINDS:
             raise MonitorError(f"target_kind must be one of {', '.join(_KINDS)}")
+        _check_schedule(window, interval_hours)
         if not self._source_certified(target_kind, target):
             raise MonitorError(
                 f"{target_kind} {target!r} is not certified; a monitor watches "
@@ -166,7 +189,10 @@ class MonitorService:
                 f"{kind} {watched!r} is not certified; a monitor watches "
                 "only verified numbers"
             )
-        watched_before = (row.target_kind, row.target, row.config_json)
+        _check_schedule(window, interval_hours)
+        # Compared as parsed JSON: the same config written with another key order or
+        # spacing is not a change to what is watched.
+        watched_before = (row.target_kind, row.target, _config(row))
         row.name = (name.strip() or watched) if name is not None else row.name
         row.target_kind = kind
         row.target = watched
@@ -184,7 +210,7 @@ class MonitorService:
         # threshold somebody removed from the file has to come off the monitor too.
         row.min_value = min_value
         row.max_value = max_value
-        if (row.target_kind, row.target, row.config_json) != watched_before:
+        if (row.target_kind, row.target, _config(row)) != watched_before:
             # Keys read before the edit may name the same rows by another column, so
             # the open incident re-seeds from the next reading instead of comparing.
             open_incident = self._store.open_incident(monitor_id)
@@ -473,6 +499,24 @@ class MonitorService:
             status="alerting" if open_incident is not None else "ok",
             breach_keys=_decode_list(latest.breach_keys_json if latest else None),
         )
+
+
+def _check_schedule(window: int | None, interval_hours: float | None) -> None:
+    """Reject a history window or check interval that cannot drive a check.
+
+    Raises:
+        MonitorError: if the window is not a whole number above zero, or the interval
+            is not above zero. A negative window would become a row limit.
+    """
+    if window is not None and (window != int(window) or window < 1):
+        raise MonitorError("window must be a whole number of checks, at least 1")
+    if interval_hours is not None and not interval_hours > 0:
+        raise MonitorError("interval_hours must be above 0")
+
+
+def _config(row: MetricMonitor) -> dict[str, Any]:
+    config: dict[str, Any] = json.loads(row.config_json or "{}")
+    return config
 
 
 def _decode_list(raw: str | None) -> list[str] | None:

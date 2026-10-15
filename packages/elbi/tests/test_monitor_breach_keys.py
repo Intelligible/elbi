@@ -17,7 +17,7 @@ import pytest
 from elbi import notifications
 from elbi.db import Store, open_store
 from elbi.monitoring import BREACH_WIDENED, MonitorService, Reading
-from elbi.serve import _breach_keys
+from elbi.serve import _breach_keys, _output_columns
 from elbi_core.errors import ModelError
 
 READING: dict[str, Any] = {"value": Reading(0.0, ())}
@@ -261,6 +261,23 @@ def test_changing_the_key_column_does_not_announce_every_row_as_new(
     assert ALERTS[1]["new_keys"] == ["Lead capture"]
 
 
+def test_rewriting_the_same_config_keeps_what_the_incident_announced(
+    store: Store,
+) -> None:
+    service = _service(store)
+    monitor_id = _monitor(service)
+    _read(service, monitor_id)
+    _read(service, monitor_id, "compactor")
+    # The same measure, keys in another order and the default agg spelled out.
+    service.update(
+        monitor_id,
+        config={"measure": {"key": "id", "agg": "sum", "column": "error_breach"}},
+        max_value=0,
+    )
+    _read(service, monitor_id, "compactor", "lead_capture")
+    assert [a["event"] for a in ALERTS] == ["metric.anomaly_detected", BREACH_WIDENED]
+
+
 def test_only_rows_with_a_positive_numeric_measure_breach() -> None:
     rows = [
         {"id": "b", "breach": 1},
@@ -306,3 +323,18 @@ def test_a_long_breach_list_names_whole_keys_and_counts_the_rest(store: Store) -
     assert 0 < len(named) < len(keys)
     assert named == keys[: len(named)]
     assert rest == f"{len(keys) - len(named)} more"
+
+
+def test_output_columns_keep_first_seen_order_and_mark_the_numeric_ones() -> None:
+    rows = [
+        {"workflow": "a", "breach": 1, "note": None, "ok": True},
+        {"workflow": "b", "breach": 0.5, "note": None, "ok": False, "late": 3},
+    ]
+    assert [(c.name, c.numeric) for c in _output_columns(rows)] == [
+        ("workflow", False),
+        ("breach", True),
+        ("note", True),
+        ("ok", True),
+        ("late", True),
+    ]
+    assert _output_columns([{"id": 1}, {"id": "x"}])[0].numeric is False

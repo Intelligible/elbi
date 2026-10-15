@@ -130,6 +130,7 @@ from .wire import Job as WireJob
 from .wire import LineageGraph as WireLineageGraph
 from .wire import MlflowSettings as WireMlflowSettings
 from .wire import Monitor as WireMonitor
+from .wire import MonitorColumn as WireMonitorColumn
 from .wire import MonitorHistory as WireMonitorHistory
 from .wire import NotificationItem as WireNotificationItem
 from .wire import NotificationList as WireNotificationList
@@ -2268,6 +2269,17 @@ def create_app(
     async def list_monitors(request: Request) -> list[WireMonitor]:
         """Every monitor, each with its latest value and alert status."""
         return _monitors().list_monitors()
+
+    @app.get("/api/derivations/{name}/columns")
+    async def derivation_columns(
+        name: str, request: Request
+    ) -> list[WireMonitorColumn]:
+        """A certified derivation's output columns, to pick a measure and key from."""
+        service = _monitors()
+        try:
+            return await run_in_threadpool(service.columns, name)
+        except MonitorError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/monitors")
     async def create_monitor(request: Request) -> WireMonitor:

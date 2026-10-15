@@ -278,6 +278,13 @@ class Monitor(Wire):
     breach_keys: list[str] | None = None
 
 
+class MonitorColumn(Wire):
+    """A column of a derivation's output, and whether a monitor can aggregate it."""
+
+    name: str
+    numeric: bool
+
+
 class MonitorSnapshot(Wire):
     """One observed value, and whether it read as an anomaly."""
 
