@@ -6,6 +6,25 @@ is simply that interface served on your machine.
 
 ## What gets exposed
 
+Besides one tool per derivation, `elbi mcp` registers tools for the analysis itself
+(the investigate and check tools need bound datasets, and the warehouse tools a
+connected warehouse):
+
+- **Investigate**: `structure_map` (identifiers, derived columns, and candidate
+  confounders) and `profile_dataset` (each column's completeness, type, range, and
+  common values). With a warehouse connected, also `describe_warehouse`,
+  `table_schema`, and `sample_rows`.
+- **Check**: the `verify_*` tools, which test a claim with a method suited to it
+  (confounding, Simpson's paradox, equivalence, leakage, missingness, stationarity,
+  calibration, difference-in-differences, instrumental variables, regression
+  discontinuity, survival, and more), plus `verify_contract` for a
+  [data contract](./data-contracts.md).
+- **Work**: `run_code` in a sandbox (with `job_status` and `cancel_job` for long runs),
+  and `train_model`, `list_models`, `promote_model`, and `predict`.
+- **Record and reuse**: `propose_derivation` (see
+  [agent-authored derivations](./authoring.md)), `search_derivations`, and
+  `delete_derivation`.
+
 For each derivation, the local server registers:
 
 - a **resource** at `elbi://derivation/<name>`, reading current context
