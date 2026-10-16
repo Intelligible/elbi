@@ -39,8 +39,14 @@ breaching while an incident is open raises `metric.breach_widened`, with the new
 `new_keys`. Without a key, that second failure only moves the sum and folds into the open
 incident unannounced. Each row is announced once per incident, however often it recovers
 and breaks again. A `key` that no row has fails the check as `metric.source_failed`. The
-announced rows are kept in memory, so after a restart the first check inside an open
-incident records them without alerting.
+announced rows are stored on the open incident, so a restart forgets nothing: a row that
+broke while the server was down is announced by the first check after it. A breaching row
+with no value in the key column is the empty string in `breach_keys`, and reads as
+`(blank)` in notifications and the web UI.
+
+The Monitors page sets all of this: the aggregation, the column and the key when creating
+or editing a derivation monitor, and filters for a metric monitor. A monitor with a key
+lists the rows breaching now and the rows each incident named.
 
 ## How anomalies are detected
 

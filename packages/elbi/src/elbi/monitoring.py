@@ -34,6 +34,7 @@ from elbi_core import detect_anomaly
 
 from .db import MetricMonitor, MetricSnapshot, MonitorIncident, Store
 from .wire import Monitor as WireMonitor
+from .wire import MonitorColumn as WireMonitorColumn
 from .wire import MonitorHistory as WireMonitorHistory
 from .wire import MonitorIncident as WireMonitorIncident
 from .wire import MonitorSnapshot as WireMonitorSnapshot
@@ -74,6 +75,7 @@ class MonitorService:
         read_value: Callable[[MetricMonitor], float | Reading],
         source_certified: Callable[[str, str], bool],
         on_alert: Callable[[dict[str, Any]], None] | None = None,
+        read_columns: Callable[[str], list[WireMonitorColumn]] | None = None,
     ) -> None:
         self._store = store
         # read_value resolves a monitor's current scalar; source_certified gates the
@@ -81,12 +83,26 @@ class MonitorService:
         self._read_value = read_value
         self._source_certified = source_certified
         self._on_alert = on_alert
-        # The breaching keys each keyed monitor has announced in its current incident,
-        # so a row is named once per incident however often it flaps. An alert that
-        # opens or closes the incident starts the record afresh. In memory: after a
-        # restart the first reading inside an open incident only re-seeds it, without
-        # alerting.
-        self._announced_keys: dict[str, frozenset[str]] = {}
+        self._read_columns = read_columns
+
+    def columns(self, derivation: str) -> list[WireMonitorColumn]:
+        """A certified derivation's output columns, to pick a measure and key from.
+
+        Raises:
+            MonitorError: if the derivation is not certified, has no tabular output,
+                or this service was built without a way to read it.
+        """
+        if self._read_columns is None:
+            raise MonitorError("this service cannot read a derivation's columns")
+        if not self._source_certified("derivation", derivation):
+            raise MonitorError(
+                f"derivation {derivation!r} is not certified; a monitor watches "
+                "only verified numbers"
+            )
+        try:
+            return self._read_columns(derivation)
+        except Exception as exc:
+            raise MonitorError(f"could not read {derivation!r}: {exc}") from exc
 
     def create(
         self,
@@ -108,6 +124,7 @@ class MonitorService:
         """
         if target_kind not in _KINDS:
             raise MonitorError(f"target_kind must be one of {', '.join(_KINDS)}")
+        _check_schedule(window, interval_hours)
         if not self._source_certified(target_kind, target):
             raise MonitorError(
                 f"{target_kind} {target!r} is not certified; a monitor watches "
@@ -172,7 +189,10 @@ class MonitorService:
                 f"{kind} {watched!r} is not certified; a monitor watches "
                 "only verified numbers"
             )
-        watched_before = (row.target_kind, row.target, row.config_json)
+        _check_schedule(window, interval_hours)
+        # Compared as parsed JSON: the same config written with another key order or
+        # spacing is not a change to what is watched.
+        watched_before = (row.target_kind, row.target, _config(row))
         row.name = (name.strip() or watched) if name is not None else row.name
         row.target_kind = kind
         row.target = watched
@@ -190,9 +210,13 @@ class MonitorService:
         # threshold somebody removed from the file has to come off the monitor too.
         row.min_value = min_value
         row.max_value = max_value
-        if (row.target_kind, row.target, row.config_json) != watched_before:
-            # Keys read before the edit may name the same rows by another column.
-            self._announced_keys.pop(monitor_id, None)
+        if (row.target_kind, row.target, _config(row)) != watched_before:
+            # Keys read before the edit may name the same rows by another column, so
+            # the open incident re-seeds from the next reading instead of comparing.
+            open_incident = self._store.open_incident(monitor_id)
+            if open_incident is not None and open_incident.keys_json is not None:
+                open_incident.keys_json = None
+                self._store.save_incident(open_incident)
         self._store.update_metric_monitor(row)
         saved = self._store.get_metric_monitor(monitor_id)
         return self._view(saved) if saved is not None else None
@@ -208,7 +232,6 @@ class MonitorService:
 
     def delete(self, monitor_id: str) -> bool:
         """Delete a monitor and its history; return whether it existed."""
-        self._announced_keys.pop(monitor_id, None)
         return self._store.delete_metric_monitor(monitor_id)
 
     def history(self, monitor_id: str) -> WireMonitorHistory:
@@ -288,6 +311,7 @@ class MonitorService:
                 score=verdict.score,
                 reason=verdict.reason,
                 source_verdict=source_verdict,
+                breach_keys_json=None if keys is None else json.dumps(sorted(keys)),
             )
         )
         alert = self._manage_incident(monitor, verdict, value, source_verdict)
@@ -365,23 +389,37 @@ class MonitorService:
         keys: tuple[str, ...],
         alert: dict[str, Any] | None,
     ) -> dict[str, Any] | None:
-        """Attach the breaching keys to ``alert``, or raise one for a widened breach."""
+        """Attach the breaching keys to ``alert``, or raise one for a widened breach.
+
+        The keys already announced live on the open incident, so a restart keeps them.
+        """
         current = frozenset(keys)
-        announced = self._announced_keys.get(monitor.id)
-        if alert is not None or not verdict.anomalous or announced is None:
-            # No open incident to compare with, or this alert opens or closes one.
-            self._announced_keys[monitor.id] = current
+        incident = self._store.open_incident(monitor.id) if verdict.anomalous else None
+        if alert is not None or incident is None:
+            # This alert opens or closes an incident, so there is nothing to compare.
             if alert is not None:
                 alert["breach_keys"] = sorted(current)
+            self._announce(incident, current)
             return alert
+        announced = _decode_keys(incident.keys_json)
+        if announced is None:
+            # An incident that predates keys, or whose key column was just edited.
+            self._announce(incident, current)
+            return None
         added = current - announced
         if not added:
             return None
-        self._announced_keys[monitor.id] = announced | current
+        self._announce(incident, announced | current)
         widened = self._alert(monitor, BREACH_WIDENED, verdict, value, source_verdict)
         widened["breach_keys"] = sorted(current)
         widened["new_keys"] = sorted(added)
         return widened
+
+    def _announce(self, incident: MonitorIncident | None, keys: frozenset[str]) -> None:
+        """Record on an open incident which keys it has named."""
+        if incident is not None:
+            incident.keys_json = json.dumps(sorted(keys))
+            self._store.save_incident(incident)
 
     def _source_failed(
         self, monitor: MetricMonitor, reason: str
@@ -459,7 +497,36 @@ class MonitorService:
             last_value=latest.value if latest is not None else None,
             last_checked_at=_iso(monitor.last_run_at),
             status="alerting" if open_incident is not None else "ok",
+            breach_keys=_decode_list(latest.breach_keys_json if latest else None),
         )
+
+
+def _check_schedule(window: int | None, interval_hours: float | None) -> None:
+    """Reject a history window or check interval that cannot drive a check.
+
+    Raises:
+        MonitorError: if the window is not a whole number above zero, or the interval
+            is not above zero. A negative window would become a row limit.
+    """
+    if window is not None and (window != int(window) or window < 1):
+        raise MonitorError("window must be a whole number of checks, at least 1")
+    if interval_hours is not None and not interval_hours > 0:
+        raise MonitorError("interval_hours must be above 0")
+
+
+def _config(row: MetricMonitor) -> dict[str, Any]:
+    config: dict[str, Any] = json.loads(row.config_json or "{}")
+    return config
+
+
+def _decode_list(raw: str | None) -> list[str] | None:
+    """A stored JSON list of keys, or ``None`` when the monitor is unkeyed."""
+    return None if raw is None else [str(k) for k in json.loads(raw)]
+
+
+def _decode_keys(raw: str | None) -> frozenset[str] | None:
+    keys = _decode_list(raw)
+    return None if keys is None else frozenset(keys)
 
 
 def _snapshot_view(snapshot: MetricSnapshot) -> WireMonitorSnapshot:
@@ -473,6 +540,7 @@ def _snapshot_view(snapshot: MetricSnapshot) -> WireMonitorSnapshot:
         score=snapshot.score,
         reason=snapshot.reason,
         source_verdict=snapshot.source_verdict,
+        breach_keys=_decode_list(snapshot.breach_keys_json),
     )
 
 
@@ -489,6 +557,7 @@ def _incident_view(incident: MonitorIncident) -> WireMonitorIncident:
         reason=incident.reason,
         snapshots=incident.snapshots,
         open=incident.closed_at is None,
+        keys=_decode_list(incident.keys_json),
     )
 
 

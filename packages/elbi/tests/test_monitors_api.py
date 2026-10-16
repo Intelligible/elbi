@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from elbi import create_app
 from elbi.db import open_store
 from elbi.monitoring import MonitorService
+from elbi.wire import MonitorColumn
 
 # The current value the stub source returns; a test mutates it between checks.
 NEXT: dict[str, float] = {"value": 100.0}
@@ -48,6 +49,10 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
         read_value=_read,
         source_certified=lambda kind, target: target != "uncertified",
         on_alert=ALERTS.append,
+        read_columns=lambda name: [
+            MonitorColumn(name="workflow", numeric=False),
+            MonitorColumn(name="error_breach", numeric=True),
+        ],
     )
     app = create_app(
         load_datasets=dict,
@@ -349,3 +354,49 @@ def test_an_incident_says_whether_it_opened_on_an_anomaly_or_a_failure(
     failure, anomaly = _incidents(client, monitor_id)
     assert (failure["cause"], failure["peakValue"]) == ("source_failed", None)
     assert (anomaly["cause"], anomaly["peakValue"]) == (None, 5000.0)
+
+
+def test_a_derivations_columns_are_listed_for_choosing_a_measure_and_key(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/derivations/workflow_health/columns")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"name": "workflow", "numeric": False},
+        {"name": "error_breach", "numeric": True},
+    ]
+
+
+def test_an_uncertified_derivations_columns_are_refused(client: TestClient) -> None:
+    response = client.get("/api/derivations/uncertified/columns")
+    assert response.status_code == 400
+    assert "not certified" in response.json()["detail"]
+
+
+def test_a_window_or_interval_that_cannot_drive_a_check_is_refused(
+    client: TestClient,
+) -> None:
+    base = {"name": "m", "targetKind": "metric", "target": "revenue"}
+    for bad in ({"window": -5}, {"window": 0}, {"intervalHours": 0}):
+        assert client.post("/api/monitors", json={**base, **bad}).status_code == 400
+    made = client.post("/api/monitors", json=base).json()
+    for bad in ({"window": -5}, {"intervalHours": -1}):
+        response = client.put(f"/api/monitors/{made['id']}", json=bad)
+        assert response.status_code == 400
+
+
+def test_an_edit_that_leaves_the_target_out_skips_the_certification_check(
+    client: TestClient,
+) -> None:
+    made = client.post(
+        "/api/monitors",
+        json={"name": "m", "targetKind": "metric", "target": "revenue"},
+    ).json()
+    # The source loses certification after the monitor was made.
+    uncertified = client.put(
+        f"/api/monitors/{made['id']}", json={"target": "uncertified"}
+    )
+    assert uncertified.status_code == 400
+    response = client.put(f"/api/monitors/{made['id']}", json={"sensitivity": 4})
+    assert response.status_code == 200
+    assert response.json()["sensitivity"] == 4
