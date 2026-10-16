@@ -121,7 +121,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       # Syntax, runner labels, shell correctness. Pinned by version and checksum-free only
@@ -176,7 +176,7 @@ jobs:
           # hands it to every later step, including any action they call.
           persist-credentials: false
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       - run: uv sync --locked --all-extras --dev
@@ -245,7 +245,7 @@ jobs:
           # hands it to every later step, including any action they call.
           persist-credentials: false
       - name: Install uv and set Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -327,7 +327,7 @@ jobs:
           # The checkout token is not needed after cloning; leaving it in .git/config
           # hands it to every later step, including any action they call.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       - run: uv sync --locked --all-extras --dev
@@ -354,7 +354,7 @@ jobs:
           # The checkout token is not needed after cloning; leaving it in .git/config
           # hands it to every later step, including any action they call.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       - run: uv sync --locked --all-extras --dev
@@ -377,7 +377,7 @@ jobs:
           # The checkout token is not needed after cloning; leaving it in .git/config
           # hands it to every later step, including any action they call.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       - run: uv sync --locked --all-extras --dev
@@ -385,7 +385,7 @@ jobs:
         run: uv run python -m benchmark.run
       - name: Upload the per-trap report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pitfall-benchmark-report
           path: benchmark/report/
@@ -437,7 +437,7 @@ jobs:
           # The checkout token is not needed after cloning; leaving it in .git/config
           # hands it to every later step, including any action they call.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       - run: uv sync --locked --all-extras --dev
@@ -468,7 +468,7 @@ jobs:
           # The checkout token is not needed after cloning; leaving it in .git/config
           # hands it to every later step, including any action they call.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       - run: uv sync --locked --all-extras --dev
@@ -497,7 +497,7 @@ jobs:
           fetch-depth: 0
           # The checkout token is not needed after cloning.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Check for a news fragment
         # `bash` rather than the default so the pipe below fails loudly if the label query
         # is refused.
