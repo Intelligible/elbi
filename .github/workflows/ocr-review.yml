@@ -5,22 +5,19 @@ name: Open Code Review
 # the head only as git objects.
 on:
   pull_request_target: # zizmor: ignore[dangerous-triggers]
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
-
-concurrency:
-  group: ocr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+    types: [opened, ready_for_review, labeled]
 
 permissions:
   contents: read
 
 jobs:
   review:
-    # PRs from branches in this repo are reviewed on every push: only people with
-    # write access can push here. Fork PRs are reviewed once each time a
-    # maintainer adds the ocr-review label; later pushes need the label removed
-    # and added again. author_association can't tell maintainers apart, because
-    # the event reports private org members as CONTRIBUTOR.
+    # PRs from branches in this repo are reviewed when opened (or when a draft is
+    # marked ready); fork PRs wait for a maintainer to add the ocr-review label.
+    # After that, a review runs only when the label is added again: later pushes
+    # need the label removed and re-added. author_association can't tell
+    # maintainers apart, because the event reports private org members as
+    # CONTRIBUTOR.
     if: >-
       !github.event.pull_request.draft
       && github.event.pull_request.user.login != 'dependabot[bot]'
@@ -28,6 +25,10 @@ jobs:
         && github.event.label.name == 'ocr-review'
         || github.event.action != 'labeled'
         && github.event.pull_request.head.repo.full_name == github.repository)
+    # Job-level, so events the `if` filters out (other labels) can't cancel a running review.
+    concurrency:
+      group: ocr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
