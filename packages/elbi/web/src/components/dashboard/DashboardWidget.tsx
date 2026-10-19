@@ -4,7 +4,14 @@
 // its error in place rather than blanking.
 
 import { AlertCircle, GripVertical, MoreHorizontal } from "lucide-react"
-import type { ReactNode } from "react"
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 
 import { NotebookMarkdown } from "@/components/notebook/NotebookMarkdown"
 import { Button } from "@/components/ui/button"
@@ -27,6 +34,15 @@ import { useRowKeys } from "@/hooks/useRowKeys"
 import type { Widget, WidgetData } from "@/lib/dashboards"
 import { downloadText, toCsv } from "@/lib/download"
 import { formatMetricValue } from "@/lib/metrics"
+import {
+  type CellSegment,
+  type ColumnSpec,
+  type ColumnWidth,
+  cellSegments,
+  columnFields,
+  MIN_COLUMN_WIDTH,
+  parseColumns,
+} from "@/lib/table-columns"
 import { EMPTY } from "@/lib/utils"
 
 type Row = Record<string, string | number>
@@ -35,12 +51,9 @@ function asRows(value: unknown): Row[] {
   return Array.isArray(value) ? (value as Row[]) : []
 }
 
-// The columns a tile shows and downloads: the table's configured ones, else every key
-// any row has, so the CSV matches the screen and a key the first row lacks is kept.
+// The fields a tile downloads: the same columns it shows, so the CSV matches the screen.
 function columnsOf(widget: Widget, rows: Row[]): string[] {
-  const configured = widget.viz?.columns
-  if (Array.isArray(configured)) return configured as string[]
-  return [...new Set(rows.flatMap((r) => Object.keys(r)))]
+  return columnFields(parseColumns(widget.viz?.columns, rows))
 }
 
 function CenterNote({ children }: { children: ReactNode }) {
@@ -71,21 +84,124 @@ function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
   )
 }
 
+// How far one keypress moves a column edge.
+const KEY_STEP = 10
+
+function widthStyle(width: ColumnWidth | undefined) {
+  if (typeof width === "number") return { width, minWidth: width, maxWidth: width }
+  return width === "fit" ? { width: "1%" } : undefined
+}
+
+function Cell({ segments }: { segments: CellSegment[] }) {
+  return segments.map((seg, i) =>
+    seg.href ? (
+      <a
+        // A segment's position is its identity: the text is not unique and never reorders.
+        // biome-ignore lint/suspicious/noArrayIndexKey: see above
+        key={i}
+        href={seg.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2 hover:text-foreground"
+        // A link belongs to the page it opens, not to the row that holds it.
+        onClick={(e) => e.stopPropagation()}
+      >
+        {seg.text}
+      </a>
+    ) : (
+      // biome-ignore lint/suspicious/noArrayIndexKey: see above
+      <span key={i}>{seg.text}</span>
+    ),
+  )
+}
+
+// The draggable edge of a column header. Dragging previews the width live and saves it on
+// release; a double click returns the column to its content width; the arrow keys nudge it.
+function ResizeHandle({
+  column,
+  onPreview,
+  onResize,
+}: {
+  column: ColumnSpec
+  onPreview: (width: number | null) => void
+  onResize: (field: string, width: ColumnWidth) => void
+}) {
+  const stop = useRef<(() => void) | null>(null)
+  useEffect(() => () => stop.current?.(), [])
+
+  const current = (el: HTMLElement) =>
+    typeof column.width === "number"
+      ? column.width
+      : (el.parentElement?.getBoundingClientRect().width ?? 0)
+  const clamp = (w: number) => Math.max(MIN_COLUMN_WIDTH, w)
+
+  const begin = (e: MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const x0 = e.clientX
+    const w0 = current(e.currentTarget)
+    const move = (ev: globalThis.MouseEvent) => onPreview(clamp(w0 + ev.clientX - x0))
+    const end = (ev: globalThis.MouseEvent) => {
+      stop.current?.()
+      onPreview(null)
+      if (ev.clientX !== x0) onResize(column.field, clamp(w0 + ev.clientX - x0))
+    }
+    stop.current = () => {
+      window.removeEventListener("mousemove", move)
+      window.removeEventListener("mouseup", end)
+      stop.current = null
+    }
+    window.addEventListener("mousemove", move)
+    window.addEventListener("mouseup", end)
+  }
+
+  const nudge = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowRight" ? KEY_STEP : e.key === "ArrowLeft" ? -KEY_STEP : 0
+    if (!step) return
+    e.preventDefault()
+    onResize(column.field, clamp(current(e.currentTarget) + step))
+  }
+
+  return (
+    // The ARIA window-splitter pattern: a focusable separator that moves an edge. An <hr>
+    // cannot take focus or a drag, so there is no native element for this.
+    // biome-ignore lint/a11y/useSemanticElements: see above
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize column ${column.field}`}
+      aria-valuenow={typeof column.width === "number" ? column.width : undefined}
+      aria-valuemin={MIN_COLUMN_WIDTH}
+      tabIndex={0}
+      className="dash-no-drag absolute top-0 right-0 h-full w-1.5 cursor-col-resize touch-none select-none hover:bg-border focus-visible:bg-ring"
+      onMouseDown={begin}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={() => onResize(column.field, "fit")}
+      onKeyDown={nudge}
+    />
+  )
+}
+
 function RowsTable({
   widget,
   data,
   onRowClick,
+  onColumnWidth,
 }: {
   widget: Widget
   data?: WidgetData
   onRowClick?: (row: Row) => void
+  onColumnWidth?: (field: string, width: ColumnWidth) => void
 }) {
   const rowKey = useRowKeys()
+  // The width a column is being dragged to, shown before it is saved.
+  const [dragging, setDragging] = useState<{ field: string; width: number } | null>(null)
   const rows = asRows(data?.value)
   if (rows.length === 0) return <div className="text-sm text-text-tertiary">No rows.</div>
   const viz = widget.viz ?? {}
-  const columns = columnsOf(widget, rows)
+  const columns = parseColumns(viz.columns, rows)
   const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50
+  const widthOf = (c: ColumnSpec) => (dragging?.field === c.field ? dragging.width : c.width)
   return (
     // Fills the tile rather than sizing to the rows: a taller tile shows more of them,
     // and a shorter one scrolls, instead of leaving the extra height as padding.
@@ -94,8 +210,21 @@ function RowsTable({
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             {columns.map((c) => (
-              <TableHead key={c} className="px-2 py-1">
-                {c}
+              <TableHead
+                key={c.field}
+                className={onColumnWidth ? "relative px-2 py-1 pr-3" : "px-2 py-1"}
+                style={widthStyle(widthOf(c))}
+              >
+                {c.label ?? c.field}
+                {onColumnWidth ? (
+                  <ResizeHandle
+                    column={{ ...c, width: widthOf(c) }}
+                    onPreview={(width) =>
+                      setDragging(width === null ? null : { field: c.field, width })
+                    }
+                    onResize={onColumnWidth}
+                  />
+                ) : null}
               </TableHead>
             ))}
           </TableRow>
@@ -107,11 +236,25 @@ function RowsTable({
               className={onRowClick ? "cursor-pointer hover:bg-accent" : undefined}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >
-              {columns.map((c) => (
-                <TableCell key={c} className="px-2 py-1">
-                  {String(row[c] ?? "")}
-                </TableCell>
-              ))}
+              {columns.map((c) => {
+                const width = widthOf(c)
+                // A fit column never wraps; a fixed one wraps unless it says not to, and
+                // then clips rather than pushing its neighbours.
+                const nowrap = width === "fit" || c.wrap === false
+                return (
+                  <TableCell
+                    key={c.field}
+                    className={
+                      nowrap
+                        ? `px-2 py-1 whitespace-nowrap${typeof width === "number" ? " overflow-hidden text-ellipsis" : ""}`
+                        : "px-2 py-1"
+                    }
+                    style={widthStyle(width)}
+                  >
+                    <Cell segments={cellSegments(String(row[c.field] ?? ""))} />
+                  </TableCell>
+                )
+              })}
             </TableRow>
           ))}
         </TableBody>
@@ -136,6 +279,7 @@ export function DashboardWidget({
   onDrillThrough,
   onEdit,
   onDelete,
+  onColumnWidth,
 }: {
   widget: Widget
   data?: WidgetData
@@ -144,6 +288,8 @@ export function DashboardWidget({
   onDrillThrough?: () => void
   onEdit?: () => void
   onDelete?: () => void
+  /** Saves a column's new width. Without it a table is read-only and shows no handles. */
+  onColumnWidth?: (field: string, width: ColumnWidth) => void
 }) {
   const crossFilter = widget.interactions?.crossFilter
   // The rows a data tile already holds, offered as a CSV from the tile menu.
@@ -191,7 +337,12 @@ export function DashboardWidget({
         return <MetricBody widget={widget} data={data} />
       case "table":
         return rows.length ? (
-          <RowsTable widget={widget} data={data} onRowClick={onRowClick} />
+          <RowsTable
+            widget={widget}
+            data={data}
+            onRowClick={onRowClick}
+            onColumnWidth={onColumnWidth}
+          />
         ) : (
           <CenterNote>No rows.</CenterNote>
         )

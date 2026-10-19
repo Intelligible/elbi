@@ -301,7 +301,7 @@
           "$ref": "#/$defs/bind"
         },
         "viz": {
-          "description": "Rendering spec for the widget. For 'chart'/'map' this is a grammar-of-graphics spec; 'metric' takes its value and format from the bound metric; for 'table' it configures columns and paging.",
+          "description": "Rendering spec for the widget. For 'chart'/'map' this is a grammar-of-graphics spec; 'metric' takes its value and format from the bound metric; for 'table' it configures columns and paging. 'columns' lists the fields to show, each a field name or an object {field, label, width, wrap}: width is a number of pixels, 'fit' (size to content) or 'fill' (take the remaining space), and a cell holding an http(s) address, or a [text](url) link to one, renders as a link.",
           "type": "object"
         },
         "content": {

@@ -97,6 +97,42 @@ sandboxed like everything else:
 A text widget takes `content` or `bind`, never both — otherwise which one renders would
 be decided somewhere other than the spec.
 
+## Table columns
+
+A `table` tile shows every field its rows carry unless `viz.columns` says otherwise. Each
+entry is a field name, or an object that adds a label, a width and wrapping:
+
+```json
+{ "id": "evidence", "type": "table", "gridPos": {"x": 0, "y": 0, "w": 24, "h": 10},
+  "bind": { "derivation": "unit_price_evidence" },
+  "viz": { "columns": [
+    "unit",
+    { "field": "proposed_usd", "label": "Price", "width": 90 },
+    { "field": "reason", "width": 420 },
+    { "field": "source", "width": "fit", "wrap": false }
+  ] } }
+```
+
+| Key | Meaning |
+| --- | --- |
+| `field` | The row field the column shows. Required. |
+| `label` | The header text. Defaults to the field name. |
+| `width` | A number of pixels, `"fit"` to size to the content, or `"fill"` to take the space the others leave. Unset sizes the column to its content, as before. |
+| `wrap` | `false` keeps a cell on one line, clipping what does not fit. Defaults to wrapping. |
+
+Plain names and objects can be mixed, and a tile that lists no `columns` behaves as it
+always did.
+
+The same widths can be set in the UI. Drag the right edge of a column header to resize
+it, double-click the edge to return the column to `"fit"`, or focus it and use the left
+and right arrow keys. The change is saved into the spec as one undoable step, so
+`elbi pull` writes it back to the file and `elbi sync` pushes it, and a width set by hand
+and one dragged are the same value.
+
+A cell whose text is an `http` or `https` address, or a `[text](url)` link to one,
+renders as a link that opens in a new tab. No other scheme becomes a link, so a derivation
+returning `javascript:` or `data:` text shows it as plain text.
+
 ## Metric tiles bind shared metrics
 
 A `metric` tile never computes its own number. It binds a metric from the
