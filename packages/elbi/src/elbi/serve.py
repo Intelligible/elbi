@@ -92,6 +92,7 @@ from .search.sources import Sources
 from .titles import llm_title
 from .warehouse import storage
 from .warehouse.service import WarehouseError, WarehouseService, warehouse_available
+from .wire import MonitorColumn as WireMonitorColumn
 
 logger = logging.getLogger("elbi")
 
@@ -173,8 +174,25 @@ def _aggregate_values(agg: str, values: list[float]) -> float:
     return sum(values)
 
 
+def _output_columns(rows: list[dict[str, Any]]) -> list[WireMonitorColumn]:
+    """The columns of a derivation's rows, in first-seen order, and which are numeric.
+
+    A column is numeric when every value it holds is a number, so a monitor can
+    aggregate it; one that is always null is offered as numeric rather than hidden.
+    """
+    numeric: dict[str, bool] = {}
+    for row in rows:
+        for column, value in row.items():
+            numeric.setdefault(column, True)
+            if value is not None and not isinstance(value, (int, float)):
+                numeric[column] = False
+    return [WireMonitorColumn(name=c, numeric=n) for c, n in numeric.items()]
+
+
 def _breach_keys(rows: list[dict[str, Any]], column: str, key: str) -> tuple[str, ...]:
     """The ``key`` of every row whose ``column`` is positive: a keyed monitor's breach.
+
+    A row with no key is the empty string, so it cannot collide with a real key.
 
     Raises:
         ModelError: if there are rows and none has ``key``, which only a misnamed key
@@ -185,7 +203,7 @@ def _breach_keys(rows: list[dict[str, Any]], column: str, key: str) -> tuple[str
     return tuple(
         sorted(
             {
-                "(blank)" if r.get(key) in (None, "") else str(r[key])
+                "" if r.get(key) in (None, "") else str(r[key])
                 for r in rows
                 if isinstance(r.get(column), (int, float)) and r[column] > 0
             }
@@ -839,9 +857,7 @@ def build(
         artifact = make_runner().run(name)
         value = artifact.value
         if not (isinstance(value, list) and value and isinstance(value[0], dict)):
-            raise ModelError(
-                f"derivation {name!r} does not produce tabular rows to train on"
-            )
+            raise ModelError(f"derivation {name!r} does not produce a table of rows")
         return list(value)
 
     def apply_derivation(name: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1121,6 +1137,9 @@ def build(
             return value
         return Reading(value, _breach_keys(rows, column, key))
 
+    def read_monitor_columns(name: str) -> list[WireMonitorColumn]:
+        return _output_columns(load_derivation_rows(name))
+
     def monitor_source_certified(kind: str, target: str) -> bool:
         """Whether a monitor's target is a certified metric or derivation."""
         if kind == "metric":
@@ -1131,6 +1150,7 @@ def build(
         store=store,
         read_value=read_monitor_value,
         source_certified=monitor_source_certified,
+        read_columns=read_monitor_columns,
         # In-app notification, then webhook + audit.
         on_alert=monitor_alert_handler(store),
     )
