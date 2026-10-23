@@ -1,7 +1,7 @@
 // Pins a table widget's interactions: a row click emits its fields into the mapped
 // variables (cross-filter), and Details runs the drill-through.
 
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
@@ -238,5 +238,248 @@ describe("tile actions", () => {
 
     // react-grid-layout's draggableCancel; without it, opening the menu drags the tile.
     expect(screen.getByLabelText(/Tile actions/).className).toContain("dash-no-drag")
+  })
+})
+
+describe("a table tile's columns", () => {
+  const colTile = (columns: unknown[]): Widget => ({
+    id: "t",
+    type: "table",
+    title: "Evidence",
+    gridPos: { x: 0, y: 0, w: 24, h: 8 },
+    viz: { columns },
+  })
+  const colData = (rows: Record<string, string | number>[]): WidgetData => ({
+    widgetId: "t",
+    derivation: "evidence",
+    kind: "table",
+    value: rows,
+    dataVersion: "v1",
+    error: null,
+  })
+  const ROWS = [
+    { unit: "chat", reason: "Top of the peer range", source: "https://modal.com/pricing" },
+  ]
+
+  it("labels a column with its configured label and keeps the field for the data", () => {
+    render(
+      <DashboardWidget
+        widget={colTile(["unit", { field: "reason", label: "Why" }])}
+        data={colData(ROWS)}
+        variables={{}}
+      />,
+    )
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["unit", "Why"])
+    expect(screen.getByRole("cell", { name: "Top of the peer range" })).toBeInTheDocument()
+  })
+
+  it("gives a column its configured pixel width", () => {
+    render(
+      <DashboardWidget
+        widget={colTile(["unit", { field: "reason", width: 420 }])}
+        data={colData(ROWS)}
+        variables={{}}
+      />,
+    )
+    const header = screen.getByRole("columnheader", { name: "reason" })
+    expect(header.style.width).toBe("420px")
+  })
+
+  it("sizes a fit column to its content and lets a fill column take the rest", () => {
+    render(
+      <DashboardWidget
+        widget={colTile([
+          { field: "unit", width: "fit" },
+          { field: "reason", width: "fill" },
+        ])}
+        data={colData(ROWS)}
+        variables={{}}
+      />,
+    )
+    expect(screen.getByRole("cell", { name: "chat" })).toHaveClass("whitespace-nowrap")
+    expect(screen.getByRole("columnheader", { name: "reason" }).style.width).toBe("")
+  })
+
+  it("does not wrap a column that says wrap is false", () => {
+    render(
+      <DashboardWidget
+        widget={colTile([{ field: "reason", width: 200, wrap: false }])}
+        data={colData(ROWS)}
+        variables={{}}
+      />,
+    )
+    expect(screen.getByRole("cell", { name: "Top of the peer range" })).toHaveClass(
+      "whitespace-nowrap",
+    )
+  })
+
+  it("downloads exactly the configured fields, whatever shape each column was given", async () => {
+    const user = userEvent.setup()
+    downloadText.mockClear()
+    render(
+      <DashboardWidget
+        widget={colTile(["unit", { field: "source", width: 300 }])}
+        data={colData(ROWS)}
+        variables={{}}
+      />,
+    )
+    await user.click(screen.getByRole("button", { name: /Tile actions/ }))
+    await user.click(screen.getByRole("menuitem", { name: /CSV/i }))
+    expect(downloadText.mock.calls[0][1]).toBe("unit,source\nchat,https://modal.com/pricing")
+  })
+})
+
+describe("links in a table cell", () => {
+  const tile: Widget = {
+    id: "t",
+    type: "table",
+    gridPos: { x: 0, y: 0, w: 24, h: 8 },
+    interactions: { crossFilter: { emit: { unit: "datum.unit" } } },
+  }
+  const data = (source: string): WidgetData => ({
+    widgetId: "t",
+    derivation: "evidence",
+    kind: "table",
+    value: [{ unit: "training", source }],
+    dataVersion: "v1",
+    error: null,
+  })
+
+  it("renders a web address as a link that opens in a new tab", () => {
+    render(
+      <DashboardWidget widget={tile} data={data("https://modal.com/pricing")} variables={{}} />,
+    )
+    const link = screen.getByRole("link", { name: "https://modal.com/pricing" })
+    expect(link).toHaveAttribute("href", "https://modal.com/pricing")
+    expect(link).toHaveAttribute("target", "_blank")
+    expect(link.getAttribute("rel")).toContain("noopener")
+    expect(link.getAttribute("rel")).toContain("noreferrer")
+  })
+
+  it("renders a markdown link as its label", () => {
+    render(
+      <DashboardWidget
+        widget={tile}
+        data={data("see [Modal pricing](https://modal.com/pricing)")}
+        variables={{}}
+      />,
+    )
+    expect(screen.getByRole("link", { name: "Modal pricing" })).toHaveAttribute(
+      "href",
+      "https://modal.com/pricing",
+    )
+  })
+
+  it("does not make a link out of a script address", () => {
+    render(
+      <DashboardWidget widget={tile} data={data("[click](javascript:alert(1))")} variables={{}} />,
+    )
+    expect(screen.queryByRole("link")).toBeNull()
+  })
+
+  it("does not cross-filter when a link is clicked", async () => {
+    const user = userEvent.setup()
+    const onCrossFilter = vi.fn()
+    render(
+      <DashboardWidget
+        widget={tile}
+        data={data("https://modal.com/pricing")}
+        variables={{}}
+        onCrossFilter={onCrossFilter}
+      />,
+    )
+    const link = screen.getByRole("link")
+    link.addEventListener("click", (e) => e.preventDefault())
+    await user.click(link)
+    expect(onCrossFilter).not.toHaveBeenCalled()
+  })
+})
+
+describe("resizing a table column", () => {
+  const tile: Widget = {
+    id: "t",
+    type: "table",
+    gridPos: { x: 0, y: 0, w: 24, h: 8 },
+    viz: { columns: ["unit", { field: "reason", width: 300 }] },
+  }
+  const data: WidgetData = {
+    widgetId: "t",
+    derivation: "evidence",
+    kind: "table",
+    value: [{ unit: "chat", reason: "why" }],
+    dataVersion: "v1",
+    error: null,
+  }
+
+  it("shows no handles when nothing can save a width", () => {
+    render(<DashboardWidget widget={tile} data={data} variables={{}} />)
+    expect(screen.queryByRole("separator")).toBeNull()
+  })
+
+  it("saves the new width when a header edge is dragged and released", () => {
+    const onColumnWidth = vi.fn()
+    render(
+      <DashboardWidget widget={tile} data={data} variables={{}} onColumnWidth={onColumnWidth} />,
+    )
+    const handle = screen.getByRole("separator", { name: "Resize column reason" })
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 160 })
+    expect(onColumnWidth).not.toHaveBeenCalled()
+    fireEvent.mouseUp(window, { clientX: 160 })
+    expect(onColumnWidth).toHaveBeenCalledExactlyOnceWith("reason", 360)
+  })
+
+  it("saves nothing when the edge was grabbed and not moved", () => {
+    const onColumnWidth = vi.fn()
+    render(
+      <DashboardWidget widget={tile} data={data} variables={{}} onColumnWidth={onColumnWidth} />,
+    )
+    const handle = screen.getByRole("separator", { name: "Resize column reason" })
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseUp(window, { clientX: 100 })
+    expect(onColumnWidth).not.toHaveBeenCalled()
+  })
+
+  it("returns a column to its content width on a double click", () => {
+    const onColumnWidth = vi.fn()
+    render(
+      <DashboardWidget widget={tile} data={data} variables={{}} onColumnWidth={onColumnWidth} />,
+    )
+    fireEvent.doubleClick(screen.getByRole("separator", { name: "Resize column reason" }))
+    expect(onColumnWidth).toHaveBeenCalledExactlyOnceWith("reason", "fit")
+  })
+
+  it("resizes from the keyboard", async () => {
+    const user = userEvent.setup()
+    const onColumnWidth = vi.fn()
+    render(
+      <DashboardWidget widget={tile} data={data} variables={{}} onColumnWidth={onColumnWidth} />,
+    )
+    screen.getByRole("separator", { name: "Resize column reason" }).focus()
+    await user.keyboard("{ArrowRight}")
+    expect(onColumnWidth).toHaveBeenLastCalledWith("reason", 310)
+    await user.keyboard("{ArrowLeft}")
+    expect(onColumnWidth).toHaveBeenLastCalledWith("reason", 290)
+  })
+
+  it("does not start a row click or a tile drag from the handle", () => {
+    const onCrossFilter = vi.fn()
+    const crossTile: Widget = {
+      ...tile,
+      interactions: { crossFilter: { emit: { unit: "datum.unit" } } },
+    }
+    render(
+      <DashboardWidget
+        widget={crossTile}
+        data={data}
+        variables={{}}
+        onCrossFilter={onCrossFilter}
+        onColumnWidth={vi.fn()}
+      />,
+    )
+    const handle = screen.getByRole("separator", { name: "Resize column reason" })
+    expect(handle.closest(".dash-no-drag")).not.toBeNull()
+    fireEvent.click(handle)
+    expect(onCrossFilter).not.toHaveBeenCalled()
   })
 })

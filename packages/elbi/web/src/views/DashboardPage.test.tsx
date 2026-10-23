@@ -1,13 +1,13 @@
 // Pins what a refused save does: the board goes back to the last spec the server
 // accepted, and the editor that made the edit stays open with the server's reason.
 
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
-import type { Dashboard } from "@/lib/dashboards"
+import type { Dashboard, WidgetData } from "@/lib/dashboards"
 
 vi.mock("@/components/dashboard/JsonEditor", () => ({ JsonEditor: () => null }))
 
@@ -250,5 +250,97 @@ describe("DashboardPage", () => {
       expect(screen.queryByRole("alert")).toBeNull()
       expect(screen.getByText("new figure")).toBeInTheDocument()
     })
+  })
+})
+
+describe("resizing a table column on the board", () => {
+  const tableDashboard = (viz?: Record<string, unknown>): Dashboard => ({
+    ...DASHBOARD,
+    spec: {
+      ...DASHBOARD.spec,
+      pages: [
+        {
+          name: "main",
+          widgets: [
+            {
+              id: "t",
+              type: "table",
+              title: "Evidence",
+              bind: { derivation: "evidence" },
+              ...(viz ? { viz } : {}),
+              gridPos: { x: 0, y: 0, w: 24, h: 8 },
+            },
+          ],
+        },
+      ],
+    },
+  })
+  const evidence: WidgetData = {
+    widgetId: "t",
+    derivation: "evidence",
+    kind: "table",
+    value: [{ unit: "chat", reason: "why" }],
+    dataVersion: "v1",
+    error: null,
+  }
+  const open = async (dashboard: Dashboard) => {
+    vi.mocked(getDashboard).mockResolvedValue(dashboard)
+    vi.mocked(resolvePage).mockResolvedValue([evidence])
+    vi.mocked(saveDashboard).mockResolvedValue(undefined as never)
+    render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={["/dashboards/d1"]}>
+          <Routes>
+            <Route path="/dashboards/:id" element={<DashboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>,
+    )
+    return screen.findByRole("separator", { name: "Resize column reason" })
+  }
+  const drag = (handle: HTMLElement, by: number) => {
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseUp(window, { clientX: 100 + by })
+  }
+  const savedColumns = () => {
+    const spec = vi.mocked(saveDashboard).mock.calls.at(-1)?.[1]
+    return spec?.pages[0].widgets[0].viz
+  }
+
+  it("saves a dragged width into the tile's viz and keeps the rest of it", async () => {
+    const handle = await open(
+      tableDashboard({ columns: ["unit", { field: "reason", width: 300 }], pageSize: 5 }),
+    )
+    drag(handle, 60)
+    await waitFor(() => expect(saveDashboard).toHaveBeenCalled())
+    expect(savedColumns()).toEqual({
+      columns: ["unit", { field: "reason", width: 360 }],
+      pageSize: 5,
+    })
+  })
+
+  it("writes out the derived column list when the tile had none", async () => {
+    const handle = await open(tableDashboard())
+    // jsdom has no layout, so the starting width is 0 and the drag is the whole width.
+    drag(handle, 120)
+    await waitFor(() => expect(saveDashboard).toHaveBeenCalled())
+    expect(savedColumns()).toEqual({ columns: ["unit", { field: "reason", width: 120 }] })
+  })
+
+  it("says why when the server refuses the width", async () => {
+    const handle = await open(tableDashboard({ columns: [{ field: "reason", width: 300 }] }))
+    vi.mocked(saveDashboard).mockRejectedValue(new Error("viz.columns: bad width"))
+    drag(handle, 40)
+    expect(await screen.findByText(/Not saved: viz\.columns: bad width/)).toBeInTheDocument()
+  })
+
+  it("undoes a width with the same keystroke as any other edit", async () => {
+    const user = userEvent.setup()
+    const handle = await open(tableDashboard({ columns: [{ field: "reason", width: 300 }] }))
+    drag(handle, 60)
+    await waitFor(() => expect(saveDashboard).toHaveBeenCalledTimes(1))
+    await user.keyboard("{Control>}z{/Control}")
+    await waitFor(() => expect(saveDashboard).toHaveBeenCalledTimes(2))
+    expect(savedColumns()).toEqual({ columns: [{ field: "reason", width: 300 }] })
   })
 })
