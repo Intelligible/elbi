@@ -49,6 +49,7 @@ import {
   saveDashboard,
 } from "@/lib/dashboards"
 import { createHistory, record, redo, undo, undoGesture } from "@/lib/history"
+import { type ColumnWidth, withColumnWidth } from "@/lib/table-columns"
 
 const Grid = WidthProvider(GridLayout)
 // A tile's height is `(ROW_HEIGHT + margin)h - margin`, so a row is also the step a
@@ -340,6 +341,23 @@ function DashboardBoard({ id }: { id: string }) {
     [mapWidgets, writeSpec, dashboard?.spec, reportSaveError],
   )
 
+  // A column dragged to a new width is saved like any other edit: into the spec, as one
+  // undoable step. The data is unchanged, so nothing is resolved again.
+  const saveColumnWidth = useCallback(
+    async (widgetId: string, field: string, width: ColumnWidth) => {
+      const value = widgets[widgetId]?.value
+      const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
+      const nextSpec = mapWidgets((all) =>
+        all.map((w) =>
+          w.id === widgetId ? { ...w, viz: withColumnWidth(w.viz, field, width, rows) } : w,
+        ),
+      )
+      if (!nextSpec) return
+      await writeSpec(nextSpec, dashboard?.spec).catch(reportSaveError)
+    },
+    [widgets, mapWidgets, writeSpec, dashboard?.spec, reportSaveError],
+  )
+
   const publish = async () => {
     setPublishError(null)
     try {
@@ -518,6 +536,7 @@ function DashboardBoard({ id }: { id: string }) {
                   onCrossFilter={(emit) => setVariables((current) => ({ ...current, ...emit }))}
                   onEdit={() => setTileUnderEdit(widget)}
                   onDelete={() => setTileToDelete(widget)}
+                  onColumnWidth={(field, width) => void saveColumnWidth(widget.id, field, width)}
                   onDrillThrough={() => {
                     const target = widget.interactions?.drillThrough?.target ?? ""
                     const [kind, ref] = target.split(":")
