@@ -1,4 +1,8 @@
-# Agent evals: does elbi make a coding agent better at data science?
+# Agent evals: does elbi make a coding agent better at data science? (WIP)
+
+> **Work in progress.** These are prototype harnesses with one or two rounds per result;
+> they have not yet been ported onto the shipped `reconcile_effect` tool or replicated
+> there. Treat the numbers as evidence for the mechanism, not as published results.
 
 These harnesses measure an agent with elbi against the same agent without it, on public
 benchmarks with deterministic grading. They are the **prototypes that produced the results
@@ -27,6 +31,17 @@ agent's, by elbi, when it writes the final answer:
 Neither the agent alone nor elbi alone does as well as the two combined: on 117 CausalDS
 interval answers, total interval score was 483.8 (agent alone) and 483.2 (elbi alone)
 against 217.0 combined.
+
+### Where each gain comes from
+
+| Gain | Source of the improvement | Shipped as |
+|---|---|---|
+| CausalDS: 0.055 of the 0.060 drop in CausalDSScore (about 91%) | Interval combination on the 7 graded average-effect interval tasks: capped nIS 6.88 to 2.86 (round 1) and 9.70 to 2.78 (round 2). The 7 prediction-interval tasks elbi does not touch stayed flat (12.57 vs 12.55, 12.55 vs 12.56). | `second_opinion.combine_interval`, applied by `reconcile_effect` |
+| CausalDS: the remaining 0.005 | Pass rate 97.1% to 100% in round 1 only (equal in round 2), plus 0.001 from non-interval error. Not traced to the tool: agent-side run-to-run difference. | (none) |
+| QRData held-out: 2 of the 4 extra correct answers | Point combination with elbi's doubly robust estimate fixed 2 answers. It also broke 1 the agent had right, which base had missed too, so it cost nothing against base. | `second_opinion.combine_point` and `estimate_effect`'s AIPW, applied by `reconcile_effect` |
+| QRData held-out: the other 2 | The agent's own answer differed from base's run; the tool did not change them. One (hospital stay) matches a pattern seen in the pilot, where agents with an elbi tool got a sign right 4/4 vs base 2/4. Not attributed. | (none) |
+| No score change measured | Script re-run and the range check (v1): never changed an answer for the better. The range check would have blocked one base sign error (+1.98 against elbi's -5.6 to -16.9). | `reconcile_effect` withholds an out-of-range estimate until confirmed |
+| No score change measured | Per-arm spline (the spline's penalty had shrunk a weak binary effect to about 0) and the sparse-data guard: correctness, not separately scored. | `second_opinion.estimate_effect` |
 
 ### CausalDS realistic exam (100 tasks, the benchmark's own grader)
 
