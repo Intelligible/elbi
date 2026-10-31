@@ -144,14 +144,51 @@ def test_declines_with_too_few_rows_and_skips_incomplete_ones() -> None:
     assert "too few" in op.caveats[0]
 
 
-def test_small_arm_gets_no_doubly_robust() -> None:
+@pytest.mark.parametrize("treated", [0, 3])
+def test_no_contrast_in_the_treatment_gives_no_estimate(treated: int) -> None:
+    """Too few (or no) rows in one arm: every model would report an effect of exactly 0
+    with no spread, a confident answer the data cannot support, so elbi declines."""
     rows = _confounded(200)
-    treated = [r for r in rows if r["t"] == 1][:3]
-    op = so.estimate_effect(
-        [r for r in rows if r["t"] == 0] + treated, "t", "y", ["z"], bootstrap=4
-    )
+    kept = [r for r in rows if r["t"] == 0] + [r for r in rows if r["t"] == 1][:treated]
+    op = so.estimate_effect(kept, "t", "y", ["z"], bootstrap=4)
+    assert op.estimates == {}
+    assert op.range() is None
+    assert "barely varies" in op.caveats[0]
+
+
+def test_rejects_equal_levels() -> None:
+    with pytest.raises(ValueError, match="differ"):
+        so.estimate_effect(_confounded(50), "t", "y", ["z"], x0=1.0, x1=1.0)
+
+
+def test_a_non_finite_doubly_robust_estimate_is_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(so, "aipw_effect", lambda *a, **k: (math.nan, math.nan))
+    op = so.estimate_effect(_confounded(120), "t", "y", ["z"], bootstrap=2)
     assert op.doubly_robust is None
-    assert any("fewer than" in c for c in op.caveats)
+    assert "not finite" in op.caveats[-1]
+    assert so.combine_point(1.5, op) == 1.5
+
+
+def test_binary_outcome_linear_model_is_not_shrunk() -> None:
+    """The logistic outcome model is unpenalised, like the linear one: a penalty on
+    unscaled inputs shrinks a strong effect in a small sample toward 0. Averaged over
+    seeds, so the bias shows through the sampling noise."""
+    bias = []
+    for seed in range(8):
+        rng = np.random.default_rng(seed)
+        n = 80
+        z = rng.normal(0, 30, n)  # unscaled covariate, as data arrive
+        t = (rng.random(n) < 0.5).astype(float)
+        p = 1 / (1 + np.exp(-(-2.0 + 4.0 * t + 0.01 * z)))
+        y = (rng.random(n) < p).astype(float)
+        op = so.estimate_effect(_rows(t=t, y=y, z=z), "t", "y", ["z"], bootstrap=2)
+        truth = np.mean(
+            1 / (1 + np.exp(-(2.0 + 0.01 * z))) - 1 / (1 + np.exp(-(-2.0 + 0.01 * z)))
+        )
+        bias.append(op.estimates["linear"] - truth)
+    assert abs(np.mean(bias)) < 0.06
 
 
 def test_rejects_unknown_estimand() -> None:
