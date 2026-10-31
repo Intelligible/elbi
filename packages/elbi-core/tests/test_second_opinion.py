@@ -8,6 +8,7 @@ answer alone, disagreement moves it between the two) with Hypothesis.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
 
 import numpy as np
 import pytest
@@ -15,6 +16,16 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 so = pytest.importorskip("elbi_core.verification.second_opinion")
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _few_threads() -> Iterator[None]:
+    """Cap native threads: under xdist, every worker's model fits otherwise take every
+    core at once and the suite slows by orders of magnitude."""
+    from threadpoolctl import threadpool_limits
+
+    with threadpool_limits(limits=2):
+        yield
 
 
 def _rows(**cols: np.ndarray) -> list[dict[str, float]]:
