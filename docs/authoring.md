@@ -229,6 +229,15 @@ per-derivation run tools:
   influence, misspecification), and a model's predictive accuracy (re-evaluated
   leakage-free, screening target proxies and train/test contamination). Each returns
   the same **sound / unsound / inconclusive** verdict. See [Verification](#verification).
+- **`reconcile_effect`**: a second, independent analysis of an average effect
+  (ATE, ATT or ATC). The agent passes its estimate (and interval, if any) with the
+  adjustment set it chose; elbi re-estimates the effect with three outcome models
+  and a doubly robust estimator and returns the answer to report. For a question
+  about the effect itself the two analyses are combined at equal weight (a point is
+  their mean; an interval is the central interval of their combined uncertainty, so
+  it widens where they disagree). For a question that names a method, it only
+  checks. An estimate outside every elbi model's range is withheld until the agent
+  confirms it. Needs the `ml` extra.
 - **`run_code`**: run Python in the sandbox to explore data and prototype a
   computation *before* authoring a derivation. Datasets load as `data['<name>']`
   (row dicts); `print()` to inspect and set a `result` variable to return a value;
