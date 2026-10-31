@@ -1,0 +1,160 @@
+# Agent evals: does elbi make a coding agent better at data science?
+
+These harnesses measure an agent with elbi against the same agent without it, on public
+benchmarks with deterministic grading. They are the **prototypes that produced the results
+below**, kept as they were run so the numbers stay reproducible. The ideas they validated
+now ship as `elbi_core.verification.second_opinion` and the `reconcile_effect` MCP tool;
+porting these harnesses onto that shipped tool is the first follow-up (see
+[Next steps](#next-steps)).
+
+Everything here runs headless Claude Code (`claude -p`, model `claude-opus-5-5`) in a
+fresh directory per task, with web tools and subagents disabled. The two arms get the same
+prompt; the elbi arm adds one MCP server and one sentence telling the agent to write its
+final answer through it.
+
+## What was found
+
+The gain comes from a second, independent analysis whose result is combined with the
+agent's, by elbi, when it writes the final answer:
+
+- elbi re-estimates the effect itself (three outcome models with bootstrap errors, and a
+  doubly robust estimator for a two-valued treatment), given the agent's adjustment set;
+- the two analyses are combined at equal weight: an interval becomes the central interval
+  of the mixture of both (it widens where they disagree), a point becomes their mean;
+- elbi writes the answer, so the combination cannot be skipped. An advisory tool the
+  agent could ignore moved nothing.
+
+Neither the agent alone nor elbi alone does as well as the two combined: on 117 CausalDS
+interval answers, total interval score was 483.8 (agent alone) and 483.2 (elbi alone)
+against 217.0 combined.
+
+### CausalDS realistic exam (100 tasks, the benchmark's own grader)
+
+CausalDSScore, lower is better. The elbi arm uses `submit_answer` only on tasks asking for
+an average effect with a 95% interval (10 of the 100).
+
+| Round | base | elbi |
+|---|---|---|
+| 1 | 0.2132 (pass 97.1%) | 0.1611 (pass 100%) |
+| 2 | 0.2396 (pass 97.1%) | 0.1705 (pass 97.1%) |
+| Mean of 2 | 0.226 | 0.166 |
+
+Round 3 stopped at 16 of 100 tasks and is not reported. The published leaderboard uses
+CausalDS's own agent harness and three-run means, so these numbers are not comparable to
+it. CausalDS's 200-task hard exam is not public.
+
+### QRData (Liu et al., ACL Findings 2024)
+
+Accuracy under QRData's published rule (numbers within 3%, choices by prefix).
+
+| Set | base | elbi v1 | elbi v2 |
+|---|---|---|---|
+| Pilot, 40 questions stratified (1 round) | 29/40 | 31/40 | |
+| Pilot's 10 causal-number questions, 3 more rounds | 9/30 | 9/30 | |
+| Held-out causal-number questions, 49 (1 round) | 27/49 | 27/49 | **31/49** |
+
+- **v1** (`qrdata/check_server.py`) re-runs the agent's script, checks an effect answer
+  against elbi's range, and blocks until the agent confirms. It never changed an answer
+  for the better; the pilot's +2 did not replicate.
+- **v2** (`qrdata/check_server_v2.py`, `qrdata/effect_dr.py`) adds the per-arm spline,
+  the doubly robust estimate, and the equal-weight mean when the question asks for the
+  effect itself. Held out: 4 better and 0 worse than base (paired 95% CI +2.0 to +16.3
+  points). Of the 4, the combination itself accounts for 2 (it also broke 1 answer
+  base got wrong anyway); the other 2 came from the agent. One round only.
+- elbi's doubly robust estimate *alone* would have scored 16/37 where the agent's final
+  scored 24/37: the combination helps, replacing the agent does not.
+
+### Things that did not move the score
+
+- Advice the agent can ignore (`estimate_effect` returning a second opinion with a rule
+  for reconciling it): unhinted agents never called it; hinted agents called it but did
+  not follow the rule. No measurable win on the CausalDS test set.
+- Storing what an earlier session learned (as a typed claim with fitted models, or as
+  notes and code) for a follow-up question on the same data: no arm differed beyond
+  noise in 24 paired runs, and the reuse tool was called once.
+- Structure planning before analysis (`plan_analysis`) on BLADE: no measurable win.
+
+## Layout
+
+```
+prototype/   the CausalDS-era elbi tools
+  plan_server.py    MCP server: plan_analysis, submit_answer (PLAN_SUBMIT=1), and
+                    experimental arms (typed claims, reuse) behind env flags
+  effect_check.py   three g-computation models, bootstrap SEs, mixture_interval
+  latent_effect.py  spline g-computation, including calibration-file proxies
+  effect_claim.py   typed effect claims (identification check, ETT reuse)
+causalds/    cds_run.py (runner), make_exam.py, official_report.py (grader summary),
+             run_official.sh (3 rounds, resumes after usage limits), prereg.md
+qrdata/      qr_run.py (runner; arms base, elbi = v1, elbi2 = v2), check_server.py,
+             check_server_v2.py, effect_dr.py, make_exam.py, grade.py (pilot),
+             grade_v2.py (held-out), prereg.md, prereg_v2.md, run_*.sh,
+             exam_*_qids.json (the question ids each exam must contain)
+```
+
+## Setup
+
+1. Claude Code on `PATH` as `claude`, logged in. Runs consume your plan's usage; the run
+   scripts wait and resume when a limit is hit.
+2. The elbi side runs with this workspace's Python (`uv run`); override with `ELBI_PY`.
+3. CausalDS:
+   ```bash
+   git clone https://github.com/andleb/causalds benchmark/agent_evals/causalds/upstream
+   # follow its README to create upstream/.venv (the agent's Python for both benchmarks)
+   uv run python benchmark/agent_evals/causalds/make_exam.py
+   ```
+   `CAUSALDS_DIR` points elsewhere if the clone lives elsewhere. Results above used
+   commit `3d675d3`.
+4. QRData (CC BY-NC 4.0, so its data is not included here):
+   ```bash
+   git clone https://github.com/xxxiaol/QRData benchmark/agent_evals/qrdata/upstream
+   unzip benchmark/agent_evals/qrdata/upstream/benchmark/data.zip -d benchmark/agent_evals/qrdata
+   uv run python benchmark/agent_evals/qrdata/make_exam.py   # checks the ids match
+   ```
+   `AGENT_BIN` sets the agent's Python `bin` directory (default: CausalDS's venv).
+
+## Run
+
+```bash
+cd benchmark/agent_evals/causalds
+./run_official.sh                   # 100 tasks x base/elbi x 3 rounds
+uv run python official_report.py
+
+cd ../qrdata
+./run_pilot.sh && uv run python grade.py
+RUNS=runs_heldout EXAM=exam_heldout.json ARMS="base elbi elbi2" uv run python qr_run.py
+RUNS=runs_heldout EXAM=exam_heldout.json uv run python grade_v2.py
+```
+
+A single task: `uv run python qr_run.py 11` (task numbers are 1-based in the exam file).
+
+## Caveats worth knowing
+
+- **Pre-registration.** Each QRData step was written down before its runs (`prereg*.md`),
+  including the decision rule. The CausalDS rule was amended once before its runs, to
+  replace a free widening parameter with the equal-weight mixture (`causalds/prereg.md`).
+- **The v2 tool file is pinned.** During the held-out run, `check_server_v2.py` was
+  edited mid-run outside the experiment. Tasks 21 to 49 were rerun with the frozen file,
+  whose MD5 (`60de2305ad3a38219724bbad7a9f45d0`) matches the one recorded at the freeze;
+  that is the file here, and the 31/49 uses it throughout. `check_server.py` (v1) differs
+  from what ran only in the path it imports `effect_claim` from.
+- **Memorization.** QRData comes from public textbooks; in one task the agent said its
+  answer matched "the value I recall from the textbook". Treat absolute accuracy with
+  care; the paired base vs elbi difference is the result.
+- **Percent answers.** The prompt asks for "the number only", so agents write `4.11`
+  where the key has `4.11%`, which the grader reads as 0.0411. Two held-out questions
+  are lost this way in every arm.
+- **IHDP dominates the held-out set** (25 of 49). Its keys are the simulated true
+  effects, where averaging two estimates naturally reduces noise.
+- **The shipped module differs from the CausalDS prototype**: its spline is fitted per
+  treatment arm, and it has no calibration-file handling for proxy variables
+  (`prototype/latent_effect.py`). It has not itself been run on CausalDS.
+
+## Next steps
+
+1. Port the runners to the shipped server (`elbi` MCP with a dataset bound per task, the
+   agent told to report `reconcile_effect`'s answer) and reproduce both tables. Decide
+   how CausalDS's proxy variables and calibration file reach the shipped tool.
+2. A second round of the QRData held-out set (base vs v2, about 100 runs) before any
+   public claim.
+3. Finish CausalDS round 3.
+4. Mutation-test `second_opinion` (`just mutation` with `module-path` pointed at it).
