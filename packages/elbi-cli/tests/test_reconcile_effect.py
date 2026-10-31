@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -16,6 +17,15 @@ from elbi_core import Registry, Runner
 from elbi_core.data import Table
 
 so = pytest.importorskip("elbi_core.verification.second_opinion")
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _few_threads() -> Iterator[None]:
+    """Cap native threads so parallel test workers do not oversubscribe the cores."""
+    from threadpoolctl import threadpool_limits
+
+    with threadpool_limits(limits=2):
+        yield
 
 
 def _text(result: Any) -> str:
