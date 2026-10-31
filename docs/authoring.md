@@ -426,4 +426,4 @@ elbi certify <name>     # approve a proposed derivation for serving
 
 Certification is recorded locally in `.elbi/lifecycle.yaml`. *Who* may
 certify, signatures, and multi-party review are governance concerns handled by
-the platform, not the local layer.
+the platform ([Summand](https://summand.com)), not the local layer.
