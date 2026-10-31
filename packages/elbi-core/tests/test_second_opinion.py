@@ -93,6 +93,23 @@ def test_spline_does_not_shrink_a_weak_binary_effect_to_zero() -> None:
     assert abs(op.estimates["spline"] - 0.14) < 0.06
 
 
+def test_sparse_binary_outcome_degrades_instead_of_raising() -> None:
+    """A rare outcome and a tiny treated arm leave cross-validation folds with one
+    class; the models that cannot be fitted drop out rather than failing the call."""
+    rng = np.random.default_rng(0)
+    n = 300
+    z = rng.normal(0, 1, n)
+    t = np.zeros(n)
+    t[:6] = 1
+    y = (rng.random(n) < 0.03).astype(float)
+    y[0] = 1
+    op = so.estimate_effect(
+        _rows(t=t, y=y, z=z), "t", "y", ["z"], estimand="att", bootstrap=3
+    )
+    assert set(op.estimates) < {*so.MODELS, so.DOUBLY_ROBUST}
+    assert all(math.isfinite(v) for v in op.estimates.values())
+
+
 def test_continuous_treatment_gets_g_computation_but_no_doubly_robust() -> None:
     rng = np.random.default_rng(2)
     n = 600
