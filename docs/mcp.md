@@ -7,13 +7,13 @@ is simply that interface served on your machine.
 ## What gets exposed
 
 Besides one tool per derivation, `elbi mcp` registers tools for the analysis itself
-(the investigate and check tools need bound datasets, and the warehouse tools a
-connected warehouse):
+(the investigate and check tools need bound datasets):
 
 - **Investigate**: `structure_map` (identifiers, derived columns, and candidate
   confounders) and `profile_dataset` (each column's completeness, type, range, and
-  common values). With a warehouse connected, also `describe_warehouse`,
-  `table_schema`, and `sample_rows`.
+  common values). The `elbi serve` app's MCP endpoint also exposes
+  `describe_warehouse`, `table_schema`, and `sample_rows` (see
+  [MCP: let your coding agent see the data](./analytics-as-code.md#mcp-let-your-coding-agent-see-the-data)).
 - **Check**: the `verify_*` tools, which test a claim with a method suited to it
   (confounding, Simpson's paradox, equivalence, leakage, missingness, stationarity,
   calibration, difference-in-differences, instrumental variables, regression
