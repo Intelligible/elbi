@@ -53,7 +53,7 @@ from sklearn.linear_model import (
     LogisticRegressionCV,
     RidgeCV,
 )
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import QuantileTransformer, SplineTransformer, StandardScaler
 
@@ -125,7 +125,10 @@ def _model(kind: str, binary: bool, n: int) -> Any:
         )
         return make_pipeline(basis, head)
     if kind == "linear":
-        return LogisticRegression(max_iter=3000) if binary else LinearRegression()
+        # Unpenalised, like LinearRegression: a penalty would shrink the effect itself.
+        if binary:
+            return LogisticRegression(penalty=None, max_iter=3000)
+        return LinearRegression()
     if binary:
         return HistGradientBoostingClassifier(max_iter=200, random_state=0)
     return HistGradientBoostingRegressor(max_iter=200, random_state=0)
@@ -221,7 +224,8 @@ def aipw_effect(
     """
     n = len(Y)
     m1, m0, e = np.zeros(n), np.zeros(n), np.zeros(n)
-    for tr, te in KFold(folds, shuffle=True, random_state=seed).split(Z):
+    # Stratified on T, so every training fold holds both arms.
+    for tr, te in StratifiedKFold(folds, shuffle=True, random_state=seed).split(Z, T):
         for arm, out in ((1.0, m1), (0.0, m0)):
             s = tr[T[tr] == arm]
             out[te] = np.mean(
@@ -270,6 +274,8 @@ def estimate_effect(
     """
     if estimand not in ("ate", "att", "atc"):
         raise ValueError(f"estimand must be 'ate', 'att' or 'atc', not {estimand!r}")
+    if math.isclose(x0, x1):
+        raise ValueError("x0 and x1 must differ")
     adjust = tuple(dict.fromkeys(adjust))
     data, n = _frame(rows, [x, y, *adjust])
     base = EffectOpinion(x, y, adjust, float(x0), float(x1), estimand, n)
@@ -283,6 +289,11 @@ def estimate_effect(
         else np.zeros((n, 0))
     )
     two_valued = bool(np.all(np.isclose(T, x0) | np.isclose(T, x1)))
+    smaller_arm = min(int(np.isclose(T, x1).sum()), int(np.isclose(T, x0).sum()))
+    if np.ptp(T) == 0 or (two_valued and smaller_arm < _MIN_ARM):
+        # With no contrast in the data every model reports an effect of exactly 0 with
+        # no spread: a confident answer the data cannot support.
+        return replace(base, caveats=(f"{x} barely varies: no estimate",))
     rng = np.random.default_rng(seed)
     draws = [np.arange(n)] + [rng.integers(0, n, n) for _ in range(bootstrap)]
     estimates: dict[str, float] = {}
@@ -297,22 +308,18 @@ def estimate_effect(
         if math.isfinite(vals[0]) and boot.size >= 2:
             estimates[kind], errors[kind] = vals[0], float(np.std(boot, ddof=1))
     caveats: list[str] = []
-    arms_ok = (
-        min(int(np.isclose(T, x1).sum()), int(np.isclose(T, x0).sum())) >= _MIN_ARM
-    )
-    if two_valued and arms_ok:
+    if two_valued:
         T01: Floats = np.isclose(T, x1).astype(np.float64)
         Zd = Z if adjust else np.zeros((n, 1))
         try:
-            estimates[DOUBLY_ROBUST], errors[DOUBLY_ROBUST] = aipw_effect(
-                T01, Zd, Y, estimand, seed=seed
-            )
+            tau, se = aipw_effect(T01, Zd, Y, estimand, seed=seed)
         except ValueError as exc:
             caveats.append(f"doubly robust estimate could not be fitted: {exc}")
-    elif two_valued:
-        caveats.append(
-            f"fewer than {_MIN_ARM} rows at x0 or x1: no doubly robust estimate"
-        )
+        else:
+            if math.isfinite(tau) and math.isfinite(se):
+                estimates[DOUBLY_ROBUST], errors[DOUBLY_ROBUST] = tau, se
+            else:
+                caveats.append("doubly robust estimate was not finite")
     else:
         caveats.append(
             "treatment takes more than two values: no doubly robust estimate"
