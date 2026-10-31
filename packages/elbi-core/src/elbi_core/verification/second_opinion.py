@@ -36,6 +36,7 @@ scikit-learn is an optional dependency (the ``ml`` extra), as for ``_causal``.
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, TypeAlias
@@ -138,8 +139,12 @@ def _fit_predict(kind: str, X: Floats, y: Floats, new: Floats) -> Floats:
     if np.unique(y).size < 2:
         return np.full(len(new), float(y[0]) if len(y) else math.nan)
     binary = _binary(y)
-    m = _model(kind, binary, len(X)).fit(X, y)
-    out = m.predict_proba(new)[:, 1] if binary else m.predict(new)
+    # Small or sparse fits warn (few members per class, slow convergence); the estimate
+    # is judged by its bootstrap spread, so the warnings would only be noise here.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = _model(kind, binary, len(X)).fit(X, y)
+        out = m.predict_proba(new)[:, 1] if binary else m.predict(new)
     return np.asarray(out, dtype=np.float64)
 
 
@@ -161,7 +166,27 @@ def _g_effect(
     estimand: Estimand,
     two_valued: bool,
 ) -> float:
-    """g-computation: mean of E[Y | x1, Z] - E[Y | x0, Z] over the estimand's rows."""
+    """g-computation: mean of E[Y | x1, Z] - E[Y | x0, Z] over the estimand's rows.
+
+    NaN when the model cannot be fitted (a cross-validation fold of a rare binary
+    outcome with one class), so that model, or that bootstrap draw, drops out.
+    """
+    try:
+        return _g_effect_fit(kind, T, Z, Y, x0, x1, estimand, two_valued)
+    except ValueError:
+        return math.nan
+
+
+def _g_effect_fit(
+    kind: str,
+    T: Floats,
+    Z: Floats,
+    Y: Floats,
+    x0: float,
+    x1: float,
+    estimand: Estimand,
+    two_valued: bool,
+) -> float:
     pop = _population(T, x0, x1, estimand)
     if not pop.any():
         return math.nan
@@ -206,7 +231,9 @@ def aipw_effect(
             StandardScaler(),
             LogisticRegressionCV(Cs=6, max_iter=3000, scoring="neg_log_loss"),
         )
-        e[te] = ps.fit(Z[tr], T[tr]).predict_proba(Z[te])[:, 1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            e[te] = ps.fit(Z[tr], T[tr]).predict_proba(Z[te])[:, 1]
     e = np.clip(e, _PROPENSITY_CLIP, 1 - _PROPENSITY_CLIP)
     if estimand == "ate":
         psi = m1 - m0 + T * (Y - m1) / e - (1 - T) * (Y - m0) / (1 - e)
@@ -276,9 +303,12 @@ def estimate_effect(
     if two_valued and arms_ok:
         T01: Floats = np.isclose(T, x1).astype(np.float64)
         Zd = Z if adjust else np.zeros((n, 1))
-        estimates[DOUBLY_ROBUST], errors[DOUBLY_ROBUST] = aipw_effect(
-            T01, Zd, Y, estimand, seed=seed
-        )
+        try:
+            estimates[DOUBLY_ROBUST], errors[DOUBLY_ROBUST] = aipw_effect(
+                T01, Zd, Y, estimand, seed=seed
+            )
+        except ValueError as exc:
+            caveats.append(f"doubly robust estimate could not be fitted: {exc}")
     elif two_valued:
         caveats.append(
             f"fewer than {_MIN_ARM} rows at x0 or x1: no doubly robust estimate"
