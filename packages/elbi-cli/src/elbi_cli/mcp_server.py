@@ -1075,7 +1075,14 @@ def _reconcile_effect(
         if ci_lower is not None and ci_upper is not None:
             lo, hi = so.combine_interval(ci_lower, ci_upper, opinion)
             final_point = min(max(final_point, lo), hi)
-        how = "your analysis and elbi's, equally weighted"
+        # The point is combined only with the doubly robust estimate (a two-valued
+        # treatment); say so when there is none rather than claim a combination.
+        if opinion.doubly_robust is not None:
+            how = "your analysis and elbi's, equally weighted"
+        elif ci_lower is not None:
+            how = "interval combined with elbi's models; point is yours, checked"
+        else:
+            how = "your answer, checked (no doubly robust estimate to combine with)"
     out["final"] = {"estimate": final_point, "ci_lower": lo, "ci_upper": hi}
     out["combined"] = how
     out["note"] = "Report the final answer."

@@ -44,9 +44,20 @@ def _table(n: int = 160, seed: int = 0) -> Table:
     return Table(rows=rows)
 
 
+def _dose_table(n: int = 160) -> Table:
+    """A continuous treatment: no doubly robust estimate exists."""
+    rng = random.Random(1)
+    rows = []
+    for _ in range(n):
+        z = rng.gauss(0, 1)
+        x = z + rng.gauss(0, 1)
+        rows.append({"x": x, "y": 1.5 * x + 2 * z + rng.gauss(0, 1), "z": z})
+    return Table(rows=rows)
+
+
 @pytest.fixture(scope="module")
 def server() -> Any:
-    tables = {"d": _table(), "tiny": _table(8)}
+    tables = {"d": _table(), "tiny": _table(8), "dose": _dose_table()}
     registry = Registry()
     return build_server(
         registry, lambda: Runner(registry), load_dataset=tables.__getitem__
@@ -139,3 +150,34 @@ def test_malformed_requests_are_refused(
 ) -> None:
     with pytest.raises(MCPError, match=message):
         _call(server, estimate=2.0, **args)
+
+
+def test_without_a_doubly_robust_estimate_the_point_is_reported_as_checked(
+    server: Any,
+) -> None:
+    args = {
+        "dataset": "dose",
+        "x": "x",
+        "y": "y",
+        "adjust": ["z"],
+        "x0": 0.0,
+        "x1": 1.0,
+    }
+    out = json.loads(
+        _text(
+            asyncio.run(server.call_tool("reconcile_effect", {**args, "estimate": 1.5}))
+        )
+    )
+    assert out["final"]["estimate"] == 1.5
+    assert out["combined"].startswith("your answer, checked")
+    both = json.loads(
+        _text(
+            asyncio.run(
+                server.call_tool(
+                    "reconcile_effect",
+                    {**args, "estimate": 1.5, "ci_lower": 1.3, "ci_upper": 1.7},
+                )
+            )
+        )
+    )
+    assert both["combined"].startswith("interval combined")
