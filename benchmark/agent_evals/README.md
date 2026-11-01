@@ -48,11 +48,20 @@ against 217.0 combined.
 CausalDSScore, lower is better. The elbi arm uses `submit_answer` only on tasks asking for
 an average effect with a 95% interval (10 of the 100).
 
-| Round | base | elbi |
-|---|---|---|
-| 1 | 0.2132 (pass 97.1%) | 0.1611 (pass 100%) |
-| 2 | 0.2396 (pass 97.1%) | 0.1705 (pass 97.1%) |
-| Mean of 2 | 0.226 | 0.166 |
+| Round | base | elbi | elbi, shipped tool (replay) |
+|---|---|---|---|
+| 1 | 0.2132 (pass 97.1%) | 0.1611 (pass 100%) | 0.1623 |
+| 2 | 0.2396 (pass 97.1%) | 0.1705 (pass 97.1%) | 0.1716 |
+| Mean of 2 | 0.226 | 0.166 | 0.167 |
+
+The last column replays each recorded `submit_answer` call through the shipped
+`reconcile_effect` (`causalds/replay_shipped.py`, graded by `causalds/grade_replay.py`; no
+agent run), on the same rows the prototype used: the calibration file's true values when a
+scene has one. Every other answer is the recorded one. Per task, the per-arm spline helps
+where the prototype's joint spline had shrunk the effect (t084: interval score 0.12 to
+0.01), and one task gets worse (t069: 0.49 to 0.87). There elbi's own models disagree
+widely (boosted 0.10, linear 0.34, doubly robust 1.04, spline 1.11, against a true 0.42),
+and the combined interval stretches to cover them.
 
 Round 3 stopped at 16 of 100 tasks and is not reported. The published leaderboard uses
 CausalDS's own agent harness and three-run means, so these numbers are not comparable to
@@ -106,7 +115,9 @@ prototype/   the CausalDS-era elbi tools
   latent_effect.py  spline g-computation, including calibration-file proxies
   effect_claim.py   typed effect claims (identification check, ETT reuse)
 causalds/    cds_run.py (runner), make_exam.py, official_report.py (grader summary),
-             run_official.sh (3 rounds, resumes after usage limits), prereg.md
+             run_official.sh (3 rounds, resumes after usage limits), prereg.md,
+             replay_shipped.py + grade_replay.py (recorded answers through the
+             shipped tool, then graded)
 qrdata/      qr_run.py (runner; arms base, elbi = v1, elbi2 = v2), check_server.py,
              check_server_v2.py, effect_dr.py, make_exam.py, grade.py (pilot),
              grade_v2.py (held-out), replay_shipped.py (recorded answers through
@@ -141,6 +152,7 @@ qrdata/      qr_run.py (runner; arms base, elbi = v1, elbi2 = v2), check_server.
 cd benchmark/agent_evals/causalds
 ./run_official.sh                   # 100 tasks x base/elbi x 3 rounds
 uv run python official_report.py
+uv run python replay_shipped.py && upstream/.venv/bin/python grade_replay.py
 
 cd ../qrdata
 ./run_pilot.sh && uv run python grade.py
@@ -170,7 +182,8 @@ A single task: `uv run python qr_run.py 11` (task numbers are 1-based in the exa
   effects, where averaging two estimates naturally reduces noise.
 - **The shipped module differs from the CausalDS prototype**: its spline is fitted per
   treatment arm, and it has no calibration-file handling for proxy variables
-  (`prototype/latent_effect.py`). It has not itself been run on CausalDS.
+  (`prototype/latent_effect.py`). It has been checked on CausalDS only by the offline
+  replay above, which hands it the calibration rows directly.
 
 ## Next steps
 
@@ -182,7 +195,11 @@ A single task: `uv run python qr_run.py 11` (task numbers are 1-based in the exa
 2. A second round of the QRData held-out set (base vs v2, about 100 runs) before any
    public claim.
 3. Finish CausalDS round 3.
-4. Mutation-test `second_opinion` (`just mutation` with `module-path` pointed at it).
+4. Open question from the CausalDS replay (t069): when elbi's own models disagree widely,
+   each still takes an equal share of elbi's half of the mixture. Down-weighting elbi when
+   its models spread far more than their standard errors is one option; one task is not
+   evidence for it, so it needs a held-out check before any change.
+5. Mutation-test `second_opinion` (`just mutation` with `module-path` pointed at it).
 5. **Explore a persistent-memory benchmark (proposed; not yet committed).** Audit
    [DSAEval](https://github.com/AMA-CMFAI/DSAEval)'s dataset groups for multi-question
    sequences with genuine analytical dependencies. Check sequence lengths, what knowledge
