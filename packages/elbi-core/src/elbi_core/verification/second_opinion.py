@@ -215,13 +215,34 @@ def aipw_effect(
     estimand: Estimand = "ate",
     folds: int = 5,
     seed: int = 0,
+    repeats: int = 5,
 ) -> tuple[float, float]:
     """Cross-fitted AIPW estimate and influence-function standard error.
 
     ``T`` is 0/1. Outcome models per arm are the mean of elbi's model kinds, so no
     choice among them is made; the propensity is a cross-validated logistic model,
     clipped away from 0 and 1.
+
+    One random split into folds moves the estimate by a fraction of its standard
+    error, enough to flip an answer graded to a tolerance. So the cross-fit is
+    repeated over ``repeats`` splits and the median taken, with the standard error
+    widened by the spread across splits (Chernozhukov et al. 2018, "median" rule).
     """
+    if repeats < 1:
+        raise ValueError("repeats must be at least 1")
+    runs = [_aipw_split(T, Z, Y, estimand, folds, seed + k) for k in range(repeats)]
+    taus = np.asarray([tau for tau, _ in runs], dtype=np.float64)
+    tau = float(np.median(taus))
+    variance = np.median(
+        [se**2 + (t - tau) ** 2 for t, (_, se) in zip(taus, runs, strict=True)]
+    )
+    return tau, float(math.sqrt(variance))
+
+
+def _aipw_split(
+    T: Floats, Z: Floats, Y: Floats, estimand: Estimand, folds: int, seed: int
+) -> tuple[float, float]:
+    """One cross-fit of AIPW over one random split into ``folds`` folds."""
     n = len(Y)
     m1, m0, e = np.zeros(n), np.zeros(n), np.zeros(n)
     # Stratified on T, so every training fold holds both arms.

@@ -171,6 +171,31 @@ def test_a_non_finite_doubly_robust_estimate_is_dropped(
     assert so.combine_point(1.5, op) == 1.5
 
 
+def test_repeated_cross_fits_take_the_median_and_widen_by_their_spread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One split into folds can move the estimate enough to flip a graded answer, so
+    the doubly robust estimate is the median over splits, and its standard error
+    counts the disagreement between them."""
+    splits = {0: (1.0, 0.1), 1: (5.0, 0.1), 2: (2.0, 0.3)}
+    seen: list[int] = []
+
+    def one_split(*args: object) -> tuple[float, float]:
+        seed = args[-1]
+        assert isinstance(seed, int)
+        seen.append(seed)
+        return splits[seed]
+
+    monkeypatch.setattr(so, "_aipw_split", one_split)
+    tau, se = so.aipw_effect(np.zeros(3), np.zeros((3, 1)), np.zeros(3), repeats=3)
+    assert seen == [0, 1, 2]
+    assert tau == 2.0
+    # Per split: se^2 + (tau_k - median)^2 = 1.01, 9.01, 0.09; their median is 1.01.
+    assert se == pytest.approx(math.sqrt(1.01))
+    with pytest.raises(ValueError, match="repeats"):
+        so.aipw_effect(np.zeros(3), np.zeros((3, 1)), np.zeros(3), repeats=0)
+
+
 def test_binary_outcome_linear_model_is_not_shrunk() -> None:
     """The logistic outcome model is unpenalised, like the linear one: a penalty on
     unscaled inputs shrinks a strong effect in a small sample toward 0. Averaged over
