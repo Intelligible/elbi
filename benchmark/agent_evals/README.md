@@ -76,6 +76,13 @@ Accuracy under QRData's published rule (numbers within 3%, choices by prefix).
   effect itself. Held out: 4 better and 0 worse than base (paired 95% CI +2.0 to +16.3
   points). Of the 4, the combination itself accounts for 2 (it also broke 1 answer
   base got wrong anyway); the other 2 came from the agent. One round only.
+- **Replayed through the shipped tool** (`qrdata/replay_shipped.py`, no agent run): each
+  v2 agent's final submission passed to `reconcile_effect` instead of the prototype
+  scores 31/49, the same as the prototype, with no question graded differently. With a
+  single cross-fitting split the replay scored 30/49: on one question (t021, ATT) the
+  doubly robust estimate ranged from 3.93 to 4.45 across 8 random splits, enough to move
+  the combined answer across the 3% band. The shipped estimate is therefore the median
+  over 5 splits; that costs about 50% more time per effect check.
 - elbi's doubly robust estimate *alone* would have scored 16/37 where the agent's final
   scored 24/37: the combination helps, replacing the agent does not.
 
@@ -102,7 +109,8 @@ causalds/    cds_run.py (runner), make_exam.py, official_report.py (grader summa
              run_official.sh (3 rounds, resumes after usage limits), prereg.md
 qrdata/      qr_run.py (runner; arms base, elbi = v1, elbi2 = v2), check_server.py,
              check_server_v2.py, effect_dr.py, make_exam.py, grade.py (pilot),
-             grade_v2.py (held-out), prereg.md, prereg_v2.md, run_*.sh,
+             grade_v2.py (held-out), replay_shipped.py (recorded answers through
+             the shipped tool), prereg.md, prereg_v2.md, run_*.sh,
              exam_*_qids.json (the question ids each exam must contain)
 ```
 
@@ -167,9 +175,32 @@ A single task: `uv run python qr_run.py 11` (task numbers are 1-based in the exa
 ## Next steps
 
 1. Port the runners to the shipped server (`elbi` MCP with a dataset bound per task, the
-   agent told to report `reconcile_effect`'s answer) and reproduce both tables. Decide
-   how CausalDS's proxy variables and calibration file reach the shipped tool.
+   agent told to report `reconcile_effect`'s answer) and reproduce both tables. The
+   offline replay checks the tool's arithmetic on recorded submissions, not how an agent
+   uses it. Decide how CausalDS's proxy variables and calibration file reach the shipped
+   tool.
 2. A second round of the QRData held-out set (base vs v2, about 100 runs) before any
    public claim.
 3. Finish CausalDS round 3.
 4. Mutation-test `second_opinion` (`just mutation` with `module-path` pointed at it).
+5. **Explore a persistent-memory benchmark (proposed; not yet committed).** Audit
+   [DSAEval](https://github.com/AMA-CMFAI/DSAEval)'s dataset groups for multi-question
+   sequences with genuine analytical dependencies. Check sequence lengths, what knowledge
+   could carry over, and whether the existing scoring can detect a benefit. If the audit
+   finds enough suitable sequences, pilot four conditions: a cold agent, an agent restarted
+   with transcript/log memory, an agent restarted with ELBI's structured empirical memory,
+   and a continuous session. Compare accuracy, tokens, wall-clock time, analytical steps,
+   and memory creation/maintenance cost; the key comparison is ELBI versus transcript
+   memory. Keep this distinct from the prior CausalDS reuse result: 24 paired runs showed
+   no measurable accuracy difference, and the reuse tool was called once. The audit is a
+   gate, not a commitment to run the full benchmark or evidence that memory helps.
+6. **Check whether we can score method selection on QRData (exploratory).** Match the
+   held-out questions against CauSciBench's QRData-CI items and reference method labels.
+   Determine whether the saved transcripts preserve each arm's selected method well enough
+   to compute MSA on a clearly defined overlap. Do not compare it directly with the published
+   61.5% unless the questions, prompts, and scoring protocol are comparable; our current
+   51% result is numeric-answer accuracy on a different 49-question set.
+7. **Consider DABstep as a later benchmark (tentative).** Revisit it if the QRData tool
+   pattern transfers and we want to test whether ELBI's targeted, explicit checks help on a
+   broader data-analysis benchmark. First verify that its tasks and scoring support a fair,
+   reproducible with/without-ELBI comparison.
