@@ -56,6 +56,7 @@ from sklearn.linear_model import (
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import QuantileTransformer, SplineTransformer, StandardScaler
+from threadpoolctl import ThreadpoolController
 
 from ._numerics import _frame
 
@@ -67,6 +68,7 @@ DOUBLY_ROBUST = "doubly_robust"
 _MIN_ROWS = 20
 _MIN_ARM = 5
 _PROPENSITY_CLIP = 0.01
+_THREADS = ThreadpoolController()
 
 
 @dataclass(frozen=True)
@@ -115,7 +117,7 @@ def _binary(v: Floats) -> bool:
 def _model(kind: str, binary: bool, n: int) -> Any:
     if kind == "spline":
         basis = make_pipeline(
-            QuantileTransformer(n_quantiles=min(1000, n)),
+            QuantileTransformer(n_quantiles=min(1000, n), random_state=0),
             SplineTransformer(n_knots=8, degree=3, extrapolation="linear"),
         )
         head: Any = (
@@ -144,7 +146,7 @@ def _fit_predict(kind: str, X: Floats, y: Floats, new: Floats) -> Floats:
     binary = _binary(y)
     # Small or sparse fits warn (few members per class, slow convergence); the estimate
     # is judged by its bootstrap spread, so the warnings would only be noise here.
-    with warnings.catch_warnings():
+    with warnings.catch_warnings(), _THREADS.limit(limits=1):
         warnings.simplefilter("ignore")
         m = _model(kind, binary, len(X)).fit(X, y)
         out = m.predict_proba(new)[:, 1] if binary else m.predict(new)
@@ -256,7 +258,7 @@ def _aipw_split(
             StandardScaler(),
             LogisticRegressionCV(Cs=6, max_iter=3000, scoring="neg_log_loss"),
         )
-        with warnings.catch_warnings():
+        with warnings.catch_warnings(), _THREADS.limit(limits=1):
             warnings.simplefilter("ignore")
             e[te] = ps.fit(Z[tr], T[tr]).predict_proba(Z[te])[:, 1]
     e = np.clip(e, _PROPENSITY_CLIP, 1 - _PROPENSITY_CLIP)
@@ -315,6 +317,16 @@ def estimate_effect(
         # With no contrast in the data every model reports an effect of exactly 0 with
         # no spread: a confident answer the data cannot support.
         return replace(base, caveats=(f"{x} barely varies: no estimate",))
+    lo, hi = float(T.min()), float(T.max())
+    if not all(
+        lo <= v <= hi or math.isclose(v, lo) or math.isclose(v, hi)
+        for v in (base.x0, base.x1)
+    ):
+        # Outside the data the spline and boosted models go flat: each reports ~0.
+        raise ValueError(
+            f"x0={base.x0:g} and x1={base.x1:g} must lie within the observed values "
+            f"of {x} ({lo:g} to {hi:g}): pass the two values your estimate compares"
+        )
     rng = np.random.default_rng(seed)
     draws = [np.arange(n)] + [rng.integers(0, n, n) for _ in range(bootstrap)]
     estimates: dict[str, float] = {}

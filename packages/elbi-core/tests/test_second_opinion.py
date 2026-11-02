@@ -161,6 +161,14 @@ def test_rejects_equal_levels() -> None:
         so.estimate_effect(_confounded(50), "t", "y", ["z"], x0=1.0, x1=1.0)
 
 
+def test_rejects_levels_outside_the_observed_treatment() -> None:
+    """A 1/2-coded treatment with the default 0/1 levels: the spline and boosted models
+    cannot extrapolate, so each would report an effect of exactly 0."""
+    rows = [{**r, "t": r["t"] + 1} for r in _confounded(200)]
+    with pytest.raises(ValueError, match="observed"):
+        so.estimate_effect(rows, "t", "y", ["z"], bootstrap=4)
+
+
 def test_a_non_finite_doubly_robust_estimate_is_dropped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -226,6 +234,39 @@ def test_opinion_is_a_pure_function_of_the_rows() -> None:
     a = so.estimate_effect(rows, "t", "y", ["z"], bootstrap=2)
     b = so.estimate_effect(rows, "t", "y", ["z"], bootstrap=2)
     assert a == b
+
+
+def test_spline_ignores_global_random_state_above_the_quantile_subsample() -> None:
+    """Above 10,000 rows per fit the quantile transform subsamples; unseeded, the
+    estimate would follow numpy's global random state."""
+    rng = np.random.default_rng(0)
+    n = 25_000
+    z = rng.normal(0, 1, (n, 1))
+    t = (rng.random(n) < 0.5).astype(float)
+    y = t + z[:, 0] + rng.normal(0, 1, n)
+    runs = []
+    for global_seed in (1, 2):
+        np.random.seed(global_seed)
+        runs.append(so._g_effect("spline", t, z, y, 0.0, 1.0, "ate", True))
+    assert runs[0] == runs[1]
+
+
+def test_model_fits_run_on_one_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An OpenMP thread per core made fits this small about 20x slower."""
+    from threadpoolctl import threadpool_info
+
+    seen: set[int] = set()
+    model = so._model
+
+    def spy(*args: object) -> object:
+        seen.update(
+            i["num_threads"] for i in threadpool_info() if i["user_api"] == "openmp"
+        )
+        return model(*args)
+
+    monkeypatch.setattr(so, "_model", spy)
+    so.estimate_effect(_confounded(120), "t", "y", ["z"], bootstrap=2)
+    assert seen == {1}
 
 
 def test_no_adjustment_set_still_estimates() -> None:
