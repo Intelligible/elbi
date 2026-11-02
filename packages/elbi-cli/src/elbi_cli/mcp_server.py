@@ -1028,15 +1028,18 @@ def _reconcile_effect(
             "reconcile_effect needs scikit-learn (install elbi-core[ml]); "
             "report your own estimate."
         )
-    opinion = so.estimate_effect(
-        rows,
-        x,
-        y,
-        adjust,
-        x0=x0,
-        x1=x1,
-        estimand=estimand,  # type: ignore[arg-type]
-    )
+    try:
+        opinion = so.estimate_effect(
+            rows,
+            x,
+            y,
+            adjust,
+            x0=x0,
+            x1=x1,
+            estimand=estimand,  # type: ignore[arg-type]
+        )
+    except ValueError as exc:
+        raise MCPError(INVALID_PARAMS, str(exc)) from exc
     span = opinion.range()
     out: dict[str, Any] = {
         "elbi_estimates": opinion.estimates,
@@ -1728,7 +1731,8 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         "(and your interval as `ci_lower`/`ci_upper`, if you have one): elbi "
         "re-estimates the same effect from the data with its own models (three "
         "outcome models with bootstrap errors, and a doubly robust estimator for a "
-        "two-valued treatment) and returns the final answer to report. `adjust` is "
+        "two-valued treatment) and returns the final answer to report. `x0`/`x1` are "
+        "the two values of `x` your estimate compares (default 0 and 1). `adjust` is "
         "the adjustment set your causal reasoning chose; `estimand` is ate "
         "(everyone), att (rows at x1) or atc (rows at x0). When the question asks for "
         "the effect itself, the answer combines your analysis and elbi's with equal "
