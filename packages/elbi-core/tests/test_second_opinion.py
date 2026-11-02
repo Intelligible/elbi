@@ -253,15 +253,15 @@ def test_spline_ignores_global_random_state_above_the_quantile_subsample() -> No
 
 def test_model_fits_run_on_one_thread(monkeypatch: pytest.MonkeyPatch) -> None:
     """An OpenMP thread per core made fits this small about 20x slower."""
-    from threadpoolctl import threadpool_info
+    from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
 
     seen: set[int] = set()
     model = so._model
 
     def spy(*args: object) -> object:
-        seen.update(
-            i["num_threads"] for i in threadpool_info() if i["user_api"] == "openmp"
-        )
+        # scikit-learn's own count: torch or LightGBM loaded by other tests bring
+        # their own OpenMP runtimes, which these fits never use.
+        seen.add(_openmp_effective_n_threads())
         return model(*args)
 
     monkeypatch.setattr(so, "_model", spy)
