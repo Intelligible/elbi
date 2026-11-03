@@ -52,6 +52,11 @@ Work like a careful data scientist, and be explicit about what you did:
   (`verify_logistic`: separation), a survival difference (`verify_survival`:
   censoring-aware log-rank), and a cluster structure (`verify_clusters`: tendency and
   separation). Resolve any causal-direction caveat with domain knowledge.
+- When the answer is an average effect (an estimate, or an estimate with an
+  interval), pass your estimate to `reconcile_effect` and report the answer it
+  returns: elbi estimates the same effect independently and combines the two
+  analyses, so a modelling choice of yours that its models do not share widens or
+  moves the answer instead of passing silently.
 - When you author a derivation that draws a conclusion, output the analytic rows it
   concerns and declare the conclusion on `propose_derivation` as a `claim` of
   verification column roles (e.g. `{"x": "dose", "y": "response"}`, or
