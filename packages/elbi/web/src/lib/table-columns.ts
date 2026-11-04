@@ -79,11 +79,24 @@ export interface CellSegment {
   href?: string
 }
 
-// A markdown link, or a bare web address up to the next space.
-const LINK = /\[([^\]\n]+)\]\(([^)\s]+)\)|https?:\/\/[^\s<>"]+/gi
+// A markdown link, or a bare web address up to the next space. A markdown address may hold
+// one balanced pair of parentheses, as a Wikipedia address does.
+const LINK = /\[([^\]\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)|https?:\/\/[^\s<>"]+/gi
 const WEB = /^https?:\/\//i
 // Punctuation that ends a sentence rather than an address.
-const TRAILING = /[.,;:!?)\]'"]+$/
+const TRAILING = /[.,;:!?\]'"]+$/
+
+const count = (s: string, ch: string) => s.split(ch).length - 1
+
+// GitHub's autolink rule: a closing parenthesis ends the address only if the address opened
+// one, so "(see https://x.com)" leaves its ")" outside and ".../Foo_(bar)" keeps it.
+function trimAddress(url: string): string {
+  let out = url.replace(TRAILING, "")
+  while (out.endsWith(")") && count(out, ")") > count(out, "(")) {
+    out = out.slice(0, -1).replace(TRAILING, "")
+  }
+  return out
+}
 
 // Splits a cell into plain text and links. Only http and https ever become a link; a
 // markdown link to anything else stays visible as the text it was written as.
@@ -104,7 +117,7 @@ export function cellSegments(text: string): CellSegment[] {
       else plain(m[0])
       at = start + m[0].length
     } else {
-      const url = m[0].replace(TRAILING, "")
+      const url = trimAddress(m[0])
       out.push({ text: url, href: url })
       plain(m[0].slice(url.length))
       at = start + m[0].length

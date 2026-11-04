@@ -151,6 +151,35 @@ describe("cellSegments", () => {
     ])
   })
 
+  // GFM's autolink rule (spec examples 625 and 626): a trailing ")" belongs to the address
+  // only when the address opened it. https://github.github.com/gfm/#autolinks-extension-
+  it.each([
+    ["see https://en.wikipedia.org/wiki/Foo_(bar) now", "https://en.wikipedia.org/wiki/Foo_(bar)"],
+    [
+      "(https://www.google.com/search?q=Markup+(business))",
+      "https://www.google.com/search?q=Markup+(business)",
+    ],
+    [
+      "https://www.google.com/search?q=Markup+(business)))",
+      "https://www.google.com/search?q=Markup+(business)",
+    ],
+    [
+      "https://www.google.com/search?q=(business))+ok",
+      "https://www.google.com/search?q=(business))+ok",
+    ],
+    ["(see https://modal.com/pricing).", "https://modal.com/pricing"],
+  ])("links %s to %s and loses no text", (text, href) => {
+    const segments = cellSegments(text)
+    expect(segments.filter((s) => s.href).map((s) => s.href)).toEqual([href])
+    expect(segments.map((s) => s.text).join("")).toBe(text)
+  })
+
+  it("keeps a balanced parenthesis inside a markdown link's address", () => {
+    expect(cellSegments("[Foo](https://en.wikipedia.org/wiki/Foo_(bar))")).toEqual([
+      { text: "Foo", href: "https://en.wikipedia.org/wiki/Foo_(bar)" },
+    ])
+  })
+
   it("links two addresses separated by a space", () => {
     const links = cellSegments("https://a.example/x https://b.example/y").filter((s) => s.href)
     expect(links.map((s) => s.href)).toEqual(["https://a.example/x", "https://b.example/y"])

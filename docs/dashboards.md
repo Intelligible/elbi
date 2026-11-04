@@ -117,7 +117,7 @@ entry is a field name, or an object that adds a label, a width and wrapping:
 | --- | --- |
 | `field` | The row field the column shows. Required. |
 | `label` | The header text. Defaults to the field name. |
-| `width` | A number of pixels, `"fit"` to size to the content, or `"fill"` to take the space the others leave. Unset sizes the column to its content, as before. |
+| `width` | A number of pixels, `"fit"` to size to the content, or `"fill"` to take the space the others leave. A column with no width beside a `"fill"` one shrinks to its longest word, so give the others a width or `"fit"`. Unset sizes the column to its content, as before. |
 | `wrap` | `false` keeps a cell on one line, clipping what does not fit. Defaults to wrapping. |
 
 Plain names and objects can be mixed, and a tile that lists no `columns` behaves as it
@@ -125,9 +125,13 @@ always did.
 
 The same widths can be set in the UI. Drag the right edge of a column header to resize
 it, double-click the edge to return the column to `"fit"`, or focus it and use the left
-and right arrow keys. The change is saved into the spec as one undoable step, so
-`elbi pull` writes it back to the file and `elbi sync` pushes it, and a width set by hand
-and one dragged are the same value.
+and right arrow keys, which save when the key is released. Each change is saved into the
+spec as one undoable step, so `elbi pull` writes it back to the file and `elbi sync`
+pushes it, and a width set by hand and one dragged are the same value.
+
+Resizing a column on a tile that lists no `columns` writes the columns it shows at that
+moment into the spec. A field the derivation returns later stays off the tile until it is
+added to `columns`.
 
 A cell whose text is an `http` or `https` address, or a `[text](url)` link to one,
 renders as a link that opens in a new tab. No other scheme becomes a link, so a derivation

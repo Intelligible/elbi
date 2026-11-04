@@ -43,7 +43,7 @@ import {
   MIN_COLUMN_WIDTH,
   parseColumns,
 } from "@/lib/table-columns"
-import { EMPTY } from "@/lib/utils"
+import { cn, EMPTY } from "@/lib/utils"
 
 type Row = Record<string, string | number>
 
@@ -86,10 +86,14 @@ function MetricBody({ widget, data }: { widget: Widget; data?: WidgetData }) {
 
 // How far one keypress moves a column edge.
 const KEY_STEP = 10
+const KEY_STEPS: Record<string, number> = { ArrowRight: KEY_STEP, ArrowLeft: -KEY_STEP }
 
+// In an auto-layout table a 1% column shrinks to its content and a 100% one takes the rest.
 function widthStyle(width: ColumnWidth | undefined) {
   if (typeof width === "number") return { width, minWidth: width, maxWidth: width }
-  return width === "fit" ? { width: "1%" } : undefined
+  if (width === "fill") return { width: "100%" }
+  if (width === "fit") return { width: "1%" }
+  return undefined
 }
 
 function Cell({ segments }: { segments: CellSegment[] }) {
@@ -116,7 +120,8 @@ function Cell({ segments }: { segments: CellSegment[] }) {
 }
 
 // The draggable edge of a column header. Dragging previews the width live and saves it on
-// release; a double click returns the column to its content width; the arrow keys nudge it.
+// release; a double click returns the column to its content width; the arrow keys nudge it
+// the same way, saving once the key is released, so a held key is one edit.
 function ResizeHandle({
   column,
   onPreview,
@@ -128,6 +133,7 @@ function ResizeHandle({
 }) {
   const stop = useRef<(() => void) | null>(null)
   useEffect(() => () => stop.current?.(), [])
+  const nudged = useRef<number | null>(null)
 
   const current = (el: HTMLElement) =>
     typeof column.width === "number"
@@ -136,6 +142,8 @@ function ResizeHandle({
   const clamp = (w: number) => Math.max(MIN_COLUMN_WIDTH, w)
 
   const begin = (e: MouseEvent<HTMLDivElement>) => {
+    // A drag whose mouseup never arrived would otherwise keep its listeners for good.
+    stop.current?.()
     e.preventDefault()
     e.stopPropagation()
     const x0 = e.clientX
@@ -156,10 +164,19 @@ function ResizeHandle({
   }
 
   const nudge = (e: KeyboardEvent<HTMLDivElement>) => {
-    const step = e.key === "ArrowRight" ? KEY_STEP : e.key === "ArrowLeft" ? -KEY_STEP : 0
+    const step = KEY_STEPS[e.key]
     if (!step) return
     e.preventDefault()
-    onResize(column.field, clamp(current(e.currentTarget) + step))
+    nudged.current = clamp((nudged.current ?? current(e.currentTarget)) + step)
+    onPreview(nudged.current)
+  }
+
+  const commit = () => {
+    if (nudged.current === null) return
+    const width = nudged.current
+    nudged.current = null
+    onPreview(null)
+    onResize(column.field, width)
   }
 
   return (
@@ -178,6 +195,8 @@ function ResizeHandle({
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={() => onResize(column.field, "fit")}
       onKeyDown={nudge}
+      onKeyUp={commit}
+      onBlur={commit}
     />
   )
 }
@@ -194,7 +213,7 @@ function RowsTable({
   onColumnWidth?: (field: string, width: ColumnWidth) => void
 }) {
   const rowKey = useRowKeys()
-  // The width a column is being dragged to, shown before it is saved.
+  // The width a column is being dragged or nudged to, shown before it is saved.
   const [dragging, setDragging] = useState<{ field: string; width: number } | null>(null)
   const rows = asRows(data?.value)
   if (rows.length === 0) return <div className="text-sm text-text-tertiary">No rows.</div>
@@ -212,7 +231,12 @@ function RowsTable({
             {columns.map((c) => (
               <TableHead
                 key={c.field}
-                className={onColumnWidth ? "relative px-2 py-1 pr-3" : "px-2 py-1"}
+                className={cn(
+                  "px-2 py-1",
+                  onColumnWidth && "relative pr-3",
+                  // A header never wraps, so a label wider than its column ends in an ellipsis.
+                  typeof widthOf(c) === "number" && "overflow-hidden text-ellipsis",
+                )}
                 style={widthStyle(widthOf(c))}
               >
                 {c.label ?? c.field}
@@ -239,16 +263,19 @@ function RowsTable({
               {columns.map((c) => {
                 const width = widthOf(c)
                 // A fit column never wraps; a fixed one wraps unless it says not to, and
-                // then clips rather than pushing its neighbours.
+                // then clips rather than pushing its neighbours. A fixed one that wraps
+                // breaks a long address inside itself rather than drawing over them.
                 const nowrap = width === "fit" || c.wrap === false
+                const fixed = typeof width === "number"
                 return (
                   <TableCell
                     key={c.field}
-                    className={
-                      nowrap
-                        ? `px-2 py-1 whitespace-nowrap${typeof width === "number" ? " overflow-hidden text-ellipsis" : ""}`
-                        : "px-2 py-1"
-                    }
+                    className={cn(
+                      "px-2 py-1",
+                      nowrap && "whitespace-nowrap",
+                      nowrap && fixed && "overflow-hidden text-ellipsis",
+                      !nowrap && fixed && "wrap-break-word",
+                    )}
                     style={widthStyle(width)}
                   >
                     <Cell segments={cellSegments(String(row[c.field] ?? ""))} />

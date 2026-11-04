@@ -297,7 +297,21 @@ describe("a table tile's columns", () => {
       />,
     )
     expect(screen.getByRole("cell", { name: "chat" })).toHaveClass("whitespace-nowrap")
-    expect(screen.getByRole("columnheader", { name: "reason" }).style.width).toBe("")
+    // In an auto-layout table a 100% column takes what the others leave (measured in
+    // Chromium, Firefox and WebKit: 557 of 800px beside a fit and a 200px column).
+    expect(screen.getByRole("columnheader", { name: "reason" }).style.width).toBe("100%")
+  })
+
+  it("keeps a fixed column's long label and long address inside the column", () => {
+    render(
+      <DashboardWidget
+        widget={colTile([{ field: "source", label: "Where the price came from", width: 120 }])}
+        data={colData(ROWS)}
+        variables={{}}
+      />,
+    )
+    expect(screen.getByRole("columnheader")).toHaveClass("overflow-hidden", "text-ellipsis")
+    expect(screen.getByRole("cell")).toHaveClass("wrap-break-word")
   })
 
   it("does not wrap a column that says wrap is false", () => {
@@ -460,6 +474,47 @@ describe("resizing a table column", () => {
     expect(onColumnWidth).toHaveBeenLastCalledWith("reason", 310)
     await user.keyboard("{ArrowLeft}")
     expect(onColumnWidth).toHaveBeenLastCalledWith("reason", 290)
+  })
+
+  it("previews a held arrow key and saves once when it is released", async () => {
+    const user = userEvent.setup()
+    const onColumnWidth = vi.fn()
+    render(
+      <DashboardWidget widget={tile} data={data} variables={{}} onColumnWidth={onColumnWidth} />,
+    )
+    const handle = screen.getByRole("separator", { name: "Resize column reason" })
+    handle.focus()
+    await user.keyboard("{ArrowRight>3}")
+    expect(onColumnWidth).not.toHaveBeenCalled()
+    expect(handle).toHaveAttribute("aria-valuenow", "330")
+    await user.keyboard("{/ArrowRight}")
+    expect(onColumnWidth).toHaveBeenCalledExactlyOnceWith("reason", 330)
+  })
+
+  it("saves a nudged width when focus leaves before the key is released", async () => {
+    const user = userEvent.setup()
+    const onColumnWidth = vi.fn()
+    render(
+      <DashboardWidget widget={tile} data={data} variables={{}} onColumnWidth={onColumnWidth} />,
+    )
+    const handle = screen.getByRole("separator", { name: "Resize column reason" })
+    handle.focus()
+    await user.keyboard("{ArrowLeft>}")
+    fireEvent.blur(handle)
+    expect(onColumnWidth).toHaveBeenCalledExactlyOnceWith("reason", 290)
+  })
+
+  it("drops a drag whose release never arrived when the next one starts", () => {
+    const onColumnWidth = vi.fn()
+    render(
+      <DashboardWidget widget={tile} data={data} variables={{}} onColumnWidth={onColumnWidth} />,
+    )
+    const handle = screen.getByRole("separator", { name: "Resize column reason" })
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseUp(window, { clientX: 160 })
+    fireEvent.mouseUp(window, { clientX: 400 })
+    expect(onColumnWidth).toHaveBeenCalledExactlyOnceWith("reason", 360)
   })
 
   it("does not start a row click or a tile drag from the handle", () => {

@@ -334,6 +334,19 @@ describe("resizing a table column on the board", () => {
     expect(await screen.findByText(/Not saved: viz\.columns: bad width/)).toBeInTheDocument()
   })
 
+  it("saves a held arrow key once and undoes it in one step", async () => {
+    const user = userEvent.setup()
+    const handle = await open(tableDashboard({ columns: [{ field: "reason", width: 300 }] }))
+    handle.focus()
+    await user.keyboard("{ArrowRight>3}{/ArrowRight}")
+    await waitFor(() => expect(saveDashboard).toHaveBeenCalled())
+    expect(saveDashboard).toHaveBeenCalledTimes(1)
+    expect(savedColumns()).toEqual({ columns: [{ field: "reason", width: 330 }] })
+    await user.keyboard("{Control>}z{/Control}")
+    await waitFor(() => expect(saveDashboard).toHaveBeenCalledTimes(2))
+    expect(savedColumns()).toEqual({ columns: [{ field: "reason", width: 300 }] })
+  })
+
   it("undoes a width with the same keystroke as any other edit", async () => {
     const user = userEvent.setup()
     const handle = await open(tableDashboard({ columns: [{ field: "reason", width: 300 }] }))
