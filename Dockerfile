@@ -19,7 +19,7 @@ COPY packages/elbi/web/ ./
 RUN npm run build -- --outDir /web/dist --emptyOutDir
 
 ############################  Stage 2: python builder  ########################
-FROM python:3.12-slim-bookworm@sha256:782412e85d0f0984994c290652577d4018aff08145c85b262bb63dc0c7522254 AS builder
+FROM python:3.15-slim-bookworm@sha256:4e03260adeeebafccd084f3584e6b84823aba5651cfb53ef8a078ed441ddf9cd AS builder
 COPY --from=ghcr.io/astral-sh/uv:0.9.18 /uv /uvx /bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -49,7 +49,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --all-packages --all-extras
 
 ############################  Stage 3: runtime  ###############################
-FROM python:3.12-slim-bookworm@sha256:782412e85d0f0984994c290652577d4018aff08145c85b262bb63dc0c7522254
+FROM python:3.15-slim-bookworm@sha256:4e03260adeeebafccd084f3584e6b84823aba5651cfb53ef8a078ed441ddf9cd
 LABEL org.opencontainers.image.source="https://github.com/Intelligible/elbi" \
       org.opencontainers.image.description="Verified-analysis chat app" \
       org.opencontainers.image.licenses="Apache-2.0"
