@@ -275,6 +275,14 @@ class Monitor(Wire):
     last_value: float | None = None
     last_checked_at: str | None = None
     status: str
+    breach_keys: list[str] | None = None
+
+
+class MonitorColumn(Wire):
+    """A column of a derivation's output, and whether a monitor can aggregate it."""
+
+    name: str
+    numeric: bool
 
 
 class MonitorSnapshot(Wire):
@@ -289,6 +297,7 @@ class MonitorSnapshot(Wire):
     score: float | None = None
     reason: str
     source_verdict: str | None = None
+    breach_keys: list[str] | None = None
 
 
 class MonitorIncident(Wire):
@@ -306,6 +315,7 @@ class MonitorIncident(Wire):
     reason: str
     snapshots: int
     open: bool
+    keys: list[str] | None = None
 
 
 class MonitorHistory(Wire):

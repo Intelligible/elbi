@@ -56,7 +56,7 @@ def effective_prefs(store: Store) -> dict[str, tuple[bool, bool]]:
 
 def _name_keys(keys: Any) -> str:
     """A monitor's breaching keys for a body: whole names to the cap, then a count."""
-    names = [str(k) for k in keys or []]
+    names = [str(k) or "(blank)" for k in keys or []]
     shown: list[str] = []
     length = 0
     for name in names:
@@ -79,7 +79,7 @@ def _render(action: str, data: Mapping[str, Any]) -> tuple[str, str, str, str]:
         keys = _name_keys(data.get("breach_keys"))
         return (
             f"Monitor {data.get('monitor', '')!r} detected an anomaly",
-            f"{reason}. Breaching: {keys}" if keys else reason,
+            f"{reason.rstrip('.')}. Breaching: {keys}" if keys else reason,
             "metric_monitor",
             str(data.get("monitor_id") or ""),
         )

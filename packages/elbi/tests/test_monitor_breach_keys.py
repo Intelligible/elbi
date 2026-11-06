@@ -17,7 +17,7 @@ import pytest
 from elbi import notifications
 from elbi.db import Store, open_store
 from elbi.monitoring import BREACH_WIDENED, MonitorService, Reading
-from elbi.serve import _breach_keys
+from elbi.serve import _breach_keys, _output_columns
 from elbi_core.errors import ModelError
 
 READING: dict[str, Any] = {"value": Reading(0.0, ())}
@@ -127,6 +127,36 @@ def test_a_restart_inside_an_open_incident_does_not_realert(store: Store) -> Non
     ]
 
 
+def test_a_row_that_broke_during_a_restart_is_announced(store: Store) -> None:
+    first = _service(store)
+    monitor_id = _monitor(first)
+    _read(first, monitor_id)
+    _read(first, monitor_id, "compactor")
+    restarted = _service(store)  # the incident remembers what it announced
+    _read(restarted, monitor_id, "compactor", "lead_capture")
+    assert [a["event"] for a in ALERTS] == [
+        "metric.anomaly_detected",
+        BREACH_WIDENED,
+    ]
+    assert ALERTS[1]["new_keys"] == ["lead_capture"]
+
+
+def test_the_history_and_monitor_carry_the_breaching_keys(store: Store) -> None:
+    service = _service(store)
+    monitor_id = _monitor(service)
+    _read(service, monitor_id)
+    _read(service, monitor_id, "compactor")
+    _read(service, monitor_id, "compactor", "lead_capture")
+    history = service.history(monitor_id)
+    assert [s.breach_keys for s in history.snapshots] == [
+        [],
+        ["compactor"],
+        ["compactor", "lead_capture"],
+    ]
+    assert history.incidents[0].keys == ["compactor", "lead_capture"]
+    assert service.get(monitor_id).breach_keys == ["compactor", "lead_capture"]
+
+
 def test_an_unkeyed_monitor_behaves_as_before(store: Store) -> None:
     service = MonitorService(
         store=store,
@@ -175,6 +205,24 @@ def test_the_opening_notification_names_the_breaching_rows(store: Store) -> None
     assert row.body == "1 is above the ceiling 0. Breaching: compactor"
 
 
+def test_a_blank_key_reads_as_blank_and_the_reason_keeps_one_stop(
+    store: Store,
+) -> None:
+    notifications.create_notifications(
+        store,
+        "metric.anomaly_detected",
+        {
+            "event": "metric.anomaly_detected",
+            "monitor_id": "m1",
+            "monitor": "workflow errors",
+            "reason": "2 is above the ceiling 0.",
+            "breach_keys": ["", "(blank)"],
+        },
+    )
+    [row] = store.list_notifications()
+    assert row.body == "2 is above the ceiling 0. Breaching: (blank), (blank)"
+
+
 def test_a_row_that_flaps_is_announced_once_per_incident(store: Store) -> None:
     service = _service(store)
     monitor_id = _monitor(service)
@@ -213,6 +261,23 @@ def test_changing_the_key_column_does_not_announce_every_row_as_new(
     assert ALERTS[1]["new_keys"] == ["Lead capture"]
 
 
+def test_rewriting_the_same_config_keeps_what_the_incident_announced(
+    store: Store,
+) -> None:
+    service = _service(store)
+    monitor_id = _monitor(service)
+    _read(service, monitor_id)
+    _read(service, monitor_id, "compactor")
+    # The same measure, keys in another order and the default agg spelled out.
+    service.update(
+        monitor_id,
+        config={"measure": {"key": "id", "agg": "sum", "column": "error_breach"}},
+        max_value=0,
+    )
+    _read(service, monitor_id, "compactor", "lead_capture")
+    assert [a["event"] for a in ALERTS] == ["metric.anomaly_detected", BREACH_WIDENED]
+
+
 def test_only_rows_with_a_positive_numeric_measure_breach() -> None:
     rows = [
         {"id": "b", "breach": 1},
@@ -226,13 +291,13 @@ def test_only_rows_with_a_positive_numeric_measure_breach() -> None:
     assert _breach_keys(rows, "breach", "id") == ("a", "b")
 
 
-def test_a_breaching_row_without_a_key_is_named_blank() -> None:
+def test_a_breaching_row_without_a_key_is_the_empty_key() -> None:
     rows = [
         {"id": None, "breach": 1},
         {"id": "", "breach": 1},
         {"id": "a", "breach": 1},
     ]
-    assert _breach_keys(rows, "breach", "id") == ("(blank)", "a")
+    assert _breach_keys(rows, "breach", "id") == ("", "a")
 
 
 def test_a_key_column_no_row_has_is_an_error_not_an_empty_breach() -> None:
@@ -258,3 +323,18 @@ def test_a_long_breach_list_names_whole_keys_and_counts_the_rest(store: Store) -
     assert 0 < len(named) < len(keys)
     assert named == keys[: len(named)]
     assert rest == f"{len(keys) - len(named)} more"
+
+
+def test_output_columns_keep_first_seen_order_and_mark_the_numeric_ones() -> None:
+    rows = [
+        {"workflow": "a", "breach": 1, "note": None, "ok": True},
+        {"workflow": "b", "breach": 0.5, "note": None, "ok": False, "late": 3},
+    ]
+    assert [(c.name, c.numeric) for c in _output_columns(rows)] == [
+        ("workflow", False),
+        ("breach", True),
+        ("note", True),
+        ("ok", True),
+        ("late", True),
+    ]
+    assert _output_columns([{"id": 1}, {"id": "x"}])[0].numeric is False
