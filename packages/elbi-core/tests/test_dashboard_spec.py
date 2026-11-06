@@ -96,6 +96,26 @@ def test_manifest_round_trips() -> None:
     assert DashboardSpec.from_manifest(spec.to_manifest()) == spec
 
 
+def test_a_table_may_configure_columns_as_names_or_objects() -> None:
+    # A column is a field name, or an object adding a label, a pixel width (or fit
+    # or fill) and wrapping. The web app reads both, and a width the UI saves must
+    # survive a pull.
+    manifest = _manifest()
+    table = manifest["pages"][1]["widgets"][0]
+    table["viz"] = {
+        "columns": [
+            "region",
+            {"field": "reason", "label": "Why", "width": 420, "wrap": True},
+            {"field": "source", "width": "fit"},
+        ],
+        "pageSize": 20,
+    }
+
+    assert is_valid_dashboard(manifest)
+    spec = DashboardSpec.from_manifest(manifest)
+    assert spec.to_manifest()["pages"][1]["widgets"][0]["viz"] == table["viz"]
+
+
 def test_derivation_names_covers_binds_and_dynamic_options() -> None:
     spec = DashboardSpec.from_manifest(_manifest())
     assert set(spec.derivation_names()) == {"regions", "revenue_rows"}
