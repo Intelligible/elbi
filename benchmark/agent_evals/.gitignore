@@ -1,0 +1,11 @@
+# benchmark checkouts, data, generated exams and run outputs
+causalds/upstream/
+causalds/exam_official.json
+causalds/runs_*/
+causalds/*.log
+qrdata/upstream/
+qrdata/data/
+qrdata/exam_pilot.json
+qrdata/exam_heldout.json
+qrdata/runs_*/
+qrdata/*.log
