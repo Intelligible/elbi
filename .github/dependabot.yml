@@ -32,21 +32,28 @@ updates:
       #
       # Lift this together with the pin, when xgboost-cpu ships a macOS wheel.
       - dependency-name: "autogluon.tabular"
+      # Every litellm since 1.104 requires huggingface-hub<2.
+      - dependency-name: "huggingface-hub"
+        update-types: ["version-update:semver-major"]
     groups:
       # Split so a dev-tooling bump (ruff/mypy/pytest) never waits on a runtime
-      # dependency's review, and vice versa.
+      # dependency's review, and vice versa. Majors stay out, as in the npm groups below:
+      # anthropic 2 rode in with twenty minor bumps.
       dev-dependencies:
         dependency-type: "development"
         patterns: ["*"]
+        update-types: ["minor", "patch"]
       runtime-dependencies:
         dependency-type: "production"
         patterns: ["*"]
+        update-types: ["minor", "patch"]
       # Everything the two above do not reach. `dependency-type` classifies declared
       # dependencies only, so a transitive one matches neither group and arrives as a pull
       # request of its own: four of them showed up at once for packages nothing here names.
       # Listed last because a dependency joins the first group it matches.
       transitive-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The web UI. Absent until three npm security updates arrived ungrouped and one at a
   # time; without an entry here Dependabot opens security fixes individually and never
@@ -65,6 +72,9 @@ updates:
       # done deliberately, then lift this and move the floor.
       - dependency-name: "@tanstack/react-table"
         update-types: ["version-update:semver-major"]
+      # 2.3.0 bounds a resize by the grid container's height.
+      - dependency-name: "react-grid-layout"
+        versions: ["2.3.0"]
     groups:
       # The exception to the majors rule below. @vitest/coverage-v8 peers on an exact
       # vitest version ("5.0.1", not "^5"), so the two are one unit.
@@ -96,3 +106,8 @@ updates:
     schedule:
       interval: "weekly"
     labels: ["dependencies", "docker", "skip-news"]
+    ignore:
+      # A new Python is a platform move, not a refresh: the test matrix stops at 3.13, the
+      # main image fails to build on 3.15.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
