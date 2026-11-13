@@ -24,7 +24,7 @@ export function schemaDiagnostics(state: EditorState, validate: ValidateFunction
   if (validate(parsed)) return []
   return (validate.errors ?? []).map((error) => {
     const { from, to } = locate(state, error)
-    return { from, to, severity: "error" as const, message: describe(error) }
+    return { from, to, severity: "error" as const, message: describeError(error) }
   })
 }
 
@@ -96,7 +96,7 @@ function decodePointer(step: string): string {
   return step.replace(/~1/g, "/").replace(/~0/g, "~")
 }
 
-function describe(error: ErrorObject): string {
+function describeError(error: ErrorObject): string {
   const where = error.instancePath || "this object"
   if (error.keyword === "required") {
     return `${where} is missing "${(error.params as { missingProperty: string }).missingProperty}"`
