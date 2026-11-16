@@ -16,6 +16,7 @@ import atexit
 import contextlib
 import importlib.util
 import inspect
+import json
 import logging
 import os
 import sys
@@ -96,6 +97,8 @@ from elbi_core import (
     verify_trend,
 )
 from elbi_core.cache import LocalCacheStore, derivation_tag
+from elbi_core.citations import check as check_citations
+from elbi_core.citations import extract_citations
 from elbi_core.config import ColumnSpec, DatasetSpec
 from elbi_core.data import Table
 from elbi_core.errors import CertificateError, ElbiError
@@ -254,6 +257,7 @@ _ANNOTATIONS: dict[str, ToolAnnotations] = {
             "extrapolation",
             "proportional_hazards",
             "stationarity",
+            "citations",
         )
     },
     "verify": READS,
@@ -404,6 +408,7 @@ def build_server(
             _register(server, derivation, serving, attestation, certificate)
     _register_search(server, registry)
     _register_component_search(server, registry, serving, embedder)
+    _register_citation_check(server, registry, serving, make_runner)
     if operations is not None:
         _register_operate(server, operations)
     if warehouse_schema is not None:
@@ -1676,6 +1681,73 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         "verify_* tool when you are not sure which check applies."
     )
     server.tool(name="verify", description=verify_tool.__doc__)(verify_tool)
+
+
+def _register_citation_check(
+    server: MCPServer,
+    registry: Registry,
+    serving: Serving,
+    make_runner: Callable[[], Runner],
+) -> None:
+    """Register ``verify_citations``: an answer's numbers against what it cites.
+
+    Each derivation goes through the same :class:`Serving` cache ``run_<name>`` uses,
+    so the values checked are the ones an agent was given. Its version is read first,
+    as ``Serving`` reads it, so it never names a newer version than the value it
+    labels.
+    """
+
+    async def verify_citations(text: str, derivations: list[str] | None = None) -> str:
+        served = {d.name: d for d in registry if d.is_served and d.is_certified}
+        cited = {citation.name for citation in extract_citations(text)}
+        for name in derivations or []:
+            if name not in served:
+                raise MCPError(
+                    INVALID_PARAMS,
+                    f"{name!r} is not a served derivation; find one with "
+                    "search_derivations.",
+                )
+        names = dict.fromkeys([n for n in served if n in cited] + (derivations or []))
+        sources: dict[str, object] = {}
+        versions: dict[str, str] = {}
+        for name in names:
+            try:
+                runner = make_runner()
+                versions[name] = await asyncio.to_thread(runner.data_version, name)
+                outcome = await serving.serve(name)
+            except ElbiError as exc:
+                raise MCPError(
+                    INVALID_PARAMS, f"Could not serve derivation {name!r}: {exc}"
+                ) from exc
+            sources[name] = _served_value(served[name], outcome)
+        return check_citations(text, sources, versions).render()
+
+    verify_citations.__doc__ = (
+        "Check an answer before you send it: every number in `text` against the "
+        "served outputs it cites, and every `name@hash` citation against the version "
+        "served now. A number is supported when a served value, rounded to the "
+        "precision the number is written with, equals it (a percent may be that "
+        "value x100); any other number is unsupported, and a citation of an older "
+        "version is stale. Checks every served derivation cited as `name@hash` in the "
+        "text, plus any named in `derivations`. Returns faithful / unfaithful / "
+        "inconclusive (no numbers), naming each failure. It reads numbers, not words: "
+        "a sign carried by a verb ('fell 21.9%') is compared by magnitude."
+    )
+    server.tool(name="verify_citations", description=verify_citations.__doc__)(
+        verify_citations
+    )
+
+
+def _served_value(derivation: Derivation, outcome: ServeOutcome) -> object:
+    if outcome.structured is not None:
+        return outcome.structured
+    contract = derivation.serve
+    # A json serve has no structured content, so its text is parsed back past the
+    # ``# title`` header ``Serve.render`` prepends.
+    if contract is not None and contract.format == "json":
+        title = f"# {contract.title}\n\n" if contract.title else ""
+        return json.loads(outcome.text.removeprefix(title))
+    return outcome.text
 
 
 def _format_result(result: Any) -> str:
