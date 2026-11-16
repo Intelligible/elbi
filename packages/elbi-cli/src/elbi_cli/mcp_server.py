@@ -27,6 +27,7 @@ from typing import Any, Protocol
 
 from mcp.server import MCPServer, NotificationOptions
 from mcp.server.mcpserver import Context as McpContext
+from mcp.server.mcpserver.exceptions import ResourceError
 from mcp.shared.exceptions import MCPError
 from mcp.types import (
     INVALID_PARAMS,
@@ -482,6 +483,16 @@ async def _notify_tools_changed(ctx: McpContext[Any, Any]) -> None:
         )
 
 
+async def _serve_or_refuse(
+    serving: Serving, name: str, params: dict[str, Any] | None = None
+) -> ServeOutcome:
+    """The SDK forwards only a ``ResourceError``'s text, from a tool or a resource."""
+    try:
+        return await serving.serve(name, params)
+    except ElbiError as exc:
+        raise ResourceError(str(exc)) from exc
+
+
 def _register(
     server: MCPServer,
     derivation: Derivation,
@@ -507,7 +518,7 @@ def _register(
 
     async def read() -> str:
         # A resource read returns the full rendering, not the trimmed preview.
-        return (await serving.serve(name)).text
+        return (await _serve_or_refuse(serving, name)).text
 
     read.__name__ = name
     read.__doc__ = description
@@ -523,7 +534,9 @@ def _register(
     )(read)
 
     async def run() -> CallToolResult:
-        return _tool_result(await serving.serve(name), name, attestation, certificate)
+        return _tool_result(
+            await _serve_or_refuse(serving, name), name, attestation, certificate
+        )
 
     run.__name__ = tool_name(name)
     run.__doc__ = f"Run the {name} derivation and return its served output."
@@ -541,7 +554,10 @@ def _build_param_tool(
 
     async def run(**kwargs: Any) -> CallToolResult:
         return _tool_result(
-            await serving.serve(name, kwargs), name, attestation, certificate
+            await _serve_or_refuse(serving, name, kwargs),
+            name,
+            attestation,
+            certificate,
         )
 
     signature_params: list[inspect.Parameter] = []

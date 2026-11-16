@@ -168,9 +168,12 @@ def _registry() -> Registry:
     return registry
 
 
-def _call(name: str, arguments: dict[str, Any]) -> CallToolResult:
+def _call(
+    name: str, arguments: dict[str, Any], registry: Registry | None = None
+) -> CallToolResult:
     """Build the server, connect an in-memory client, and call one tool."""
-    registry = _registry()
+    if registry is None:
+        registry = _registry()
     server = build_server(registry, lambda: Runner(registry))
 
     async def run() -> CallToolResult:
@@ -446,6 +449,8 @@ def test_reading_an_unknown_derivation_resource_is_invalid_params() -> None:
                 raised.value.error.data
             )
 
+    asyncio.run(run())
+
 
 # --- Narrowing over the wire (a row/column policy through the real client) ---
 
@@ -519,3 +524,64 @@ def _signed_proof() -> tuple[Any, dict[str, Any], dict[str, Any]]:
         )
     )
     return issuer, {"verdict": "supported"}, certificate
+
+
+# --- Derivation errors over the wire ---
+
+_REFUSAL = "model file does not match its manifest"
+
+
+def _failing_registry() -> Registry:
+    from elbi_core.errors import DerivationError
+
+    registry = Registry()
+
+    @derivation(
+        name="refuse_with_param",
+        params={"x": param.integer()},
+        serve=serve.json(),
+        registry=registry,
+    )
+    def refuse_with_param(ctx: Context) -> Artifact:
+        raise DerivationError(_REFUSAL)
+
+    @derivation(name="refuse", serve=serve.json(), registry=registry)
+    def refuse(ctx: Context) -> Artifact:
+        raise DerivationError(_REFUSAL)
+
+    @derivation(name="crash", serve=serve.json(), registry=registry)
+    def crash(ctx: Context) -> Artifact:
+        raise ValueError("internal detail")
+
+    return registry
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments"),
+    [("run_refuse_with_param", {"x": 1}), ("run_refuse", {})],
+)
+def test_an_elbi_error_reaches_the_agent(tool: str, arguments: dict[str, Any]) -> None:
+    result = _call(tool, arguments, _failing_registry())
+    assert result.is_error is True
+    assert _REFUSAL in _text(result)
+
+
+def test_any_other_failure_stays_hidden() -> None:
+    result = _call("run_crash", {}, _failing_registry())
+    assert result.is_error is True
+    assert "internal detail" not in _text(result)
+
+
+def test_an_elbi_error_reaches_a_resource_reader() -> None:
+    from mcp.shared.exceptions import MCPError
+
+    registry = _failing_registry()
+    server = build_server(registry, lambda: Runner(registry))
+
+    async def run() -> None:
+        async with Client(server) as client:
+            with pytest.raises(MCPError) as raised:
+                await client.read_resource("elbi://derivation/refuse")
+            assert _REFUSAL in raised.value.error.message
+
+    asyncio.run(run())
