@@ -83,6 +83,7 @@ from elbi_core import (
     verify_multiverse,
     verify_normality,
     verify_overlap,
+    verify_pooled_effect,
     verify_powerlaw,
     verify_prediction,
     verify_proportional_hazards,
@@ -243,6 +244,7 @@ _ANNOTATIONS: dict[str, ToolAnnotations] = {
             "prediction",
             "experiment",
             "proportions",
+            "pooled_effect",
             "forecast",
             "calibration",
             "logistic",
@@ -1460,6 +1462,39 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         verify_proportions_tool
     )
 
+    async def verify_pooled_effect_tool(
+        dataset: str,
+        effect: str,
+        se: str,
+        study: str | None = None,
+        new_effect: float | None = None,
+        new_se: float | None = None,
+    ) -> str:
+        table = _load(dataset)
+        report = await asyncio.to_thread(
+            verify_pooled_effect,
+            table.rows,
+            effect,
+            se,
+            study=study,
+            new_effect=new_effect,
+            new_se=new_se,
+        )
+        return f"Pooled '{effect}' across studies:\n\n{report.render()}"
+
+    verify_pooled_effect_tool.__doc__ = (
+        "Verify an effect pooled across several past studies before trusting it, one "
+        "row per study with its `effect` and standard error `se`: DerSimonian-Laird "
+        "random effects with tau², I², the Hartung-Knapp and prediction intervals, "
+        "then fewer than five studies, heterogeneity under which fixed and random "
+        "effects disagree on sign, and one study carrying the result. Given "
+        "`new_effect` and `new_se`, also checks the pooled estimate as a prior for "
+        "that new study (prior-data conflict). Returns sound / unsound / inconclusive."
+    )
+    server.tool(
+        name="verify_pooled_effect", description=verify_pooled_effect_tool.__doc__
+    )(verify_pooled_effect_tool)
+
     async def verify_forecast_tool(
         dataset: str, time: str, actual: str, forecast: str, seasonal_period: int = 1
     ) -> str:
@@ -1625,6 +1660,11 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         count: str | None = None,
         predictors: list[str] | None = None,
         covariates: list[str] | None = None,
+        effect: str | None = None,
+        se: str | None = None,
+        study: str | None = None,
+        new_effect: float | None = None,
+        new_se: float | None = None,
     ) -> str:
         table = _load(dataset)
         claim = {
@@ -1659,6 +1699,11 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
                 "count": count,
                 "predictors": predictors,
                 "covariates": covariates,
+                "effect": effect,
+                "se": se,
+                "study": study,
+                "new_effect": new_effect,
+                "new_se": new_se,
             }.items()
             if v is not None
         }
@@ -1669,9 +1714,10 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         "Verify a claim by running every applicable check at once. Assign the columns "
         "of your claim to roles (x/y for an effect, group/value for a comparison, "
         "variant/metric for an A/B test, y_true/y_pred for a classifier, time/event/"
-        "group for survival, features for clusters, …); the engine selects the checks "
-        "whose preconditions the data satisfies, runs them all, and returns one "
-        "verdict (sound / unsound / invalid / inconclusive): a validity failure "
+        "group for survival, features for clusters, effect/se for studies to pool, …); "
+        "the engine selects the checks whose preconditions the data satisfies, runs "
+        "them all, and returns one verdict (sound / unsound / invalid / "
+        "inconclusive): a validity failure "
         "(sample-ratio mismatch) voids the result. Prefer this over picking a single "
         "verify_* tool when you are not sure which check applies."
     )

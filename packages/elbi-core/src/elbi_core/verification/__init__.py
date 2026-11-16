@@ -23,6 +23,7 @@ from .leakage import verify_leakage
 from .missingness import verify_missingness
 from .multiverse import MultiverseReport, verify_multiverse
 from .overlap import verify_overlap
+from .pooled import verify_pooled_effect
 from .powerlaw import verify_powerlaw
 from .prediction import verify_prediction
 from .proportions import verify_proportions
@@ -65,6 +66,7 @@ __all__ = [
     "verify_multiverse",
     "verify_normality",
     "verify_overlap",
+    "verify_pooled_effect",
     "verify_powerlaw",
     "verify_prediction",
     "verify_proportional_hazards",

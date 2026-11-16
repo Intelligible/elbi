@@ -41,6 +41,7 @@ from .iv import verify_iv
 from .leakage import verify_leakage
 from .missingness import verify_missingness
 from .overlap import verify_overlap
+from .pooled import verify_pooled_effect
 from .prediction import verify_prediction
 from .proportions import verify_proportions
 from .rdd import verify_rdd
@@ -437,6 +438,8 @@ def _estimate_label(
         )
     if gate == "prediction":
         return f"held-out predictive skill = {effect:.3g}"
+    if gate == "pooled-effect":
+        return f"{effect:+.3g} in {claim.get('effect')}, pooled by random effects"
     return f"estimate = {effect:+.3g}"
 
 
@@ -728,6 +731,28 @@ _CATALOG: tuple[_Check, ...] = (
         lambda rows, c: verify_proportions(rows, c["group"], c["outcome"]),
     ),
     _Check(
+        # new_effect and new_se are scalars, not columns.
+        "pooled-effect",
+        lambda rows, c: (
+            "a pooled effect needs numeric effect and standard-error columns"
+            if _has(c, "effect", "se")
+            and _numeric(rows, c["effect"])
+            and _numeric(rows, c["se"])
+            else None
+        ),
+        lambda rows, c: verify_pooled_effect(
+            rows,
+            c["effect"],
+            c["se"],
+            study=c.get("study"),
+            new_effect=(
+                float(c["new_effect"]) if c.get("new_effect") is not None else None
+            ),
+            new_se=float(c["new_se"]) if c.get("new_se") is not None else None,
+        ),
+        certifying=True,
+    ),
+    _Check(
         "trend",
         lambda rows, c: (
             "a trend needs a numeric time index and a numeric value"
@@ -968,6 +993,7 @@ def _why_not(check: _Check, rows: Rows, claim: Claim) -> str:
         "screen": "needs a two-level group and 2+ numeric outcome columns",
         "rtm": "needs before, after and a two-level (baseline-selected) group",
         "proportions": "needs two categorical columns",
+        "pooled-effect": "needs numeric effect and se (standard error) columns",
         "trend": "needs a numeric time index and value",
         "did-pretrends": "needs group, time, value and a treatment start",
         "forecast": "needs time, actual and forecast columns",

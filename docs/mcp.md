@@ -16,6 +16,14 @@ For each derivation, the local server registers:
 Each call builds a fresh runner, so the agent always sees a current computation
 against your local data bindings.
 
+### Verification tools
+
+Alongside the derivations, the server registers the verification oracle as `verify_*`
+tools, one per claim shape, plus `verify`, which runs every check that applies to a
+claim's column roles. Each takes a dataset name and the columns the claim is about, and
+returns a **sound / unsound / inconclusive** verdict with the checks behind it; see
+[Verification](./authoring.md#verification).
+
 ## Shaping results for the model
 
 LLM accuracy drops on large inline tables, so a `table` tool does not dump every

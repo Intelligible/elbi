@@ -584,6 +584,19 @@ def _t_sf(t: float, df: float) -> float:
     return _betai(df / 2.0, 0.5, df / (df + t * t))
 
 
+def _t_inv(p: float, df: float) -> float:
+    """Two-sided Student-t critical value: the ``t`` at which ``_t_sf`` equals ``p``."""
+    if df <= 0 or p <= 0:
+        return math.inf
+    lo, hi = 0.0, 1.0
+    while _t_sf(hi, df) > p:
+        lo, hi = hi, hi * 2.0
+    for _ in range(100):
+        mid = (lo + hi) / 2.0
+        lo, hi = (mid, hi) if _t_sf(mid, df) > p else (lo, mid)
+    return (lo + hi) / 2.0
+
+
 def _f_sf(f: float, d1: float, d2: float) -> float:
     """Upper-tail probability P(F >= f) for an F distribution with ``(d1, d2)`` df."""
     if f <= 0 or d1 <= 0 or d2 <= 0:
