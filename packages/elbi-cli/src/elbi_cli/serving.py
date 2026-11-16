@@ -30,6 +30,7 @@ from elbi_core import (
     stamp_provenance,
     validate_components,
 )
+from elbi_core.versioning import inputs_version
 
 ParamValues = Mapping[str, Any]
 
@@ -54,6 +55,10 @@ class Served:
     artifact: Artifact
     data_version: str
     computed_at: float
+    # `computed_at` is this layer's TTL clock; `cached_at` is when the runner's cache
+    # first computed the version (None without an entry).
+    inputs_version: str
+    cached_at: float | None
 
 
 @dataclass(frozen=True)
@@ -126,17 +131,18 @@ class Serving:
             # except a `components` contract, which needs one to stamp provenance.
             # Read before computing, as the cached path does, so the stamp never
             # names a newer version than the one the artifact was computed under.
-            data_version = (
-                await _run(runner.data_version, name, params)
+            data_version, inputs = (
+                await _versions(runner, name, params)
                 if contract.format == "components"
-                else None
+                else ("", "")
             )
             artifact = await self._compute(runner, name, params)
-            outcome = self._present(name, contract, artifact, "uncached", data_version)
+            served = Served(artifact, data_version, self._clock(), inputs, None)
+            outcome = self._present(name, contract, "uncached", served)
             return outcome, None
 
         runner = self._make_runner()
-        data_version = await _run(runner.data_version, name, params)
+        data_version, inputs = await _versions(runner, name, params)
         last = self._last.get(key)
 
         if last is not None:
@@ -149,9 +155,7 @@ class Serving:
                 # the version it was actually computed under -- `last.data_version`,
                 # which happens to equal `data_version` here, but only because of
                 # `fresh`.
-                outcome = self._present(
-                    name, contract, last.artifact, "hit", last.data_version
-                )
+                outcome = self._present(name, contract, "hit", last)
                 return outcome, data_version
             if cache.expire is None or age < cache.expire:
                 # Stale (within the expire ceiling): serve last-good now, refresh
@@ -161,15 +165,14 @@ class Serving:
                 # equal the freshly computed `data_version` here -- that mismatch is
                 # exactly what makes this stale. Stamping with the wrong one would
                 # claim a served component is current when it is not.
-                outcome = self._present(
-                    name, contract, last.artifact, "stale", last.data_version
-                )
+                outcome = self._present(name, contract, "stale", last)
                 return outcome, data_version
             # Past `expire`: hard miss: block for fresh, never serve this old.
 
         artifact = await self._compute(runner, name, params)
-        self._last[key] = Served(artifact, data_version, self._clock())
-        outcome = self._present(name, contract, artifact, "miss", data_version)
+        served = await self._served(runner, artifact, data_version, inputs)
+        self._last[key] = served
+        outcome = self._present(name, contract, "miss", served)
         return outcome, data_version
 
     async def _compute(
@@ -189,25 +192,33 @@ class Serving:
                 raise ComponentError(f"derivation {name!r}: {exc}") from None
         return artifact
 
+    async def _served(
+        self, runner: Runner, artifact: Artifact, data_version: str, inputs: str
+    ) -> Served:
+        cached_at = await _in_thread(lambda: runner.computed_at(data_version))
+        return Served(artifact, data_version, self._clock(), inputs, cached_at)
+
     def _present(
-        self,
-        name: str,
-        contract: Serve,
-        artifact: Artifact,
-        status: str,
-        data_version: str | None = None,
+        self, name: str, contract: Serve, status: str, served: Served
     ) -> ServeOutcome:
         """Render an artifact for serving.
 
         For a ``components`` contract with a known ``data_version``, every item is
         stamped with this derivation's name and *this artifact's* version (the
-        value was validated as a list of components when it was computed).
+        value was validated as a list of components when it was computed), plus the
+        data it rests on and when that version was first computed. Both come from
+        stored state, so serving an unchanged version twice stamps the same thing.
         """
-        if contract.format == "components" and data_version is not None:
+        artifact = served.artifact
+        if contract.format == "components":
             artifact = Artifact.components(
                 [
                     stamp_provenance(
-                        item, derivation=name, derivation_version=data_version
+                        item,
+                        derivation=name,
+                        derivation_version=served.data_version,
+                        inputs_version=served.inputs_version,
+                        computed_at=_iso_utc(served.cached_at),
                     )
                     for item in artifact.value
                 ]
@@ -257,12 +268,14 @@ class Serving:
             try:
                 self._contract(name)  # never refresh what cannot be served
                 runner = self._make_runner()
-                data_version = await _run(runner.data_version, name, params)
+                data_version, inputs = await _versions(runner, name, params)
                 # Caches the artifact and not a rendering: this task inherits the
                 # context of whichever caller triggered it, so it must persist nothing
                 # scoped to them into an entry every caller reads.
                 artifact = await self._compute(runner, name, params)
-                self._last[key] = Served(artifact, data_version, self._clock())
+                self._last[key] = await self._served(
+                    runner, artifact, data_version, inputs
+                )
             except Exception as exc:  # stale-if-error: any failure keeps last-good
                 # Keep serving the last-good value, but surface the failure rather
                 # than swallowing it silently.
@@ -275,12 +288,18 @@ class Serving:
         asyncio.get_running_loop().create_task(refresh())
 
 
-async def _run(
-    fn: Callable[[str, ParamValues], str], name: str, params: ParamValues
-) -> str:
-    """Run a blocking runner call in a thread so the event loop is never blocked."""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: fn(name, params))
+async def _versions(runner: Runner, name: str, params: ParamValues) -> tuple[str, str]:
+    """The composite data version and the hash of its input versions alone."""
+    version, _code, inputs = await _in_thread(
+        lambda: runner.version_parts(name, params)
+    )
+    return version, inputs_version(inputs)
+
+
+def _iso_utc(timestamp: float | None) -> str | None:
+    if timestamp is None:
+        return None
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(round(timestamp, 6)))
 
 
 async def _in_thread(thunk: Callable[[], _T]) -> _T:

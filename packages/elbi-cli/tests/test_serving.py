@@ -385,6 +385,49 @@ def test_components_hit_keeps_the_same_stamped_version(tmp_path: Path) -> None:
     assert _stamped(second)["provenance"] == _stamped(first)["provenance"]
 
 
+def test_components_freshness_is_stable_for_a_version_and_moves_with_data(
+    tmp_path: Path,
+) -> None:
+    from elbi_core.cache import LocalCacheStore
+
+    serving, base = _build_components(tmp_path)
+    now = [1_800_000_000.0]
+    store = LocalCacheStore(tmp_path / "cache")
+    registry = serving._registry
+
+    def make_runner() -> Runner:
+        return Runner(
+            registry,
+            bindings=DataBindings(bindings={"n": "n.csv"}),
+            base_dir=base,
+            store=store,
+            clock=lambda: now[0],
+        )
+
+    serving._make_runner = make_runner
+
+    async def serve_once() -> dict:
+        return _stamped(await serving.serve("facts"))["provenance"]
+
+    first = asyncio.run(serve_once())
+    again = asyncio.run(serve_once())  # a hit
+    assert again == first
+    assert first["computed_at"] == "2027-01-15T08:00:00Z"
+
+    # A restarted server (new Serving, same persisted cache) stamps the same values:
+    # the time comes from the stored entry, not from when this process looked.
+    restarted = Serving(registry, make_runner)
+    assert _stamped(asyncio.run(restarted.serve("facts")))["provenance"] == first
+
+    now[0] += 500  # the data changes later, so the new version is computed later
+    (base / "n.csv").write_text("value\n9\n", encoding="utf-8")
+    fresh = Serving(registry, make_runner)
+    moved = _stamped(asyncio.run(fresh.serve("facts")))["provenance"]
+    assert moved["inputs_version"] != first["inputs_version"]
+    assert moved["derivation_version"] != first["derivation_version"]
+    assert moved["computed_at"] != first["computed_at"]
+
+
 def test_components_stale_serve_keeps_the_old_version_not_the_new_one(
     tmp_path: Path,
 ) -> None:
@@ -421,6 +464,8 @@ def test_components_uncached_still_gets_a_version_stamped(tmp_path: Path) -> Non
     outcome = asyncio.run(scenario())
     assert outcome.status == "uncached"
     assert _stamped(outcome)["provenance"]["derivation_version"]
+    assert _stamped(outcome)["provenance"]["inputs_version"]
+    assert "computed_at" not in _stamped(outcome)["provenance"]
 
 
 def test_components_uncached_stamps_the_version_it_was_computed_from(

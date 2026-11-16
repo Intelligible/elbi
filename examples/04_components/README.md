@@ -26,7 +26,9 @@ reasoning actually sees) and the full component objects -- `structure`,
 automatically at serve time from this derivation's own content-hash version,
 so a consumer can check whether a component is still current the same way
 Elbi decides any derivation is stale, without ORC needing any refresh
-machinery of its own. `search_components` finds these statements by keyword or
+machinery of its own. `provenance.inputs_version` and `provenance.computed_at`
+say which data a statement rests on and when it was computed.
+`search_components` finds these statements by keyword or
 meaning, the same way `search_derivations` finds a derivation.
 
 `fixtures/generate_customers.py` regenerates the committed fixture (seeded, so

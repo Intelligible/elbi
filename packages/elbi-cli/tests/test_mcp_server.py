@@ -1250,6 +1250,8 @@ def test_search_components_tool_returns_matches_with_provenance() -> None:
     matches = out.structured_content["components"]
     assert matches[0]["provenance"]["derivation"] == "facts"
     assert matches[0]["provenance"]["derivation_version"]
+    assert matches[0]["provenance"]["inputs_version"]
+    assert matches[0]["provenance"]["computed_at"].endswith("Z")
 
 
 def test_search_components_tool_ignores_non_components_derivations() -> None:

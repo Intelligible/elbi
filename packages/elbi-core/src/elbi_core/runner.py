@@ -114,6 +114,14 @@ class Runner:
         plan = self._plan(name, params or {}, stack=())
         return plan.data_version, plan.code_version, dict(plan.input_versions)
 
+    def computed_at(self, data_version: str) -> float | None:
+        """When the cache first computed ``data_version`` (epoch seconds).
+
+        None when nothing is cached under it.
+        """
+        cached = self._get(data_version)
+        return None if cached is None else cached.computed_at
+
     def _resolve(
         self,
         name: str,

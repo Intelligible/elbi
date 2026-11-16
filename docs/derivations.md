@@ -128,7 +128,12 @@ these shallow: agents fill flat arguments more reliably than nested ones.
 `components` is the one format with checks of its own. On serve every item is
 validated against the ORC component schema (ids unique) and stamped with
 `provenance.derivation` and `provenance.derivation_version`, so a consumer can tell
-whether a statement is still current. Under `verify()` the artifact gets one check
+whether a statement is still current. Two more fields say how fresh it is and what it
+rests on: `provenance.inputs_version`, a hash of the input versions alone (it moves when
+the data does, not when only the code does), and `provenance.computed_at`, the UTC time
+that version was first computed, stable across re-serves of one version. A derivation
+with caching off keeps no entry, so it carries no `computed_at`. `search_components`
+returns the same provenance. Under `verify()` the artifact gets one check
 per component: sound when it carries `evidence` (a `domain_knowledge` note is
 exempt), `invalid` when an item fails the schema. That check is structural, so an
 agent-proposed components derivation is held for a human by default; see

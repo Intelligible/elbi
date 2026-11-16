@@ -396,3 +396,10 @@ def derivation_version(
     """
     ordered = [f"{name}={version}" for name, version in sorted(input_versions.items())]
     return compose(code, params, *ordered)
+
+
+def inputs_version(input_versions: Mapping[str, str]) -> str:
+    """Hash of the input versions alone, so it moves with data, not code or params."""
+    return compose(
+        *(f"{name}={version}" for name, version in sorted(input_versions.items()))
+    )
