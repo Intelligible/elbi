@@ -512,6 +512,7 @@ def _seed_namespace(
             on_materialise=lambda: _note_data_mode("materialised"),
         )
         namespace["sql"] = _nb_sql
+        namespace["run"] = _nb_run
     elif data_path:
         with contextlib.suppress(Exception):
             namespace["data"] = json.loads(Path(data_path).read_text(encoding="utf-8"))
@@ -585,14 +586,33 @@ def _note_data_mode(mode: str) -> None:
         _DATA_MODE = mode
 
 
+def _nb_run(name: str, **params: Any) -> Any:
+    """Compute the project's derivation ``name`` server-side and return its value.
+
+    A table comes back as a list of row dicts (the shape of ``data[...]``), a json
+    derivation as its dict, components as their list. Params travel as JSON.
+    """
+    reply = _roundtrip({"type": "run_request", "name": name, "params": params})
+    if reply.get("error"):
+        raise _data.NotebookQueryError(str(reply["error"]))
+    return reply.get("value")
+
+
 def _request_query(*, sql: str = "", table: str = "", limit: int) -> dict[str, Any]:
-    """Ask the host to run a query server-side and block for its reply.
+    """Ask the host to run a query server-side and block for its reply."""
+    return _roundtrip(
+        {"type": "query_request", "sql": sql, "table": table, "limit": limit}
+    )
+
+
+def _roundtrip(request: dict[str, Any]) -> dict[str, Any]:
+    """Send a request to the host and block for its ``query_reply``.
 
     Same shape as :func:`_request_input`: emit a request, then read the parent's reply
-    off stdin while still servicing widget traffic, so a query inside a cell that also
+    off stdin while still servicing widget traffic, so a request inside a cell that also
     has live widgets does not deadlock or mistake a comm message for its answer.
     """
-    _send({"type": "query_request", "sql": sql, "table": table, "limit": limit})
+    _send(request)
     while True:
         line = sys.stdin.readline()
         if not line:

@@ -29,6 +29,7 @@ from .kernel import (
     Kernel,
     OutputSink,
     QueryResolver,
+    RunResolver,
     SubprocessKernel,
 )
 from .parameters import (
@@ -51,6 +52,7 @@ __all__ = [
     "Notebook",
     "OutputSink",
     "QueryResolver",
+    "RunResolver",
     "SubprocessKernel",
     "analyze_code",
     "apply_overrides",

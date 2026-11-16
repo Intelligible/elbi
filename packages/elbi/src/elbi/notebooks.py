@@ -38,6 +38,7 @@ from elbi_core.notebook import (
     CommListener,
     DependencyGraph,
     Kernel,
+    RunResolver,
     SubprocessKernel,
     analyze_code,
     apply_overrides,
@@ -327,6 +328,7 @@ class NotebookService:
         load_datasets: Callable[[], dict[str, Rows]],
         dataset_names: Callable[[], list[str]] | None = None,
         query_resolver: QueryResolver | None = None,
+        run_resolver: RunResolver | None = None,
         backend: str = "subprocess",
         egress: str | Sequence[str] = "full",
         image: str | None = None,
@@ -348,6 +350,7 @@ class NotebookService:
         # eager path still applies, so nothing that constructs this service breaks.
         self._dataset_names = dataset_names
         self._query_resolver = query_resolver
+        self._run_resolver = run_resolver
         self._backend = backend
         self._egress = egress
         self._image = image
@@ -481,6 +484,7 @@ class NotebookService:
         Without this, ``sql()`` in a cell has nothing to resolve against and the
         notebook is a longer way round to the data than the query API beside it.
         """
+        kernel.set_run_resolver(self._run_resolver)
         if self._query_resolver is None:
             return
         resolver = self._query_resolver
