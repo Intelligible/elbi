@@ -26,6 +26,8 @@ from typing import Any
 import httpx
 import typer
 
+from elbi_core.config import PROJECT_CONFIG_FILENAME
+
 from .._console import arrow, fail, ok, warn
 from ..config_sync import SyncError, surfaces
 from ..config_sync import pull as pull_engine
@@ -104,9 +106,9 @@ def _export(client: httpx.Client, root: Path, out: Path) -> None:
                 "evidence-only (records/derivations/*.source.py), not importable. "
                 "Run export from the checkout that produced this deployment."
             )
-        yaml_src = root / "elbi.yaml"
+        yaml_src = root / PROJECT_CONFIG_FILENAME
         if yaml_src.is_file():
-            shutil.copy2(yaml_src, stage / "elbi.yaml")
+            shutil.copy2(yaml_src, stage / PROJECT_CONFIG_FILENAME)
 
         counts: dict[str, int] = {}
         for row in _get(client, "/api/derivations"):

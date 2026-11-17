@@ -29,7 +29,7 @@ from .data import Table, load_table
 from .errors import ConfigError, DataBindingError
 from .sandbox import ComputeProfileError, ComputeProfiles
 
-PROJECT_FILENAME = "elbi.yaml"
+PROJECT_CONFIG_FILENAME = "elbi.yaml"
 DEV_BINDINGS_FILENAME = "elbi.dev.yaml"
 
 #: File formats a compute engine can scan without loading fully (out of core).
@@ -461,7 +461,7 @@ class DataBindings:
         """
         declared = tuple(dataset_names)
         problems = [
-            f"dataset {name!r} is declared in {PROJECT_FILENAME} but has no "
+            f"dataset {name!r} is declared in {PROJECT_CONFIG_FILENAME} but has no "
             f"binding in {DEV_BINDINGS_FILENAME}"
             for name in declared
             if name not in self.bindings
@@ -470,7 +470,7 @@ class DataBindings:
             if name not in declared:
                 problems.append(
                     f"{DEV_BINDINGS_FILENAME} binds {name!r}, which "
-                    f"{PROJECT_FILENAME} does not declare"
+                    f"{PROJECT_CONFIG_FILENAME} does not declare"
                 )
             is_file_path = isinstance(source, str) and not _ENV_REF.match(source)
             if is_file_path and not self.resolve(name, base_dir).is_file():

@@ -22,6 +22,8 @@ from typing import Any
 import httpx
 import typer
 
+from elbi_core.config import PROJECT_CONFIG_FILENAME
+
 from .._console import arrow, console, fail, ok, warn
 from ..config_sync import Change, SyncError
 from ..config_sync import plan as plan_engine
@@ -63,7 +65,7 @@ def resolve_host(root: Path, target: str | None, url: str | None) -> str:
         if target:
             raise SyncError(
                 f"no target named {target!r}: this project declares none. "
-                "Add a `targets:` mapping to elbi.yaml, or pass --url."
+                f"Add a `targets:` mapping to {PROJECT_CONFIG_FILENAME}, or pass --url."
             )
         return (given or DEFAULT_URL).rstrip("/")
 

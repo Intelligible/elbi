@@ -9,6 +9,8 @@ from pathlib import Path
 
 import typer
 
+from elbi_core.config import PROJECT_CONFIG_FILENAME
+
 from .._console import arrow, console, fail, ok
 from ..scaffold import WORKSPACE_PACKAGES, render
 
@@ -82,7 +84,7 @@ def init(
             "re-verify each claim[/dim]"
         )
     else:
-        console.print("  # add datasets and derivations to elbi.yaml")
+        console.print(f"  # add datasets and derivations to {PROJECT_CONFIG_FILENAME}")
         console.print("  elbi validate")
 
 

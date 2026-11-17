@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from elbi_core.config import ProjectConfig
+from elbi_core.config import PROJECT_CONFIG_FILENAME, ProjectConfig
 from elbi_core.sandbox import (
     ComputeProfile,
     ComputeProfileError,
@@ -88,7 +88,7 @@ def resolve_profiles(config: ProjectConfig | None = None) -> ComputeProfiles:
             raise ComputeProfileError(f"{PROFILES_ENV} must be a JSON list of profiles")
         definitions = parsed
     elif config is not None and config.compute_profiles:
-        definitions, source = config.compute_profiles, "elbi.yaml"
+        definitions, source = config.compute_profiles, PROJECT_CONFIG_FILENAME
     else:
         definitions, source = BUILTIN_PROFILES, "built-in defaults"
 

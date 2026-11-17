@@ -7,7 +7,11 @@ from pathlib import Path
 import typer
 
 from elbi_core import SpecValidationError, validate_manifest
-from elbi_core.config import DEV_BINDINGS_FILENAME, PROJECT_FILENAME, DataBindings
+from elbi_core.config import (
+    DEV_BINDINGS_FILENAME,
+    PROJECT_CONFIG_FILENAME,
+    DataBindings,
+)
 from elbi_core.errors import ElbiError
 
 from .._console import arrow, fail, ok, warn
@@ -62,7 +66,7 @@ def validate(
         if undeclared:
             warn(
                 f"{derivation.name}: reads dataset(s) not declared in "
-                f"{PROJECT_FILENAME}: {', '.join(sorted(undeclared))}"
+                f"{PROJECT_CONFIG_FILENAME}: {', '.join(sorted(undeclared))}"
             )
         ok(f"{derivation.name}")
 
@@ -83,7 +87,7 @@ def validate(
     if wiring_problems:
         fail(
             f"{len(wiring_problems)} wiring problem(s) between "
-            f"{PROJECT_FILENAME} and {DEV_BINDINGS_FILENAME}"
+            f"{PROJECT_CONFIG_FILENAME} and {DEV_BINDINGS_FILENAME}"
         )
     if failed_derivation_count or wiring_problems:
         raise typer.Exit(code=1)
