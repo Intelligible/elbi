@@ -280,6 +280,15 @@ def test_wiring_problems_resolve_relative_path_against_base_dir(
     assert bindings.wiring_problems(["sales"], project_dir) == ()
 
 
+def test_wiring_problems_report_bindings_that_are_not_files(tmp_path: Path) -> None:
+    (tmp_path / "fixtures").mkdir()
+    bindings = DataBindings(bindings={"orders": "./fixtures", "sales": ""})
+    assert bindings.wiring_problems(["orders", "sales"], tmp_path) == (
+        "dataset 'orders' is bound to './fixtures', which is not an existing file",
+        "dataset 'sales' is bound to '', which is not an existing file",
+    )
+
+
 def test_wiring_problems_list_unbound_in_declared_order_then_bindings_by_name(
     tmp_path: Path,
 ) -> None:
@@ -296,7 +305,7 @@ def test_wiring_problems_list_unbound_in_declared_order_then_bindings_by_name(
         "dataset 'alpha' is declared in elbi.yaml but has no binding in elbi.dev.yaml",
         "elbi.dev.yaml binds 'beta', which elbi.yaml does not declare",
         "elbi.dev.yaml binds 'orphan', which elbi.yaml does not declare",
-        "dataset 'orphan' is bound to ./missing.csv, which does not exist",
+        "dataset 'orphan' is bound to './missing.csv', which is not an existing file",
     )
 
 

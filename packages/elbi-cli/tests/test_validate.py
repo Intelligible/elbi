@@ -121,7 +121,7 @@ def test_validate_fails_on_binding_to_missing_file(
     )
     assert result.exit_code == 1, result.output
     assert "fixtures/missing.csv" in result.output
-    assert "does not exist" in result.output
+    assert "not an existing file" in result.output
 
 
 def test_validate_skips_wiring_check_without_dev_bindings(

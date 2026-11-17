@@ -473,9 +473,10 @@ class DataBindings:
                     f"{PROJECT_FILENAME} does not declare"
                 )
             is_file_path = isinstance(source, str) and not _ENV_REF.match(source)
-            if is_file_path and not self.resolve(name, base_dir).exists():
+            if is_file_path and not self.resolve(name, base_dir).is_file():
                 problems.append(
-                    f"dataset {name!r} is bound to {source}, which does not exist"
+                    f"dataset {name!r} is bound to {source!r}, which is not an "
+                    "existing file"
                 )
         return tuple(problems)
 
