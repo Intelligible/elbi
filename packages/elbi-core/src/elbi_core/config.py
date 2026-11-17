@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -441,6 +441,43 @@ class DataBindings:
             return versioning.hash_json(probe.rows), None
         table = _run_sql(spec, query=spec.query, table=spec.table)
         return versioning.hash_json(table.rows), table
+
+    def wiring_problems(
+        self, dataset_names: Iterable[str], base_dir: Path
+    ) -> tuple[str, ...]:
+        """Describe each way these bindings disagree with the declared datasets.
+
+        A declared dataset must be bound, a bound dataset must be declared, and a
+        file-path binding must point at an existing file. An ``env(VAR)`` or SQL
+        binding is checked by name only, so an unset variable is not a problem.
+
+        Args:
+            dataset_names: The datasets declared in the project configuration.
+            base_dir: The directory a relative file path is resolved against.
+
+        Returns:
+            One message per problem, empty when the bindings agree. Unbound declared
+            datasets come first in declaration order, then bindings in name order.
+        """
+        declared = tuple(dataset_names)
+        problems = [
+            f"dataset {name!r} is declared in {PROJECT_FILENAME} but has no "
+            f"binding in {DEV_BINDINGS_FILENAME}"
+            for name in declared
+            if name not in self.bindings
+        ]
+        for name, source in sorted(self.bindings.items()):
+            if name not in declared:
+                problems.append(
+                    f"{DEV_BINDINGS_FILENAME} binds {name!r}, which "
+                    f"{PROJECT_FILENAME} does not declare"
+                )
+            is_file_path = isinstance(source, str) and not _ENV_REF.match(source)
+            if is_file_path and not self.resolve(name, base_dir).exists():
+                problems.append(
+                    f"dataset {name!r} is bound to {source}, which does not exist"
+                )
+        return tuple(problems)
 
     def _require(self, dataset: str) -> Any:
         if dataset not in self.bindings:

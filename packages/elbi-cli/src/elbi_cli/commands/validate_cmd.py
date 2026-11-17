@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from elbi_core import SpecValidationError, validate_manifest
+from elbi_core.config import DEV_BINDINGS_FILENAME, PROJECT_FILENAME, DataBindings
 from elbi_core.errors import ElbiError
 
 from .._console import arrow, fail, ok, warn
@@ -25,6 +26,13 @@ def validate(
     base_dir = directory.resolve()
     try:
         project = load_project(base_dir)
+        # `exists()`: an absent file loads as empty bindings, which would report
+        # every declared dataset as unbound.
+        bindings = (
+            DataBindings.load(project.bindings_path)
+            if project.bindings_path.exists()
+            else None
+        )
     except ElbiError as exc:
         fail(str(exc))
         raise typer.Exit(code=1) from exc
@@ -36,13 +44,13 @@ def validate(
     )
 
     declared = set(project.config.dataset_names)
-    problems = 0
+    failed_derivation_count = 0
 
     for derivation in project.registry:
         try:
             validate_manifest(derivation.to_manifest())
         except SpecValidationError as exc:
-            problems += 1
+            failed_derivation_count += 1
             fail(f"{derivation.name}: {exc}")
             continue
 
@@ -58,7 +66,24 @@ def validate(
             )
         ok(f"{derivation.name}")
 
-    if problems:
-        fail(f"{problems} derivation(s) failed validation")
+    wiring_problems: tuple[str, ...] = ()
+    if bindings is None:
+        arrow(f"wiring check skipped: no {DEV_BINDINGS_FILENAME} found")
+    else:
+        wiring_problems = bindings.wiring_problems(
+            project.config.dataset_names, project.base_dir
+        )
+        for problem in wiring_problems:
+            fail(problem)
+
+    if failed_derivation_count:
+        fail(f"{failed_derivation_count} derivation(s) failed validation")
+    else:
+        ok("all derivations conform to the spec")
+    if wiring_problems:
+        fail(
+            f"{len(wiring_problems)} wiring problem(s) between "
+            f"{PROJECT_FILENAME} and {DEV_BINDINGS_FILENAME}"
+        )
+    if failed_derivation_count or wiring_problems:
         raise typer.Exit(code=1)
-    ok("all derivations conform to the spec")

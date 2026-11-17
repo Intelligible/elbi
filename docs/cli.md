@@ -46,8 +46,10 @@ elbi validate [--directory .]
 ```
 
 Loads the project, imports every derivation (which validates its manifest against
-the spec), and warns about dataset inputs not declared in `elbi.yaml`.
-Exits non-zero on any failure.
+the spec), and warns about dataset inputs not declared in `elbi.yaml`. When
+`elbi.dev.yaml` is present, it also checks that datasets declared in `elbi.yaml` are
+bound in `elbi.dev.yaml`, and vice-versa, and that every file-path binding points at
+a file that exists. Exits non-zero on any failure.
 
 ## `certificate`
 
