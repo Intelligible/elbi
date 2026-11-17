@@ -62,7 +62,7 @@ def validate(
         if undeclared:
             warn(
                 f"{derivation.name}: reads dataset(s) not declared in "
-                f"elbi.yaml: {', '.join(sorted(undeclared))}"
+                f"{PROJECT_FILENAME}: {', '.join(sorted(undeclared))}"
             )
         ok(f"{derivation.name}")
 
