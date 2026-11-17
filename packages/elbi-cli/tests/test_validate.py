@@ -170,3 +170,20 @@ def test_validate_reports_unreadable_dev_bindings(
     )
     assert result.exit_code == 1, result.output
     assert "cannot read" in result.output
+
+
+@pytest.mark.parametrize(
+    "relative", [".elbi/lifecycle.yaml", ".elbi/authored/score.yaml"]
+)
+def test_validate_reports_corrupt_state_record(
+    scaffold: Callable[[str], Path], runner: CliRunner, relative: str
+) -> None:
+    project = scaffold("standard")
+    record = project / relative
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text("a: [\n", encoding="utf-8")
+    result = runner.invoke(
+        app, ["validate", "-C", str(project)], catch_exceptions=False
+    )
+    assert result.exit_code == 1, result.output
+    assert "invalid YAML" in result.output

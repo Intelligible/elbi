@@ -19,6 +19,7 @@ import yaml
 
 from elbi_core import Dataset, Derivation, Serve, certify, propose
 from elbi_core import serve as serve_builders
+from elbi_core.config import read_yaml_mapping
 from elbi_core.errors import ConfigError
 from elbi_core.registry import Registry
 from elbi_core.versioning import source_version
@@ -115,12 +116,15 @@ class AuthoredStore:
         return True
 
     def read(self, name: str) -> dict[str, Any] | None:
-        """Return the stored record for ``name``, or None if absent."""
+        """Return the stored record for ``name``, or None if absent or empty.
+
+        Raises:
+            ConfigError: if the stored record cannot be read as a YAML mapping.
+        """
         path = self._path(name)
         if not path.exists():
             return None
-        record: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
-        return record
+        return read_yaml_mapping(path) or None
 
     def load_one(self, name: str, registry: Registry) -> bool:
         """Reconstruct one stored derivation into ``registry``; whether it loaded.

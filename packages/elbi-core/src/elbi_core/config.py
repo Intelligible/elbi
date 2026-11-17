@@ -170,7 +170,7 @@ class ProjectConfig:
     @classmethod
     def load(cls, path: Path) -> ProjectConfig:
         """Load and validate a project config from ``path``."""
-        data = _read_yaml_mapping(path)
+        data = read_yaml_mapping(path)
 
         project = data.get("project")
         if not isinstance(project, str) or not project:
@@ -345,7 +345,7 @@ class DataBindings:
         """Load bindings from ``path``; an absent file yields empty bindings."""
         if not path.exists():
             return cls(bindings={})
-        data = _read_yaml_mapping(path)
+        data = read_yaml_mapping(path)
         raw = data.get("data", {})
         if not isinstance(raw, dict):
             raise ConfigError(f"{path}: 'data' must be a mapping of dataset to source")
@@ -540,7 +540,16 @@ def _resolve_env(value: str, dataset: str) -> str:
     return resolved
 
 
-def _read_yaml_mapping(path: Path) -> dict[str, Any]:
+def read_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Read a YAML file whose top level is a mapping; an empty file reads as ``{}``.
+
+    Every way the file can fail to load (missing, unreadable, not UTF-8, invalid
+    YAML, not a mapping) raises :class:`ConfigError`, so a command that reports
+    configuration errors reports these too, for every file read through here.
+
+    Raises:
+        ConfigError: if the file cannot be read as a YAML mapping.
+    """
     if not path.exists():
         raise ConfigError(f"configuration file not found: {path}")
     try:
