@@ -544,6 +544,10 @@ def _read_yaml_mapping(path: Path) -> dict[str, Any]:
         raise ConfigError(f"configuration file not found: {path}")
     try:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ConfigError(f"{path}: cannot read: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"{path}: not valid UTF-8: {exc}") from exc
     except yaml.YAMLError as exc:
         raise ConfigError(f"{path}: invalid YAML: {exc}") from exc
     if loaded is None:

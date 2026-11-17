@@ -157,3 +157,16 @@ def test_validate_reports_malformed_dev_bindings(
     )
     assert result.exit_code == 1, result.output
     assert "'data' must be a mapping" in result.output
+
+
+def test_validate_reports_unreadable_dev_bindings(
+    scaffold: Callable[[str], Path], runner: CliRunner
+) -> None:
+    project = scaffold("standard")
+    (project / "elbi.dev.yaml").unlink()
+    (project / "elbi.dev.yaml").mkdir()
+    result = runner.invoke(
+        app, ["validate", "-C", str(project)], catch_exceptions=False
+    )
+    assert result.exit_code == 1, result.output
+    assert "cannot read" in result.output

@@ -178,6 +178,20 @@ def test_project_config_missing_file(tmp_path: Path) -> None:
         ProjectConfig.load(tmp_path / "absent.yaml")
 
 
+def test_project_config_unreadable_file(tmp_path: Path) -> None:
+    path = tmp_path / "elbi.yaml"
+    path.mkdir()
+    with pytest.raises(ConfigError, match="cannot read"):
+        ProjectConfig.load(path)
+
+
+def test_bindings_not_utf8(tmp_path: Path) -> None:
+    path = tmp_path / "elbi.dev.yaml"
+    path.write_bytes(b"data:\n  sales: \xff\xfe\n")
+    with pytest.raises(ConfigError, match="not valid UTF-8"):
+        DataBindings.load(path)
+
+
 def test_bindings_absent_file_is_empty(tmp_path: Path) -> None:
     bindings = DataBindings.load(tmp_path / "elbi.dev.yaml")
     assert bindings.bindings == {}
