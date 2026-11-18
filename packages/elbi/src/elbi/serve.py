@@ -351,11 +351,14 @@ def build(
         # event loop this kernel thread lacks, and returns the full value rather than
         # the serve contract's ``max_rows`` cut.
         try:
-            if not project.registry.get(name).is_served:
+            derivation = project.registry.get(name)
+            if not derivation.is_served:
                 return {
                     "error": f"derivation {name!r} is internal (no serve contract) and "
                     "cannot be run from a notebook"
                 }
+            if not derivation.is_certified:
+                return {"error": f"derivation {name!r} is not certified"}
             return {"value": make_runner().run(name, params).value}
         except ElbiError as exc:
             return {"error": str(exc)}

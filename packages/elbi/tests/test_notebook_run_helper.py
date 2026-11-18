@@ -46,6 +46,12 @@ def total(ctx: Context) -> Artifact:
 def helper(ctx: Context) -> Artifact:
     """Internal step, no serve contract."""
     return Artifact.json({"n": 1})
+
+
+@derivation(inputs={"sales": Dataset("sales")}, serve=serve.json(), status="proposed")
+def draft(ctx: Context) -> Artifact:
+    """Served, but not certified yet."""
+    return Artifact.json({"n": 1})
 '''
 
 
@@ -93,3 +99,4 @@ def test_run_computes_the_projects_derivation(
         assert '"text/plain": "30"' in run("run('total', floor=25)['total']")
         assert "nope" in run("run('nope')")
         assert "'helper' is internal" in run("run('helper')")
+        assert "'draft' is not certified" in run("run('draft')")
