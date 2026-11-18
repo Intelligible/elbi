@@ -162,7 +162,7 @@ def test_percent_and_fraction_convert_only_in_the_direction_the_unit_implies() -
     assert _verdict("97.7 percent", 0.977) == "faithful"
     assert _verdict("97.7 pct", 0.977) == "faithful"
     assert _verdict("97.7%", 97.7) == "faithful"
-    assert _verdict("0.977", 97.7) == "faithful"
+    assert _verdict("0.977", 97.7) == "unfaithful"
     assert _verdict("0.977%", 97.7) == "unfaithful"
     assert _verdict("9770", 97.7) == "unfaithful"
 
@@ -295,9 +295,15 @@ def test_faithful_report_renders_every_check() -> None:
     )
 
 
-def test_a_fraction_of_a_stored_percent_renders_its_conversion() -> None:
-    lines = check("0.977", {"d": {"v": 97.7}}, {}).render().splitlines()
-    assert "- [ok] 0.977: d $.v = 97.7 (/100)" in lines
+def test_a_plain_number_is_never_a_hundredth_of_a_served_value() -> None:
+    report = check("3 outages, a ratio of 0.3", {"d": {"n": 312.0, "pct": 28.6}}, {})
+    assert report.verdict == "unfaithful"
+    assert not any(s.supported for s in report.numbers)
+
+
+def test_a_huge_exponent_is_unsupported_not_a_crash() -> None:
+    assert _verdict("1e309", 5) == "unfaithful"
+    assert _verdict("0.0e400", 5) == "unfaithful"
 
 
 def test_nothing_to_check_against_says_so() -> None:

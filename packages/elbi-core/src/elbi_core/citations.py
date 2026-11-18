@@ -1,9 +1,8 @@
 """Check the numbers an answer states against the served outputs it cites.
 
 A written number is supported when a served value, rounded to the precision it is
-written with, equals it, also read as a percent of a fraction (``28.6%`` for
-``0.2857``) or a fraction of a percent when the number's unit says so. Nothing else
-is accepted.
+written with, equals it. A number with a percent unit may also be a served fraction
+times 100 (``28.6%`` for ``0.2857``). Nothing else is accepted.
 
 Extraction is lexical: words are not read, so a sign carried by a verb ("fell
 21.9%") is compared by magnitude. Numbers that label rather than claim (dates, list
@@ -214,7 +213,7 @@ def check(
 def _support(mention: Mention, leaves: list[tuple[str, Leaf]]) -> Support:
     # The conversion the unit implies is tried first, so `5%` reports `rate = 0.05`
     # before a count of 5 that happens to round the same.
-    for scale in (100.0, 1.0) if mention.percent else (1.0, 0.01):
+    for scale in (100.0, 1.0) if mention.percent else (1.0,):
         for name, leaf in leaves:
             if _rounds_to(leaf.value * scale, mention):
                 return Support(mention, name, leaf.path, leaf.value, scale)
@@ -222,8 +221,13 @@ def _support(mention: Mention, leaves: list[tuple[str, Leaf]]) -> Support:
 
 
 def _rounds_to(value: float, mention: Mention) -> bool:
+    if not math.isfinite(mention.value):
+        return False
     candidate = value if mention.signed else abs(value)
-    half = 0.5 * 10.0**-mention.precision
+    try:
+        half = 0.5 * 10.0**-mention.precision
+    except OverflowError:  # a finite number written as 0.0e400
+        return False
     # Inclusive of half a unit so either rounding of a tie passes; the 1e-9 factor
     # only absorbs float error.
     return abs(candidate - mention.value) <= half * (1 + 1e-9)
@@ -240,7 +244,7 @@ def _render_support(support: Support) -> str:
     written = support.mention.text.strip()
     if not support.supported:
         return f"- [FAIL] {written}: no served value rounds to it"
-    scale = {100.0: " (x100)", 0.01: " (/100)"}.get(support.scale, "")
+    scale = " (x100)" if support.scale == 100.0 else ""
     source = f"{support.derivation} {support.path} = {support.value:.10g}"
     return f"- [ok] {written}: {source}{scale}"
 

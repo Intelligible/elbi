@@ -1692,46 +1692,68 @@ def _register_citation_check(
     """Register ``verify_citations``: an answer's numbers against what it cites.
 
     Each derivation goes through the same :class:`Serving` cache ``run_<name>`` uses,
-    so the values checked are the ones an agent was given. Its version is read first,
-    as ``Serving`` reads it, so it never names a newer version than the value it
-    labels.
+    so the values checked are the ones an agent was given, labelled with the version
+    each was computed under. With caching off ``Serving`` reads none, so it is read
+    before the serve and never names a newer version than the value it labels.
     """
 
-    async def verify_citations(text: str, derivations: list[str] | None = None) -> str:
+    async def verify_citations(
+        text: str,
+        derivations: list[str] | None = None,
+        params: dict[str, dict[str, Any]] | None = None,
+    ) -> str:
         served = {d.name: d for d in registry if d.is_served and d.is_certified}
-        cited = {citation.name for citation in extract_citations(text)}
-        for name in derivations or []:
+        params = params or {}
+        requested = [*(derivations or []), *params]
+        for name in requested:
             if name not in served:
                 raise MCPError(
                     INVALID_PARAMS,
                     f"{name!r} is not a served derivation; find one with "
                     "search_derivations.",
                 )
-        names = dict.fromkeys([n for n in served if n in cited] + (derivations or []))
+        cited = {citation.name for citation in extract_citations(text)}
+        names = dict.fromkeys([n for n in served if n in cited] + requested)
         sources: dict[str, object] = {}
         versions: dict[str, str] = {}
+        unserved: dict[str, str] = {}
         for name in names:
+            values = params.get(name) or {}
             try:
-                runner = make_runner()
-                versions[name] = await asyncio.to_thread(runner.data_version, name)
-                outcome = await serving.serve(name)
+                pre = None
+                if not served[name].cache.enabled:
+                    runner = make_runner()
+                    pre = await asyncio.to_thread(runner.data_version, name, values)
+                outcome = await serving.serve(name, values)
             except ElbiError as exc:
+                if name not in requested:
+                    unserved[name] = str(exc)
+                    continue
                 raise MCPError(
                     INVALID_PARAMS, f"Could not serve derivation {name!r}: {exc}"
                 ) from exc
+            version = outcome.version or pre
+            if version is not None:
+                versions[name] = version
             sources[name] = _served_value(served[name], outcome)
-        return check_citations(text, sources, versions).render()
+        report = check_citations(text, sources, versions).render()
+        if unserved:
+            report += "\n\nnot served, so not checked (pass `params` for each):\n"
+            report += "\n".join(f"- {n}: {why}" for n, why in unserved.items())
+        return report
 
     verify_citations.__doc__ = (
         "Check an answer before you send it: every number in `text` against the "
         "served outputs it cites, and every `name@hash` citation against the version "
-        "served now. A number is supported when a served value, rounded to the "
-        "precision the number is written with, equals it (a percent may be that "
-        "value x100); any other number is unsupported, and a citation of an older "
-        "version is stale. Checks every served derivation cited as `name@hash` in the "
-        "text, plus any named in `derivations`. Returns faithful / unfaithful / "
-        "inconclusive (no numbers), naming each failure. It reads numbers, not words: "
-        "a sign carried by a verb ('fell 21.9%') is compared by magnitude."
+        "the served value was computed under. A number is supported when a served "
+        "value, rounded to the precision the number is written with, equals it (a "
+        "percent may be that value x100); any other number is unsupported, and a "
+        "citation of another version is stale. Checks every served derivation cited "
+        "as `name@hash` in the text, plus any named in `derivations` or `params`; "
+        "`params` maps a derivation to the params it was run with. Returns faithful / "
+        "unfaithful / inconclusive (no numbers), naming each failure. It reads "
+        "numbers, not words: a sign carried by a verb ('fell 21.9%') is compared by "
+        "magnitude."
     )
     server.tool(name="verify_citations", description=verify_citations.__doc__)(
         verify_citations

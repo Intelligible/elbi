@@ -35,22 +35,24 @@ The resource (`read`) still returns the complete rendering. Tune the budget with
 
 `verify_citations` checks an answer before it is sent, against the outputs it quotes.
 Pass the answer as `text`, and either cite each output in it as `name@hash` or list the
-derivations in `derivations`. Each one is served through the same cache `run_<name>`
-uses, and the report lists:
+derivations in `derivations`. For a derivation the answer ran with params, pass them in
+`params` (`{"by_region": {"region": "west"}}`); a cited one that cannot be served is
+listed as not checked. Each one is served through the same cache `run_<name>` uses, and
+the report lists:
 
 - every **number**: supported when a served value, rounded to the precision the number
   is written with, equals it (`28.6%` for `0.2857`, but not `28.5%`), with the
   derivation and JSON path it came from; any other number is unsupported;
-- every **citation**: current when its hash is a prefix of the version served now,
-  stale when it is not, unknown when nothing served names it. An output's own
-  `source: "<name>@<hash>"` field names its upstream;
+- every **citation**: current when its hash is a prefix of the version the served value
+  was computed under, stale when it is not, unknown when nothing served names it. An
+  output's own `source: "<name>@<hash>"` field names its upstream;
 - a verdict: **faithful** when every number is supported and every citation current,
   **unfaithful** otherwise, **inconclusive** when the text has no numbers.
 
-A percent may match a fraction times 100 and a plain number a stored percent divided by
-100; nothing else is converted. Dates, list markers, footnote marks, confidence levels
-and the hash in a citation are not read as numbers. Words are not read at all, so a sign
-carried by a verb ("fell 21.9%") is compared by magnitude.
+A percent may match a fraction times 100; nothing else is converted. Dates, list
+markers, footnote marks, confidence levels and the hash in a citation are not read as
+numbers. Words are not read at all, so a sign carried by a verb ("fell 21.9%") is
+compared by magnitude.
 
 ## The audit trail
 

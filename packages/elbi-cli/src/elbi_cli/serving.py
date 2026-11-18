@@ -14,7 +14,7 @@ import json
 import time
 import warnings
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
 from elbi_core import (
@@ -63,13 +63,16 @@ class ServeOutcome:
     ``text`` is the full render (what a resource read returns); ``preview`` is the
     context-sized inline text for the tool response; ``structured`` is the MCP
     ``structuredContent`` payload -- rows + count for a table, the full component
-    objects + count for ``components`` -- else ``None``.
+    objects + count for ``components`` -- else ``None``. ``version`` is the data
+    version the served artifact was computed under (a stale serve's is older than the
+    current one), ``None`` when caching is off.
     """
 
     text: str
     status: str  # "hit" | "stale" | "miss" | "uncached"
     preview: str = ""
     structured: dict[str, Any] | None = None
+    version: str | None = None
 
 
 class Serving:
@@ -104,7 +107,7 @@ class Serving:
             self._record(name, params, "error", None, type(exc).__name__)
             raise
         self._record(name, params, "ok", version, None)
-        return outcome
+        return replace(outcome, version=version)
 
     async def _serve(
         self, name: str, params: ParamValues
@@ -164,7 +167,7 @@ class Serving:
                 outcome = self._present(
                     name, contract, last.artifact, "stale", last.data_version
                 )
-                return outcome, data_version
+                return outcome, last.data_version
             # Past `expire`: hard miss: block for fresh, never serve this old.
 
         artifact = await self._compute(runner, name, params)
