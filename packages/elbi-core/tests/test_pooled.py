@@ -285,6 +285,33 @@ def test_unlabelled_studies_are_named_by_row() -> None:
     assert "'study 6'" in _check(report, "leave-one-out-stable").detail
 
 
+def test_a_missing_study_label_falls_back_to_its_row() -> None:
+    studies = [*OUTLIER_STUDIES[:-1], (None, 6.0, 0.3)]
+    report = verify_pooled_effect(_rows(studies), "lift", "se", study="market")
+    detail = _check(report, "leave-one-out-stable").detail
+    assert "'study 6'" in detail
+    assert "None" not in detail
+
+
+def test_a_null_pool_is_not_broken_by_a_sign_change() -> None:
+    # tau² = 0, so the mean is 0.05 / 6 ≈ +0.008 and Hartung-Knapp is about
+    # ±2.571 * sqrt(3.772 / 30) = ±0.91. Each drop lands in [-0.19, +0.21]: it
+    # crosses zero, but the full result never had a sign to reverse.
+    studies = [(f"m{i}", e, 1.0) for i, e in enumerate([1, -1, 0.9, -0.9, 0.3, -0.25])]
+    report = verify_pooled_effect(_rows(studies), "lift", "se", study="market")
+    assert not report.significant
+    assert _check(report, "leave-one-out-stable").survived
+    assert report.verdict == "sound"
+
+
+@pytest.mark.parametrize("new_effect", [math.nan, math.inf, -math.inf])
+def test_a_non_finite_new_study_is_inconclusive(new_effect: float) -> None:
+    report = verify_pooled_effect(
+        _rows(MARKETS), "lift", "se", new_effect=new_effect, new_se=1.0
+    )
+    assert report.verdict == "inconclusive"
+
+
 def test_verify_all_dispatches_on_effect_and_se_roles(ref) -> None:
     report = verify_all(
         _rows(MARKETS),

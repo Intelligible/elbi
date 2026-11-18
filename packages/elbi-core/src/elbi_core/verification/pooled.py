@@ -97,7 +97,7 @@ def verify_pooled_effect(
         e, s = _as_float(row.get(effect)), _as_float(row.get(se))
         if e is None or s is None or not (math.isfinite(e) and math.isfinite(s)):
             continue
-        name = str(row.get(study, "")).strip() if study else ""
+        name = str(row.get(study) or "").strip() if study else ""
         labels.append(name or f"study {i + 1}")
         effects.append(e)
         ses.append(s)
@@ -112,6 +112,8 @@ def verify_pooled_effect(
         )
     if (new_effect is None) != (new_se is None):
         return _inconclusive("a new study needs both its effect and its standard error")
+    if new_effect is not None and not math.isfinite(new_effect):
+        return _inconclusive("a new study's effect must be a finite number")
     if any(not s > 0 for s in [*ses, *([] if new_se is None else [new_se])]):
         return _inconclusive(
             "every standard error must be positive to weight its study"
@@ -180,30 +182,41 @@ def verify_pooled_effect(
         )
 
     tol = 1e-9 * max(1.0, abs(fit.mu))
-    drops = [
-        (labels[i], _dl(effects[:i] + effects[i + 1 :], ses[:i] + ses[i + 1 :]).mu)
-        for i in range(k)
-    ]
+    t_drop = _t_inv(alpha, k - 2)
+    drops = []
+    for i in range(k):
+        f = _dl(effects[:i] + effects[i + 1 :], ses[:i] + ses[i + 1 :])
+        half_drop = t_drop * f.se_hk
+        drops.append((labels[i], f.mu, _sign(f.mu - half_drop, f.mu + half_drop) != 0))
+    definite = _sign(*hk) != 0
+
+    # Crossing zero reverses the sign only when one side of it is significant: a
+    # null pool wobbling from +0.001 to -0.001 is noise, but one study hiding a
+    # significant effect of the other sign is not.
+    def flips(m: float, drop_definite: bool) -> bool:
+        return (definite or drop_definite) and (m > 0) != (fit.mu > 0)
+
     breaks = [
-        (abs(m - fit.mu), name, m)
-        for name, m in drops
-        if (m > 0) != (fit.mu > 0) or not hk[0] - tol <= m <= hk[1] + tol
+        (abs(m - fit.mu), name, m, d)
+        for name, m, d in drops
+        if flips(m, d) or not hk[0] - tol <= m <= hk[1] + tol
     ]
     if not breaks:
-        lo, hi = min(m for _, m in drops), max(m for _, m in drops)
+        lo, hi = min(m for _, m, _ in drops), max(m for _, m, _ in drops)
+        same_sign = "the same sign and " if definite else ""
         checks.append(
             Check(
                 "leave-one-out-stable",
                 True,
                 f"dropping any one study keeps the estimate in {_iv(lo, hi)}, "
-                "the same sign and inside the Hartung-Knapp interval",
+                f"{same_sign}inside the Hartung-Knapp interval",
             )
         )
     else:
-        _, name, m = max(breaks)
+        _, name, m, d = max(breaks)
         how = (
             "reversing its sign"
-            if (m > 0) != (fit.mu > 0)
+            if flips(m, d)
             else f"outside the Hartung-Knapp interval {_iv(*hk)}"
         )
         others = f" ({len(breaks) - 1} others also do)" if len(breaks) > 1 else ""
