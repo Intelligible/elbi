@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -47,4 +48,22 @@ def test_statuses_rejects_non_mapping(tmp_path: Path) -> None:
     path = tmp_path / "lifecycle.yaml"
     path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="must be a mapping"):
+        LifecycleStore(path).statuses()
+
+
+@pytest.mark.parametrize(
+    ("write", "message"),
+    [
+        (lambda path: path.mkdir(), "cannot read"),
+        (lambda path: path.write_bytes(b"a: \xff\xfe\n"), "not valid UTF-8"),
+        (lambda path: path.write_text("a: [\n", encoding="utf-8"), "invalid YAML"),
+    ],
+    ids=["directory", "not-utf8", "invalid-yaml"],
+)
+def test_statuses_reports_corrupt_sidecar_as_config_error(
+    tmp_path: Path, write: Callable[[Path], object], message: str
+) -> None:
+    path = tmp_path / "lifecycle.yaml"
+    write(path)
+    with pytest.raises(ConfigError, match=message):
         LifecycleStore(path).statuses()

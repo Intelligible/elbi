@@ -16,6 +16,7 @@ from pathlib import Path
 
 import yaml
 
+from elbi_core.config import read_yaml_mapping
 from elbi_core.errors import ConfigError
 
 #: Filename of the lifecycle sidecar, under the project's ``.elbi/`` dir.
@@ -34,9 +35,7 @@ class LifecycleStore:
         """Return the recorded ``name -> status`` map (empty if none)."""
         if not self._path.exists():
             return {}
-        loaded = yaml.safe_load(self._path.read_text(encoding="utf-8")) or {}
-        if not isinstance(loaded, dict):
-            raise ConfigError(f"{self._path}: top level must be a mapping")
+        loaded = read_yaml_mapping(self._path)
         recorded: dict[str, str] = {}
         for name, status in loaded.items():
             if status not in _STATUSES:

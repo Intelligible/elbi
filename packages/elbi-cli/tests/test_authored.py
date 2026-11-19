@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -215,3 +216,30 @@ def test_render_module_minimal() -> None:
     ast.parse(module)
     assert "from elbi_core import derivation" in module
     assert "@derivation\n" in module  # no decorator args
+
+
+def test_read_treats_an_empty_record_as_absent(tmp_path: Path) -> None:
+    root = tmp_path / "authored"
+    root.mkdir()
+    (root / "d.yaml").write_text("", encoding="utf-8")
+    assert AuthoredStore(root).read("d") is None
+
+
+@pytest.mark.parametrize(
+    ("write", "message"),
+    [
+        (lambda path: path.mkdir(), "cannot read"),
+        (lambda path: path.write_bytes(b"name: \xff\xfe\n"), "not valid UTF-8"),
+        (lambda path: path.write_text("name: [\n", encoding="utf-8"), "invalid YAML"),
+        (lambda path: path.write_text("- d\n", encoding="utf-8"), "must be a mapping"),
+    ],
+    ids=["directory", "not-utf8", "invalid-yaml", "not-a-mapping"],
+)
+def test_load_into_reports_corrupt_record_as_config_error(
+    tmp_path: Path, write: Callable[[Path], object], message: str
+) -> None:
+    root = tmp_path / "authored"
+    root.mkdir()
+    write(root / "d.yaml")
+    with pytest.raises(ConfigError, match=message):
+        AuthoredStore(root).load_into(Registry())
