@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import typer
 
 from elbi_core import ChainedJsonlAuditSink, load_issuer
+from elbi_core.config import PROJECT_CONFIG_FILENAME
 from elbi_core.errors import ElbiError
 
 from .._console import arrow, console, fail
@@ -105,8 +106,8 @@ def _report_search(project: LoadedProject) -> None:
     if project.config.search == "lexical":
         arrow("search: lexical (BM25)")
         console.print(
-            "[dim]   set search: hybrid in elbi.yaml (the default) to also "
-            "match on meaning[/dim]"
+            f"[dim]   set search: hybrid in {PROJECT_CONFIG_FILENAME} (the default) "
+            "to also match on meaning[/dim]"
         )
         return
     arrow("search: hybrid (BM25 + semantic embeddings, RRF-fused)")

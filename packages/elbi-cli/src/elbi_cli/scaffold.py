@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from elbi_core.config import DEV_BINDINGS_FILENAME, PROJECT_CONFIG_FILENAME
+
 Template = str
 
 _PLACEHOLDER = "__PROJECT__"
@@ -235,7 +237,7 @@ def render(
     working on a derivation project and the framework together.
     """
     files: dict[str, str] = {
-        "elbi.yaml": _sub(_PROJECT_YAML, project),
+        PROJECT_CONFIG_FILENAME: _sub(_PROJECT_YAML, project),
         "README.md": _sub(_README, project),
         "AGENTS.md": _sub(_AGENTS_MD, project),
         "CLAUDE.md": _CLAUDE_MD,
@@ -251,7 +253,7 @@ def render(
     files.update(
         {
             "pyproject.toml": pyproject,
-            "elbi.dev.yaml": _DEV_YAML,
+            DEV_BINDINGS_FILENAME: _DEV_YAML,
             "derivations/churn_risk.py": _CHURN_RISK,
             "fixtures/sales.csv": _FIXTURE_CSV,
             "tests/test_derivations.py": _TEST,

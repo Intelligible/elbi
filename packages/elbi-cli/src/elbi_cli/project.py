@@ -26,7 +26,7 @@ from elbi_core import (
 from elbi_core.cache import LocalCacheStore
 from elbi_core.config import (
     DEV_BINDINGS_FILENAME,
-    PROJECT_FILENAME,
+    PROJECT_CONFIG_FILENAME,
     DataBindings,
     ProjectConfig,
 )
@@ -175,10 +175,10 @@ def load_project(base_dir: Path, *, state_dir: Path | None = None) -> LoadedProj
         ConfigError: if ``elbi.yaml`` is missing.
     """
     state = state_dir if state_dir is not None else state_dir_for(base_dir)
-    project_path = base_dir / PROJECT_FILENAME
+    project_path = base_dir / PROJECT_CONFIG_FILENAME
     if not project_path.exists():
         raise ConfigError(
-            f"no {PROJECT_FILENAME} found in {base_dir}. "
+            f"no {PROJECT_CONFIG_FILENAME} found in {base_dir}. "
             "Run `elbi init <name>` to scaffold a project."
         )
 
