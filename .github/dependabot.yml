@@ -107,7 +107,8 @@ updates:
       interval: "weekly"
     labels: ["dependencies", "docker", "skip-news"]
     ignore:
-      # A new Python is a platform move, not a refresh: the test matrix stops at 3.13, the
-      # main image fails to build on 3.15.
+      # The images stay on Python 3.12 until a move is made deliberately: CI tests
+      # the code up to 3.13 but never builds the sandbox image, and the main image
+      # fails to build on 3.15.
       - dependency-name: "python"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
