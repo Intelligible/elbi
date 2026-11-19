@@ -46,6 +46,8 @@ elbi = { workspace = true }
 [dependency-groups]
 dev = [
     "pytest>=9.1",
+    # pytest 9.2 deprecates CallSpec2, which anyio's pytest plugin uses below 4.16.
+    "anyio>=4.16",
     "pytest-cov>=7.1",
     "hypothesis>=6.165.2",
     # The current starlette TestClient requires the httpx 2.x line.
