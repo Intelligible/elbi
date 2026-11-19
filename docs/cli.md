@@ -45,9 +45,12 @@ your machine; the serve contract is applied per derivation.
 elbi validate [--directory .]
 ```
 
-Loads the project, imports every derivation (which validates its manifest against
-the spec), and warns about dataset inputs not declared in `elbi.yaml`.
-Exits non-zero on any failure.
+Loads the project and imports every derivation, which checks each manifest against
+the spec. Warns when a derivation reads a dataset that is not listed under
+`datasets:` in `elbi.yaml`. If `elbi.dev.yaml` is present, also checks that every
+listed dataset has a binding there, that every binding is for a listed dataset, and
+that every file-path binding points at an existing file. Exits non-zero on any
+failure; a warning is not a failure.
 
 ## `certificate`
 

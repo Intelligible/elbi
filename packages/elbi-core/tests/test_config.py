@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import hypothesis.strategies as st
 import pytest
+from hypothesis import given
 
 from elbi_core import ConfigError, DataBindingError
 from elbi_core.config import DataBindings, ProjectConfig
@@ -176,6 +178,20 @@ def test_project_config_missing_file(tmp_path: Path) -> None:
         ProjectConfig.load(tmp_path / "absent.yaml")
 
 
+def test_project_config_unreadable_file(tmp_path: Path) -> None:
+    path = tmp_path / "elbi.yaml"
+    path.mkdir()
+    with pytest.raises(ConfigError, match="cannot read"):
+        ProjectConfig.load(path)
+
+
+def test_bindings_not_utf8(tmp_path: Path) -> None:
+    path = tmp_path / "elbi.dev.yaml"
+    path.write_bytes(b"data:\n  sales: \xff\xfe\n")
+    with pytest.raises(ConfigError, match="not valid UTF-8"):
+        DataBindings.load(path)
+
+
 def test_bindings_absent_file_is_empty(tmp_path: Path) -> None:
     bindings = DataBindings.load(tmp_path / "elbi.dev.yaml")
     assert bindings.bindings == {}
@@ -220,6 +236,91 @@ def test_bindings_non_string_value(tmp_path: Path) -> None:
     path.write_text("data:\n  sales: 123\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="must be a string"):
         DataBindings.load(path)
+
+
+def test_wiring_problems_accept_env_and_sql_bindings_without_resolving(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("UNSET_VAR", raising=False)
+    bindings = DataBindings(
+        bindings={
+            "orders": "env(UNSET_VAR)",
+            "sales": {"connection": "sqlite:///acme.db", "table": "sales"},
+        }
+    )
+    assert bindings.wiring_problems(["orders", "sales"], tmp_path) == ()
+
+
+def test_wiring_problems_report_undeclared_env_and_sql_bindings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("UNSET_VAR", raising=False)
+    bindings = DataBindings(
+        bindings={
+            "orders": "env(UNSET_VAR)",
+            "sales": {"connection": "sqlite:///acme.db", "table": "sales"},
+        }
+    )
+    assert bindings.wiring_problems([], tmp_path) == (
+        "elbi.dev.yaml binds 'orders', which elbi.yaml does not declare",
+        "elbi.dev.yaml binds 'sales', which elbi.yaml does not declare",
+    )
+
+
+def test_wiring_problems_resolve_relative_path_against_base_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = tmp_path / "project"
+    (project_dir / "fixtures").mkdir(parents=True)
+    (project_dir / "fixtures" / "sales.csv").write_text("id\n1\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    bindings = DataBindings(bindings={"sales": "./fixtures/sales.csv"})
+    assert bindings.wiring_problems(["sales"], project_dir) == ()
+
+
+def test_wiring_problems_report_bindings_that_are_not_files(tmp_path: Path) -> None:
+    (tmp_path / "fixtures").mkdir()
+    bindings = DataBindings(bindings={"orders": "./fixtures", "sales": ""})
+    assert bindings.wiring_problems(["orders", "sales"], tmp_path) == (
+        "dataset 'orders' is bound to './fixtures', which is not an existing file",
+        "dataset 'sales' is bound to '', which is not an existing file",
+    )
+
+
+def test_wiring_problems_list_unbound_in_declared_order_then_bindings_by_name(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sales.csv").write_text("id\n1\n", encoding="utf-8")
+    bindings = DataBindings(
+        bindings={
+            "orphan": "./missing.csv",
+            "beta": "env(UNSET_VAR)",
+            "sales": "./sales.csv",
+        }
+    )
+    assert bindings.wiring_problems(["zeta", "sales", "alpha"], tmp_path) == (
+        "dataset 'zeta' is declared in elbi.yaml but has no binding in elbi.dev.yaml",
+        "dataset 'alpha' is declared in elbi.yaml but has no binding in elbi.dev.yaml",
+        "elbi.dev.yaml binds 'beta', which elbi.yaml does not declare",
+        "elbi.dev.yaml binds 'orphan', which elbi.yaml does not declare",
+        "dataset 'orphan' is bound to './missing.csv', which is not an existing file",
+    )
+
+
+_dataset_names = st.sets(st.text(alphabet="abcde_", min_size=1, max_size=10))
+
+
+@given(declared=_dataset_names, bound=_dataset_names)
+def test_wiring_problems_count_the_names_on_one_side_only(
+    declared: set[str], bound: set[str]
+) -> None:
+    # `env(...)` bindings are never resolved, so only the names can disagree.
+    bindings = DataBindings(bindings=dict.fromkeys(bound, "env(UNSET_VAR)"))
+    problems = bindings.wiring_problems(sorted(declared), Path())
+    assert len(problems) == len(declared ^ bound)
+    assert (problems == ()) == (declared == bound)
 
 
 def test_project_config_derivations_dir_not_string(tmp_path: Path) -> None:
