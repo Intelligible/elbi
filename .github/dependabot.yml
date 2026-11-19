@@ -34,8 +34,9 @@ updates:
       - dependency-name: "autogluon.tabular"
     groups:
       # Split so a dev-tooling bump (ruff/mypy/pytest) never waits on a runtime
-      # dependency's review, and vice versa. Majors stay out, as in the npm groups below:
-      # anthropic 2 rode in with twenty minor bumps.
+      # dependency's review, and vice versa. Majors stay out, as in the npm groups below,
+      # so a breaking upgrade arrives as its own pull request instead of failing a bundle
+      # of ordinary ones.
       dev-dependencies:
         dependency-type: "development"
         patterns: ["*"]
