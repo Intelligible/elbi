@@ -69,9 +69,10 @@ updates:
       # done deliberately, then lift this and move the floor.
       - dependency-name: "@tanstack/react-table"
         update-types: ["version-update:semver-major"]
-      # 2.3.0 bounds a resize by the grid container's height.
+      # From 2.3.0, a dashboard tile cannot be resized past the grid's bottom edge.
+      # Remove this once a newer release is tested and resizes correctly.
       - dependency-name: "react-grid-layout"
-        versions: ["2.3.0"]
+        versions: [">=2.3.0"]
     groups:
       # The exception to the majors rule below. @vitest/coverage-v8 peers on an exact
       # vitest version ("5.0.1", not "^5"), so the two are one unit.
