@@ -70,7 +70,8 @@ updates:
       - dependency-name: "@tanstack/react-table"
         update-types: ["version-update:semver-major"]
       # From 2.3.0, a dashboard tile cannot be resized past the grid's bottom edge.
-      # Remove this once a newer release is tested and resizes correctly.
+      # package.json holds it at ~2.2.4 for the same reason. Remove both once a newer
+      # release is tested and resizes correctly.
       - dependency-name: "react-grid-layout"
         versions: [">=2.3.0"]
     groups:
