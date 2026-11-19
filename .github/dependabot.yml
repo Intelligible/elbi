@@ -32,9 +32,6 @@ updates:
       #
       # Lift this together with the pin, when xgboost-cpu ships a macOS wheel.
       - dependency-name: "autogluon.tabular"
-      # Every litellm since 1.104 requires huggingface-hub<2.
-      - dependency-name: "huggingface-hub"
-        update-types: ["version-update:semver-major"]
     groups:
       # Split so a dev-tooling bump (ruff/mypy/pytest) never waits on a runtime
       # dependency's review, and vice versa. Majors stay out, as in the npm groups below:
