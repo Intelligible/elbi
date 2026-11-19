@@ -2563,6 +2563,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "anyio" },
     { name = "boto3-stubs", extra = ["sts"] },
     { name = "cosmic-ray" },
     { name = "httpx2" },
@@ -2593,6 +2594,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "anyio", specifier = ">=4.16" },
     { name = "boto3-stubs", extras = ["sts"], specifier = ">=1.43.72" },
     { name = "cosmic-ray", specifier = ">=8.7.0" },
     { name = "httpx2", specifier = ">=2.10.0" },
