@@ -27,7 +27,16 @@ fi
 
 # Resolve the interpreter from elbi's own shebang: elbi depends on mcp, so that
 # Python is guaranteed to have it. Bare `python3` on PATH is not.
-python_bin=$(sed -n '1s/^#!//p' "$(command -v elbi)")
+# A long or quoted interpreter path does not fit a shebang, so for those uv writes
+# a `#!/bin/sh` trampoline instead and names the Python on the second line:
+#   '''exec' '/path/to/python' "$0" "$@"
+elbi_bin=$(command -v elbi)
+python_bin=$(sed -n '1s/^#!//p' "$elbi_bin")
+case "$python_bin" in
+    */sh | */bash)
+        python_bin=$(sed -n "2s/^'''exec' '\([^']*\)'.*/\1/p" "$elbi_bin")
+        ;;
+esac
 if [ -z "$python_bin" ] || ! "$python_bin" -c "import mcp" >/dev/null 2>&1; then
     echo "no Python with the 'mcp' client library found next to the elbi CLI." >&2
     echo "from a repo checkout, try: uv run ./elbi.sh" >&2
