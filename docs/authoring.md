@@ -229,6 +229,11 @@ per-derivation run tools:
   influence, misspecification), and a model's predictive accuracy (re-evaluated
   leakage-free, screening target proxies and train/test contamination). Each returns
   the same **sound / unsound / inconclusive** verdict. See [Verification](#verification).
+- **`verify_citations`**: check an answer's numbers before sending it. Each must round
+  from a served value of a derivation it cites (as `name@hash`, or named in
+  `derivations`), and each cited version must be the one served now. Returns
+  **faithful / unfaithful / inconclusive**. See
+  [Checking an answer's numbers](./mcp.md#checking-an-answers-numbers).
 - **`run_code`**: run Python in the sandbox to explore data and prototype a
   computation *before* authoring a derivation. Datasets load as `data['<name>']`
   (row dicts); `print()` to inspect and set a `result` variable to return a value;

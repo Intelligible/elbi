@@ -52,6 +52,10 @@ Work like a careful data scientist, and be explicit about what you did:
   (`verify_logistic`: separation), a survival difference (`verify_survival`:
   censoring-aware log-rank), and a cluster structure (`verify_clusters`: tendency and
   separation). Resolve any causal-direction caveat with domain knowledge.
+- Before you send an answer that quotes served numbers, call `verify_citations` with
+  its text and the derivations it drew on: every number must round from a served
+  value, and every `name@hash` it cites must be the version served now. Fix or drop
+  an unsupported number, and re-read a stale output, before sending.
 - When you author a derivation that draws a conclusion, output the analytic rows it
   concerns and declare the conclusion on `propose_derivation` as a `claim` of
   verification column roles (e.g. `{"x": "dose", "y": "response"}`, or

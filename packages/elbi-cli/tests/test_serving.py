@@ -269,6 +269,26 @@ def test_serve_records_an_ok_event_with_version(tmp_path: Path) -> None:
     assert event.version is not None  # the content-addressed provenance
 
 
+def test_a_stale_serve_reports_the_version_its_answer_was_computed_under(
+    tmp_path: Path,
+) -> None:
+    sink = _RecordingSink()
+    serving, base, _calls, _ = _build(tmp_path, audit=sink)
+
+    async def scenario() -> tuple[Any, Any]:
+        first = await serving.serve("value")
+        (base / "n.csv").write_text("value\n9\n", encoding="utf-8")
+        stale = await serving.serve("value")
+        await _drain(serving)
+        return first, stale
+
+    first, stale = asyncio.run(scenario())
+    assert stale.status == "stale" and stale.text == "2"
+    # The "2" was computed under the first version, so that is what produced it.
+    assert sink.events[1].version == sink.events[0].version
+    assert stale.version == first.version == sink.events[0].version
+
+
 def test_a_cached_serve_renders_the_same_as_an_uncached_one(tmp_path: Path) -> None:
     """A hit renders the cached artifact, so it has to agree with the long way round.
 

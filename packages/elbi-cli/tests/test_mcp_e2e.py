@@ -447,6 +447,200 @@ def test_reading_an_unknown_derivation_resource_is_invalid_params() -> None:
             )
 
 
+# --- Checking an answer's numbers against what it cites ---
+
+
+def _churn_summary() -> tuple[Registry, str]:
+    """A titled json derivation that names its upstream, and its current sha8."""
+    registry = Registry()
+
+    @derivation(
+        name="churn_summary", serve=serve.json(title="Churn"), registry=registry
+    )
+    def churn_summary(ctx: Context) -> Artifact:
+        return Artifact.json(
+            {
+                "churned": 412,
+                "customers": 1847,
+                "rate": 412 / 1847,
+                "source": "customers@1a2b3c4d",
+            }
+        )
+
+    @derivation(
+        name="by_region",
+        params={"region": param.string()},
+        serve=serve.json(),
+        registry=registry,
+    )
+    def by_region(ctx: Context) -> Artifact:
+        return Artifact.json({"region": ctx.param("region")})
+
+    @derivation(
+        name="scaled",
+        params={"k": param.integer(required=False, default=1)},
+        serve=serve.json(),
+        registry=registry,
+    )
+    def scaled(ctx: Context) -> Artifact:
+        return Artifact.json({"n": 10 * ctx.param("k")})
+
+    return registry, Runner(registry).data_version("churn_summary")[:8]
+
+
+def test_verify_citations_checks_an_answer_over_the_wire() -> None:
+    """An answer quoting a served json output is checked through the real client.
+
+    412 / 1847 is 0.2231, so the answer may say 22.3%; 21.4% is fabricated. The
+    derivation is picked by its ``name@hash`` in the text, and the upstream version
+    is read from the output's own ``source`` field.
+    """
+    registry, version = _churn_summary()
+    server = build_server(registry, lambda: Runner(registry))
+    cite = f"(churn_summary@{version}, customers@1a2b3c4d)"
+    texts = {
+        "faithful": f"Churn was 22.3%: 412 of 1,847 customers {cite}.",
+        "fabricated": f"Churn was 21.4%: 412 of 1,847 customers {cite}.",
+        "stale": "Churn was 22.3% (churn_summary@deadbeef).",
+    }
+
+    async def run() -> dict[str, str]:
+        reports = {}
+        async with Client(server) as client:
+            for key, text in texts.items():
+                result = await client.call_tool("verify_citations", {"text": text})
+                assert result.is_error is False, _text(result)
+                reports[key] = _text(result)
+            named = await client.call_tool(
+                "verify_citations",
+                {
+                    "text": "Churn was 22.3% (customers@1a2b3c4d).",
+                    "derivations": ["churn_summary"],
+                },
+            )
+            reports["named"] = _text(named)
+        return reports
+
+    reports = asyncio.run(run())
+    assert reports["faithful"].startswith("# Citations: **FAITHFUL**")
+    assert "- [ok] 22.3%: churn_summary $.rate = " in reports["faithful"]
+    assert "- [ok] customers@1a2b3c4d: current" in reports["faithful"]
+    assert reports["fabricated"].startswith("# Citations: **UNFAITHFUL**")
+    assert "- [FAIL] 21.4%: no served value rounds to it" in reports["fabricated"]
+    assert reports["stale"].startswith("# Citations: **UNFAITHFUL**")
+    assert f"stale, now churn_summary@{version}" in reports["stale"]
+    assert reports["named"].startswith("# Citations: **FAITHFUL**")
+
+
+@pytest.mark.parametrize(
+    ("derivations", "expected"),
+    [
+        (["nope"], "'nope' is not a served derivation"),
+        (["by_region"], "Could not serve derivation 'by_region'"),
+    ],
+)
+def test_verify_citations_refuses_what_it_cannot_serve(
+    derivations: list[str], expected: str
+) -> None:
+    """A derivation it cannot serve is a bad argument, not a verdict to read."""
+    from mcp.shared.exceptions import MCPError
+    from mcp.types import INVALID_PARAMS
+
+    registry, _ = _churn_summary()
+    server = build_server(registry, lambda: Runner(registry))
+
+    async def run() -> None:
+        async with Client(server) as client:
+            with pytest.raises(MCPError) as raised:
+                await client.call_tool(
+                    "verify_citations", {"text": "5%", "derivations": derivations}
+                )
+            assert raised.value.error.code == INVALID_PARAMS
+            assert expected in str(raised.value.error.message)
+
+    asyncio.run(run())
+
+
+def _verify(server: Any, arguments: dict[str, Any]) -> str:
+    async def run() -> str:
+        async with Client(server) as client:
+            result = await client.call_tool("verify_citations", arguments)
+            assert result.is_error is False, _text(result)
+            return _text(result)
+
+    return asyncio.run(run())
+
+
+def test_verify_citations_labels_a_stale_serve_with_the_version_it_computed(
+    tmp_path: Path,
+) -> None:
+    """A stale serve hands back the value cached under the old version, so citing
+    that version is citing what was served."""
+    from elbi_core.config import DataBindings
+
+    sales = tmp_path / "sales.csv"
+    sales.write_text("amount\n100\n", encoding="utf-8")
+    registry = Registry()
+
+    @derivation(
+        name="total",
+        inputs={"sales": Dataset("sales")},
+        serve=serve.json(),
+        registry=registry,
+    )
+    def total(ctx: Context) -> Artifact:
+        rows = ctx.input("sales").rows
+        return Artifact.json({"total": sum(int(r["amount"]) for r in rows)})
+
+    bindings = DataBindings(bindings={"sales": "sales.csv"})
+
+    def make_runner() -> Runner:
+        return Runner(registry, bindings=bindings, base_dir=tmp_path)
+
+    server = build_server(registry, make_runner)
+    first = make_runner().data_version("total")[:8]
+
+    async def run() -> str:
+        async with Client(server) as client:
+            await client.call_tool("run_total", {})  # 100, cached under `first`
+            sales.write_text("amount\n200\n", encoding="utf-8")
+            # Proves the next serve is stale rather than a plain hit.
+            assert make_runner().data_version("total")[:8] != first
+            result = await client.call_tool(
+                "verify_citations", {"text": f"Total was 100 (total@{first})."}
+            )
+            await asyncio.sleep(0.2)  # let the background refresh finish
+            return _text(result)
+
+    report = asyncio.run(run())
+    assert report.startswith("# Citations: **FAITHFUL**"), report
+    assert f"- [ok] total@{first}: current" in report
+
+
+def test_verify_citations_reports_a_cited_derivation_it_cannot_serve() -> None:
+    """Citing a derivation that needs params is a finding, not a failed call."""
+    registry, version = _churn_summary()
+    server = build_server(registry, lambda: Runner(registry))
+    text = f"Churn was 22.3% (churn_summary@{version}); see by_region@deadbeef."
+
+    report = _verify(server, {"text": text})
+    assert report.startswith("# Citations: **UNFAITHFUL**")
+    assert "- [ok] 22.3%: churn_summary $.rate = " in report
+    assert "- by_region: by_region: missing required parameter 'region'" in report
+
+
+def test_verify_citations_serves_a_derivation_with_the_params_given() -> None:
+    """At its default k=1 `scaled` is 10, so 30 holds only if k=3 reached it."""
+    registry, _ = _churn_summary()
+    server = build_server(registry, lambda: Runner(registry))
+
+    report = _verify(
+        server, {"text": "Tripled, the count was 30.", "params": {"scaled": {"k": 3}}}
+    )
+    assert report.startswith("# Citations: **FAITHFUL**"), report
+    assert "- [ok] 30: scaled $.n = 30" in report
+
+
 # --- Narrowing over the wire (a row/column policy through the real client) ---
 
 
