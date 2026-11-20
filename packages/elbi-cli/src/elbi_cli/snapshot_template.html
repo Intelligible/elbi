@@ -259,7 +259,11 @@
     if (!rows.length) { box.append($("div", "hint", "No rows.")); return box; }
     const viz = w.viz || {};
     // Every key any row has, as the app's table shows it, so a key the first row lacks is kept.
-    const cols = Array.isArray(viz.columns) ? viz.columns : [...new Set(rows.flatMap(Object.keys))];
+    // A configured column is a field name or a {field, label, width, wrap} object, as in the app.
+    const specs = (Array.isArray(viz.columns) ? viz.columns : [...new Set(rows.flatMap(Object.keys))])
+      .map((c) => (typeof c === "string" ? { field: c } : c))
+      .filter((c) => c && typeof c.field === "string" && c.field);
+    const cols = specs.map((c) => c.field);
     const pageSize = typeof viz.pageSize === "number" ? viz.pageSize : 50;
     const numeric = new Set(cols.filter((c) => rows.every((r) => r[c] == null || typeof r[c] === "number")));
     let sortCol = null, sortDir = 1;
@@ -267,8 +271,8 @@
     const table = $("table");
     const thead = $("thead"), tbody = $("tbody");
     const hr = $("tr");
-    const ths = cols.map((c) => {
-      const th = $("th", null, c);
+    const ths = specs.map(({ field: c, label }) => {
+      const th = $("th", null, typeof label === "string" ? label : c);
       th.tabIndex = 0;
       th.setAttribute("aria-sort", "none");
       if (numeric.has(c)) th.dataset.num = "";
