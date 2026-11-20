@@ -37,6 +37,22 @@ case "$python_bin" in
         python_bin=$(sed -n "2s/^'''exec' '\([^']*\)'.*/\1/p" "$elbi_bin")
         ;;
 esac
+# Other launchers quote the path differently (pip and pipx use double quotes, a
+# relocatable uv install computes it), so if that read came back empty, use the
+# python beside the real elbi script: the interpreter of the venv it lives in.
+if [ -z "$python_bin" ]; then
+    elbi_real=$elbi_bin
+    if [ -L "$elbi_real" ]; then
+        target=$(readlink "$elbi_real")
+        case "$target" in
+            /*) elbi_real=$target ;;
+            *) elbi_real="$(dirname "$elbi_real")/$target" ;;
+        esac
+    fi
+    if [ -x "$(dirname "$elbi_real")/python" ]; then
+        python_bin="$(dirname "$elbi_real")/python"
+    fi
+fi
 if [ -z "$python_bin" ] || ! "$python_bin" -c "import mcp" >/dev/null 2>&1; then
     echo "no Python with the 'mcp' client library found next to the elbi CLI." >&2
     echo "from a repo checkout, try: uv run ./elbi.sh" >&2
