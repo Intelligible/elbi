@@ -35,6 +35,8 @@ That prints `MCP server ready at http://localhost:7878/mcp` (the first start can
 
 A skill file tells your agent what was true when someone wrote it. elbi recomputes the answer from the data you have now.
 
+<p align="center"><img alt="An agent's skill file says to trim TTD by 3%. Overnight TTD fell 21.9%. Asked again, elbi recomputes from the new prices and says to trim 9.23%." src="./docs/assets/demo-stale-skill.gif" width="720"></p>
+
 ```bash
 git clone https://github.com/Intelligible/elbi
 cd elbi/examples/03_stale_skill
