@@ -86,6 +86,9 @@ elbi serve
 
 A skill file keeps the answer from the day it was written. In this demo the data move overnight, and the agent asks again.
 
+<details>
+<summary><strong>Show the demo</strong></summary>
+
 <p align="center"><img alt="An agent's skill file says to trim TTD by 3%. Overnight TTD fell 21.9%. Asked again, elbi recomputes from the new prices and says to trim 9.23%." src="./docs/assets/demo-stale-skill.gif" width="720"></p>
 
 ```bash
@@ -114,6 +117,8 @@ source     cov_matrix@c55af5ca
 ```
 
 It cuts TTD by about 9% and names the covariance version it used.
+
+</details>
 
 ## What your agent gets
 
