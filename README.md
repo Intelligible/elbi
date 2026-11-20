@@ -18,6 +18,8 @@
 
 elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read exactly how a finding was computed, write your own, and check, correct, or throw out any of them. elbi comes batteries-included, with a local data-science environment for notebooks, SQL, and AutoML.
 
+<p align="center"><img alt="A derivation in the elbi app: its output above the Python source that computed it" src="./docs/assets/elbi-app-derivation.png" width="720"></p>
+
 ## elbi in 60 seconds
 
 It runs on your machine. There's no account to create.
