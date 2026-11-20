@@ -796,3 +796,54 @@ def test_a_semantic_model_input_is_handed_over_as_itself() -> None:
         assert any("<td>total</td>" in rendering for rendering in html)
     finally:
         kernel.close()
+
+
+def _run_kernel(resolver: Any) -> SubprocessKernel:
+    kernel = SubprocessKernel(cell_timeout=30, dataset_names=["t"])
+    kernel.set_run_resolver(resolver)
+    return kernel
+
+
+def test_run_returns_the_hosts_value_and_ships_params_as_json() -> None:
+    seen: list[tuple[str, dict[str, Any]]] = []
+
+    def resolve(name: str, params: dict[str, Any]) -> dict[str, Any]:
+        seen.append((name, params))
+        if name == "orders":
+            return {"value": [{"n": 1}, {"n": 2}]}
+        return {"value": {"top": params.get("k"), "tags": ["a", "b"]}}
+
+    kernel = _run_kernel(resolve)
+    try:
+        status, outputs = _collect(kernel, "run('orders')")
+        assert status == "ok", outputs
+        assert _results(outputs) == ["[{'n': 1}, {'n': 2}]"]
+        status, outputs = _collect(kernel, "run('summary', k=3)['top']", 2)
+        assert status == "ok", outputs
+        assert _results(outputs) == ["3"]
+        assert seen == [("orders", {}), ("summary", {"k": 3})]
+    finally:
+        kernel.close()
+
+
+def test_run_with_a_raising_resolver_or_none_answers_instead_of_hanging() -> None:
+    def boom(name: str, params: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("kaput")
+
+    kernel = _run_kernel(boom)
+    try:
+        status, outputs = _collect(kernel, "run('x')")
+        assert status == "error"
+        assert "kaput" in "".join(str(o.get("evalue", "")) for o in outputs)
+    finally:
+        kernel.close()
+
+    bare = SubprocessKernel(cell_timeout=30, dataset_names=["t"])
+    try:
+        status, outputs = _collect(bare, "run('x')")
+        assert status == "error"
+        assert "no derivation runner" in "".join(
+            str(o.get("evalue", "")) for o in outputs
+        )
+    finally:
+        bare.close()

@@ -76,6 +76,21 @@ that this matters, aggregate it in `sql()` and bring back the answer instead of 
 That split is deliberately visible rather than automatic: a handle that quietly
 materialises just moves the memory failure later.
 
+### Reusing a derivation: `run()`
+
+A notebook cannot import the project's `derivations/`, so copying their maths into cells
+lets the two drift apart. `run("<name>", **params)` asks the server to compute the
+derivation and hands back its value:
+
+```python
+big = run("big_sales")  # table -> list of row dicts, like data["..."]
+total = run("total", floor=25)["total"]  # json -> the dict; params travel as JSON
+```
+
+A table returns every computed row (the serve contract's `max_rows` only sizes what an
+agent sees), a `components` derivation its list, and `markdown`/`text` the string. A
+derivation with no serve contract is internal and raises.
+
 ## Sizing the sandbox
 
 A notebook runs on a *compute profile*: a named shape with its CPU, memory, GPU,

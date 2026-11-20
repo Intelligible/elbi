@@ -346,6 +346,23 @@ def build(
             return {"error": str(exc)}
         return {"columns": columns, "rows": rows, "truncated": truncated}
 
+    def notebook_run(name: str, params: dict[str, Any]) -> dict[str, Any]:
+        # Runs through the Runner, not ``Serving``, whose stale-value refresh needs an
+        # event loop this kernel thread lacks, and returns the full value rather than
+        # the serve contract's ``max_rows`` cut.
+        try:
+            derivation = project.registry.get(name)
+            if not derivation.is_served:
+                return {
+                    "error": f"derivation {name!r} is internal (no serve contract) and "
+                    "cannot be run from a notebook"
+                }
+            if not derivation.is_certified:
+                return {"error": f"derivation {name!r} is not certified"}
+            return {"value": make_runner().run(name, params).value}
+        except ElbiError as exc:
+            return {"error": str(exc)}
+
     def load_datasets() -> dict[str, Rows]:
         """Every warehouse table as name→rows (the chat/notebooks/models namespace)."""
         loaded: dict[str, Rows] = {}
@@ -1200,6 +1217,7 @@ def build(
         # nothing and a table only crosses when a cell asks for it.
         dataset_names=warehouse_tables,
         query_resolver=notebook_query,
+        run_resolver=notebook_run,
         profiles=compute_profiles,
         credentials=credential_vendor(),
         # Read per kernel start, so setting it needs no restart.

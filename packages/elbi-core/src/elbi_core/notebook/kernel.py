@@ -104,6 +104,10 @@ CommListener = Callable[[dict[str, Any]], None]
 #: the kernel is the class of bug behind the Apache Polaris path-scoping CVEs.
 QueryResolver = Callable[[str, str, int], dict[str, Any]]
 
+#: Answers a cell's ``run(name, **params)`` with ``{"value": ...}`` or
+#: ``{"error": "..."}``.
+RunResolver = Callable[[str, dict[str, Any]], dict[str, Any]]
+
 
 class Kernel(Protocol):
     """A persistent interpreter for a notebook: run, interrupt, restart, close."""
@@ -146,6 +150,10 @@ class Kernel(Protocol):
 
     def set_query_resolver(self, resolver: QueryResolver | None) -> None:
         """Set the callable that answers a cell's ``sql(...)`` / ``data['x']``."""
+        ...
+
+    def set_run_resolver(self, resolver: RunResolver | None) -> None:
+        """Set the callable that answers a cell's ``run(name, **params)``."""
         ...
 
     def complete(self, code: str, cursor_pos: int) -> dict[str, Any]:
@@ -262,6 +270,7 @@ class _StreamingKernel:
         # engine and credentials already are. None when no warehouse is wired, which
         # answers with a clear error rather than hanging.
         self._query_resolver: QueryResolver | None = None
+        self._run_resolver: RunResolver | None = None
         self.last_queries = []
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
@@ -295,6 +304,27 @@ class _StreamingKernel:
     def set_query_resolver(self, resolver: QueryResolver | None) -> None:
         """Set the callable that answers a cell's warehouse queries."""
         self._query_resolver = resolver
+
+    def set_run_resolver(self, resolver: RunResolver | None) -> None:
+        """Set the callable that answers a cell's ``run(name, **params)``."""
+        self._run_resolver = resolver
+
+    def _answer_run(self, request: dict[str, Any]) -> None:
+        # Always replies on ``query_reply``, the only reply ``_roundtrip`` waits for,
+        # because the cell blocks until it gets one.
+        resolver = self._run_resolver
+        if resolver is None:
+            content: dict[str, Any] = {
+                "error": "run() is not available: this kernel has no derivation runner."
+            }
+        else:
+            try:
+                content = resolver(
+                    str(request.get("name") or ""), dict(request.get("params") or {})
+                )
+            except Exception as exc:
+                content = {"error": f"{type(exc).__name__}: {exc}"}
+        self._reply(content)
 
     def _answer_query(self, request: dict[str, Any]) -> None:
         """Run a cell's query through the resolver and write the reply to the worker.
@@ -332,8 +362,11 @@ class _StreamingKernel:
                 "error": content.get("error"),
             }
         )
+        self._reply(content)
+
+    def _reply(self, content: dict[str, Any]) -> None:
         if not self._write({"op": "query_reply", "content": content}):
-            # The rows would not encode. Answer with the failure rather than nothing,
+            # The reply would not encode. Answer with the failure rather than nothing,
             # because the cell is blocked until some reply arrives.
             self._write(
                 {
@@ -519,13 +552,16 @@ class _StreamingKernel:
                 # A cell parked in input() is not wedged; extend the budget so a person
                 # has time to answer instead of being cut off by the wall-clock timeout.
                 deadline = time.monotonic() + _INPUT_GRACE
-            if message.get("type") == "query_request":
+            if message.get("type") in ("query_request", "run_request"):
                 # A cell waiting on a server-side scan is working, not wedged. Extend
                 # the budget so a legitimately slow aggregate is not killed by the cell
                 # deadline, then answer it. Not forwarded to on_output: this is protocol
                 # traffic, not cell output.
                 deadline = max(deadline, time.monotonic() + _QUERY_GRACE)
-                self._answer_query(message)
+                if message["type"] == "run_request":
+                    self._answer_run(message)
+                else:
+                    self._answer_query(message)
                 continue
             if truncated:
                 # Past the budget, a cell's result and its traceback are still worth
