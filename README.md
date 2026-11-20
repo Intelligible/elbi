@@ -221,7 +221,7 @@ elbi stands for "Empirical Layer by Intelligible." An _empirical layer_ is where
 
 ## Running elbi across a team
 
-elbi is built for one person working on their own machine with data already in reach. If you need that learning shared across teams and connected to your organization's data systems, that's what [Summand](https://summand.com), Intelligible's enterprise data platform, is for. Write to solutions@intelligible.ai.
+elbi is built for one person working on their own machine with data already in reach. [Summand](https://summand.com), Intelligible's enterprise data platform, is the hosted version. It recomputes findings on its own when the data change and draws on several of your organization's data systems at once. Each team's work stays separate. Write to solutions@intelligible.ai.
 
 ## License
 
