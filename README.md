@@ -14,7 +14,7 @@
 
 **Give your agent an empirical memory.**
 
-elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read how a finding was computed and fix or delete any of them. Each one is tied to the data it ran on, and elbi recomputes it when that data changes. elbi also includes a local environment for notebooks and SQL, with AutoML on top.
+elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read how a finding was computed and fix or delete any of them. Each one is tied to the data it ran on, and elbi recomputes it when those data change. elbi also includes a local environment for notebooks and SQL, with AutoML on top.
 
 <p align="center"><img alt="A derivation in the elbi app: its output above the Python source that computed it" src="./docs/assets/elbi-app-derivation.png" width="720"></p>
 
@@ -29,7 +29,7 @@ cd acme-data-context
 elbi mcp                      # serve elbi over MCP
 ```
 
-That prints `MCP server ready at http://localhost:7878/mcp` (the first start can take about 30 seconds). Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer by calling the example's `run_churn_risk`. The example data is three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims. To see elbi catch a stale answer on real data, jump to [Skill files go stale](#skill-files-go-stale).
+That prints `MCP server ready at http://localhost:7878/mcp` (the first start can take about 30 seconds). Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer by calling the example's `run_churn_risk`. The example data are three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims. To see elbi catch a stale answer on real data, jump to [Skill files go stale](#skill-files-go-stale).
 
 ## Connecting Clients
 
@@ -82,7 +82,7 @@ elbi serve
 
 ## Skill files go stale
 
-A skill file keeps the answer from the day it was written. In this demo the data moves overnight, and the agent asks again.
+A skill file keeps the answer from the day it was written. In this demo the data move overnight, and the agent asks again.
 
 <p align="center"><img alt="An agent's skill file says to trim TTD by 3%. Overnight TTD fell 21.9%. Asked again, elbi recomputes from the new prices and says to trim 9.23%." src="./docs/assets/demo-stale-skill.gif" width="720"></p>
 
@@ -119,7 +119,7 @@ It cuts TTD by about 9% and names the covariance version it used.
 
 **Statistical checks.** More than 30 `verify_*` tools let your agent test a claim with a method suited to it: regression, causal designs (instrumental variables, difference-in-differences, regression discontinuity), survival analysis, calibration, forecasting, and [more](./docs/mcp.md#what-gets-exposed). Most return an estimate, its caveats, and a verdict of *sound*, *unsound*, or *inconclusive* with the reason, so your agent can see when something like a leaked feature undoes a pattern.
 
-**Saved findings.** When a finding is worth keeping, your agent records it as a *derivation* that keeps its code next to its result. Any agent you connect can find the derivation and call it again. The result is tied to the data it ran on, and the next run of elbi after that data changes recomputes it. If the agent states a claim (an effect of `x` on `y`, or a model's target and features), elbi checks the claim before recording the finding. You can revise or delete any derivation, and [require your own sign-off](./docs/authoring.md#certification-policy) if you want a stricter gate.
+**Saved findings.** When a finding is worth keeping, your agent records it as a *derivation* that keeps its code next to its result. Any agent you connect can find the derivation and call it again. The result is tied to the data it ran on, and the next run of elbi after those data change recomputes it. If the agent states a claim (an effect of `x` on `y`, or a model's target and features), elbi checks the claim before recording the finding. You can revise or delete any derivation, and [require your own sign-off](./docs/authoring.md#certification-policy) if you want a stricter gate.
 
 In SleuthBench ([arXiv:2609.34228](https://arxiv.org/abs/2609.34228)), giving six frontier models precomputed statistical artifacts alongside their Python tool raised their accuracy on questions about how features shape an outcome from 41.9% to 68.0%.
 
@@ -178,7 +178,7 @@ elbi runs it against whatever `elbi.dev.yaml` binds, records the result with its
 
 **Serving your own computations.** You can write derivations yourself, such as a metric or a piece of business logic, and elbi serves each one to every MCP client as a cached, versioned tool, so every agent and tool gets the same answer. See [Authoring derivations](./docs/derivations.md) and [Analytics as code](./docs/analytics-as-code.md).
 
-Data comes from local files (CSV, JSON, Parquet) or a SQL database ([Data sources](./docs/data-sources.md)). See [agent-authored derivations](./docs/authoring.md) for how an agent proposes one.
+Data come from local files (CSV, JSON, Parquet) or a SQL database ([Data sources](./docs/data-sources.md)). See [agent-authored derivations](./docs/authoring.md) for how an agent proposes one.
 
 ## Installation
 
