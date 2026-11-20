@@ -14,7 +14,7 @@
 
 **Give your agent an empirical memory.**
 
-elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read how a finding was computed and fix or delete any of them. Each one is tied to the data it ran on, and elbi recomputes it when those data change. elbi also includes a local environment for notebooks and SQL, with AutoML on top.
+elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read how a finding was computed and fix or delete any of them. Each one is tied to the data it ran on, and elbi recomputes it on the next run after those data change. elbi also includes a local environment for notebooks and SQL, with AutoML on top.
 
 <p align="center"><img alt="A derivation in the elbi app: its output above the Python source that computed it" src="./docs/assets/elbi-app-derivation.png" width="720"></p>
 
@@ -127,7 +127,7 @@ In SleuthBench ([arXiv:2609.34228](https://arxiv.org/abs/2609.34228)), giving si
 
 - [`01_getting_started`](examples/01_getting_started): a complete project like the one `elbi init` scaffolds, where `pricing_effects` builds on `churn_risk`, so the agent reuses one churn calculation every time.
 - [`02_serving_a_model`](examples/02_serving_a_model): give elbi a trained model and let the agent query its predictions, for one customer or a batch, without writing scoring code.
-- [`03_stale_skill`](examples/03_stale_skill): a skill file written after yesterday's close tells the agent to cut a position 3%. Overnight the stock fell 21.9%, and the same question asked as an elbi tool, recomputed from this morning's prices, cuts more than twice as much.
+- [`03_stale_skill`](examples/03_stale_skill): a skill file written after yesterday's close tells the agent to cut a position 3%. Overnight the stock fell 21.9%, and the same question asked as an elbi tool, recomputed from this morning's prices, cuts about three times as much.
 
 ## FAQ
 
