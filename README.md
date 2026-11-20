@@ -31,7 +31,7 @@ elbi mcp                      # serve elbi over MCP
 
 That prints `MCP server ready at http://localhost:7878/mcp` (the first start can take about 30 seconds). Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer from the example's `run_churn_risk` rather than inventing SQL. The example data is three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims.
 
-## Watch it catch something
+## Skill files go stale
 
 A skill file tells your agent what was true when someone wrote it. elbi recomputes the answer from the data you have now.
 
