@@ -286,6 +286,14 @@ target proxy and rows shared across the split, and reporting the held-out skill 
 measures itself). The guarantee across all of them is the same: a bad claim never
 comes back **sound**.
 
+`verify_pooled_effect` covers a claim the others cannot: an effect pooled across several
+past studies, such as earlier A/B tests of the same change, one row per study with its
+effect and standard error. It is **unsound** when there are too few studies, when
+heterogeneity is considerable and the fixed- and random-effects estimates disagree on
+sign, or when one study carries the result. Given `new_effect` and `new_se`, it also
+flags a new study whose result conflicts with the pooled estimate. Declare the claim as
+`{"effect": ..., "se": ...}` to certify a derivation that pools studies.
+
 ## Structure discovery
 
 A schema tells an agent a column's *type*; it does not tell it how the columns

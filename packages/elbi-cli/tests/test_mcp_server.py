@@ -497,6 +497,50 @@ def test_verify_analysis_through_mcp() -> None:
     assert "'z'" in out_conf  # the confounder is named
 
 
+def test_verify_pooled_effect_through_mcp() -> None:
+    from elbi_core.data import Table
+
+    markets = [
+        ("Austin", 4.1, 1.24),
+        ("Berlin", 1.9, 1.32),
+        ("Cairo", 4.3, 1.19),
+        ("Denver", 2.2, 1.28),
+        ("Edinburgh", -0.3, 1.36),
+        ("Fukuoka", 5.1, 1.21),
+    ]
+    table = Table(
+        rows=[{"market": m, "lift": str(e), "se": str(s)} for m, e, s in markets]
+    )
+    registry = Registry()
+    server = build_server(
+        registry, lambda: Runner(registry), load_dataset=lambda name: table
+    )
+    args = {"dataset": "markets", "effect": "lift", "se": "se", "study": "market"}
+
+    consistent = _tool_text(
+        asyncio.run(
+            server.call_tool(
+                "verify_pooled_effect", {**args, "new_effect": 8.0, "new_se": 4.9}
+            )
+        )
+    )
+    assert "**SOUND**" in consistent
+    assert "Hartung-Knapp" in consistent
+
+    conflicting = _tool_text(
+        asyncio.run(
+            server.call_tool(
+                "verify_pooled_effect", {**args, "new_effect": -10.0, "new_se": 2.0}
+            )
+        )
+    )
+    assert "**UNSOUND**" in conflicting
+    assert "prior-data conflict" in conflicting
+
+    composite = _tool_text(asyncio.run(server.call_tool("verify", args)))
+    assert "[sound] pooled-effect" in composite
+
+
 def test_describe_dataset_lists_and_describes() -> None:
     registry = Registry()
     server = build_server(

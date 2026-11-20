@@ -132,6 +132,13 @@ def _rtm_data() -> list[dict[str, str]]:
     return _rows(rows)
 
 
+def _pooled_data() -> list[dict[str, str]]:
+    studies = [(4.1, 1.24), (1.9, 1.32), (4.3, 1.19), (2.2, 1.28), (-0.3, 1.36)]
+    return _rows(
+        {"study": f"s{i}", "lift": e, "se": s} for i, (e, s) in enumerate(studies)
+    )
+
+
 #: question kind -> (dataset, claim, must-apply, must-not-apply)
 _MATRIX = [
     (
@@ -139,7 +146,7 @@ _MATRIX = [
         _effect_data(),
         {"x": "x", "y": "y"},
         {"effect", "correlation", "regression"},
-        {"survival", "forecast", "experiment", "clusters"},
+        {"survival", "forecast", "experiment", "clusters", "pooled-effect"},
     ),
     (
         "group difference",
@@ -224,6 +231,13 @@ _MATRIX = [
         {"before": "pre", "after": "post", "group": "g"},
         {"rtm"},
         {"effect", "experiment", "screen", "clusters"},
+    ),
+    (
+        "effect pooled across studies",
+        _pooled_data(),
+        {"effect": "lift", "se": "se", "study": "study"},
+        {"pooled-effect"},
+        {"effect", "comparison", "experiment", "regression"},
     ),
 ]
 

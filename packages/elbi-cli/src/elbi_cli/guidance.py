@@ -50,8 +50,10 @@ Work like a careful data scientist, and be explicit about what you did:
   (`verify_classification`: skill beyond the base rate), predicted probabilities
   (`verify_calibration`: expected calibration error), a logistic odds ratio
   (`verify_logistic`: separation), a survival difference (`verify_survival`:
-  censoring-aware log-rank), and a cluster structure (`verify_clusters`: tendency and
-  separation). Resolve any causal-direction caveat with domain knowledge.
+  censoring-aware log-rank), a cluster structure (`verify_clusters`: tendency and
+  separation), and an effect pooled across past studies (`verify_pooled_effect`: too
+  few studies, heterogeneity, one study carrying it, conflict with a new study).
+  Resolve any causal-direction caveat with domain knowledge.
 - When you author a derivation that draws a conclusion, output the analytic rows it
   concerns and declare the conclusion on `propose_derivation` as a `claim` of
   verification column roles (e.g. `{"x": "dose", "y": "response"}`, or
