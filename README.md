@@ -16,7 +16,9 @@
 
 *Dig deeper. Build on what you find.*
 
-elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read exactly how a finding was computed, write your own, and check, correct, or throw out any of them. elbi comes batteries-included, with a local data-science environment for notebooks, SQL, and AutoML.
+elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read how a finding was computed and fix or delete any of them. Each one is tied to the data it ran on, and elbi recomputes it on the next run after those data change. elbi also includes a local environment for notebooks and SQL, with AutoML on top.
+
+<p align="center"><img alt="A derivation in the elbi app: its output above the Python source that computed it" src="./docs/assets/elbi-app-derivation.png" width="720"></p>
 
 ## elbi in 60 seconds
 
@@ -29,7 +31,7 @@ cd acme-data-context
 elbi mcp                      # serve elbi over MCP
 ```
 
-That prints `MCP server ready at http://localhost:7878/mcp`. Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer from the example's `run_churn_risk` rather than inventing SQL. The example data is three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims.
+That prints `MCP server ready at http://localhost:7878/mcp` (the first start can take about 30 seconds). Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer by calling the example's `run_churn_risk`. The example data are three rows, enough to check that your agent is connected. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims. To see elbi catch a stale answer on real data, jump to [Skill files go stale](#skill-files-go-stale).
 
 ## Connecting Clients
 
@@ -80,37 +82,75 @@ elbi serve
 
 </details>
 
+## Skill files go stale
+
+A skill file keeps the answer from the day it was written. In this demo the data move overnight, and the agent asks again.
+
+<details>
+<summary><strong>Show the demo</strong></summary>
+
+<p align="center"><img alt="An agent's skill file says to trim TTD by 3%. Overnight TTD fell 21.9%. Asked again, elbi recomputes from the new prices and says to trim 9.23%." src="./docs/assets/demo-stale-skill.gif" width="720"></p>
+
+```bash
+git clone https://github.com/Intelligible/elbi
+cd elbi/examples/03_stale_skill
+./naive.sh          # an agent that trusts the skill file
+uv run ./elbi.sh    # the same question, asked of elbi over MCP
+```
+
+`skills/risk.md` was written after the August 6, 2026 close and says to cut TTD 3%. The next morning TTD fell 21.9% on an earnings miss, and that day is already in `fixtures/returns.csv`. The portfolio is a made-up example built on real prices.
+
+`naive.sh` follows the file:
+
+```
+BROKER: cut TTD 3%   (source: skills/risk.md, 2026-08-06 close)
+```
+
+`elbi.sh` calls elbi's `run_risk_overlay` tool, which recomputes from the current data:
+
+```
+=== run_risk_overlay ===
+as_of      2026-08-07
+gross_vol  0.2431
+cuts       TTD -0.0923
+source     cov_matrix@c55af5ca
+```
+
+It cuts TTD by about 9% and names the covariance version it used.
+
+</details>
+
 ## What your agent gets
 
-**A look before it leaps.** Before analyzing, your agent can see how a dataset fits together: which columns identify a row, which are derived from others, which carry overlapping information and could confound a comparison, and how complete each one is.
+**Dataset structure.** Before analyzing, your agent can see which columns identify a row and how complete each column is. It also sees derived columns, and overlapping ones that could confound a comparison.
 
-**Statistical checks it can run.** More than 30 `verify_*` tools let your agent test a claim with a method suited to it: regression, causal designs (instrumental variables, difference-in-differences, regression discontinuity), survival analysis, calibration, forecasting, and [more](./docs/mcp.md#what-gets-exposed). Most return an estimate, its caveats, and a verdict of *sound*, *unsound*, or *inconclusive* with the reason, so your agent can see when a confounder, a subgroup reversal, or a leaked feature undoes a pattern.
+**Statistical checks.** More than 30 `verify_*` tools let your agent test a claim with a method suited to it: regression, causal designs (instrumental variables, difference-in-differences, regression discontinuity), survival analysis, calibration, forecasting, and [more](./docs/mcp.md#what-gets-exposed). Most return an estimate, its caveats, and a verdict of *sound*, *unsound*, or *inconclusive* with the reason, so your agent can see when something like a leaked feature undoes a pattern.
 
-**A memory that shows its work.** When a finding is worth keeping, your agent records it as a *derivation*: the code, the data it ran on, and the result. Any agent you connect can find the derivation and call it again. The result is tied to the data it ran on, and the next run of elbi after that data changes recomputes it. If the agent states a claim (an effect of `x` on `y`, or a model's target and features), elbi checks the claim before recording the finding. You can revise or delete any derivation, and [require your own sign-off](./docs/authoring.md#certification-policy) if you want a stricter gate.
+**Saved findings.** When a finding is worth keeping, your agent records it as a *derivation* that keeps its code next to its result. Any agent you connect can find the derivation and call it again. The result is tied to the data it ran on, and the next run of elbi after those data change recomputes it. If the agent states a claim (an effect of `x` on `y`, or a model's target and features), elbi checks the claim before recording the finding. You can revise or delete any derivation, and [require your own sign-off](./docs/authoring.md#certification-policy) if you want a stricter gate.
 
 In SleuthBench ([arXiv:2609.34228](https://arxiv.org/abs/2609.34228)), giving six frontier models precomputed statistical artifacts alongside their Python tool raised their accuracy on questions about how features shape an outcome from 41.9% to 68.0%.
 
 ## Examples
 
-- [`01_getting_started`](examples/01_getting_started): a complete project like the one `elbi init` scaffolds, where `pricing_effects` builds on `churn_risk`, so the agent reuses a churn calculation instead of reinventing it in SQL each time.
+- [`01_getting_started`](examples/01_getting_started): a complete project like the one `elbi init` scaffolds, where `pricing_effects` builds on `churn_risk`, so the agent reuses one churn calculation every time.
 - [`02_serving_a_model`](examples/02_serving_a_model): give elbi a trained model and let the agent query its predictions, for one customer or a batch, without writing scoring code.
-- [`03_stale_skill`](examples/03_stale_skill): a skill file written after yesterday's close tells the agent to cut a position 3%. Overnight the stock fell 21.9%, and the same question asked as an elbi tool, recomputed from this morning's prices, cuts more than twice as much. The file can't tell that its data moved.
+- [`03_stale_skill`](examples/03_stale_skill): a skill file written after yesterday's close tells the agent to cut a position 3%. Overnight the stock fell 21.9%, and the same question asked as an elbi tool, recomputed from this morning's prices, cuts about three times as much.
 
 ## FAQ
 
 <details>
 <summary><strong>Why not just keep notes, or use my agent's memory?</strong></summary>
 
-Keep using them for what you've told your agent: conventions, preferences, context. For what it found out from data, elbi is the memory built for the job. A derivation shows its work (its code, inputs, result, and lineage), so you can see what a finding rests on, rerun it, re-check its claim with `elbi test`, and see which version of the data it ran on. And elbi keeps it in one place that every MCP client can use, instead of in one agent's notes or rules file, so a finding Claude Code recorded is there for Cursor too.
+Use elbi for what your agent found out from data. A derivation keeps its code and lineage, so you can rerun it or re-check its claim with `elbi test`, and it records which version of the data it used. elbi keeps it where every MCP client can reach it, so a finding Claude Code recorded is there for Cursor too.
 
-The two work together rather than compete: elbi is the source of record for what your agent learned from data, and memory is one more place that knowledge can reach. Any MCP client can already read a derivation's current result as a resource.
+They work together. Your agent's memory is for what you tell it, like your team's conventions, and a memory note can point to a derivation so the agent reads its current result. Any MCP client can already read that result as a resource.
 
 </details>
 
 <details>
 <summary><strong>Does elbi replace my semantic layer?</strong></summary>
 
-No, it builds on one. A semantic layer gives each business number one agreed definition, and a derivation can take that governed model as an input, including one described with [OSI](https://open-semantic-interchange.org/) (Open Semantic Interchange), so your agent's analysis starts from the definitions your team already owns. elbi also ships a semantic layer of its own ([Metrics](./docs/metrics.md)) that imports from and exports to OSI. What elbi adds is the work that goes beyond shared definitions: analyses and models your agent saves with the code, data, and result behind them, for any agent to build on.
+It builds on one. A semantic layer gives each business number one agreed definition, and a derivation can take that governed model as an input, including one described with [OSI](https://open-semantic-interchange.org/) (Open Semantic Interchange), so your agent's analysis starts from the definitions your team already owns. elbi also ships a semantic layer of its own ([Metrics](./docs/metrics.md)) that imports from and exports to OSI. On top of those definitions, elbi keeps the analyses and models your agent saves, with the code behind them, for any agent to build on.
 
 </details>
 
@@ -143,9 +183,9 @@ def churn_by_plan(ctx: Context) -> Artifact:
 
 elbi runs it against whatever `elbi.dev.yaml` binds, records the result with its inputs and lineage, and exposes it to the agent as `run_churn_by_plan`. The result is cached against the code and the `customers` data: a running server keeps serving it, and the next run after either changes recomputes it.
 
-**Serving your own computations.** You don't have to wait for an agent to discover something. Write derivations yourself (a metric, a model, a piece of business logic) and elbi serves each one to every MCP client as a cached, versioned tool, so every agent and tool gets the same answer. See [Authoring derivations](./docs/derivations.md) and [Analytics as code](./docs/analytics-as-code.md).
+**Serving your own computations.** You can write derivations yourself, such as a metric or a piece of business logic, and elbi serves each one to every MCP client as a cached, versioned tool, so every agent and tool gets the same answer. See [Authoring derivations](./docs/derivations.md) and [Analytics as code](./docs/analytics-as-code.md).
 
-Data comes from local files (CSV, JSON, Parquet) or a SQL database ([Data sources](./docs/data-sources.md)). See [agent-authored derivations](./docs/authoring.md) for how an agent proposes one.
+Data come from local files (CSV, JSON, Parquet) or a SQL database ([Data sources](./docs/data-sources.md)). See [agent-authored derivations](./docs/authoring.md) for how an agent proposes one.
 
 ## Installation
 
@@ -188,7 +228,7 @@ elbi stands for "Empirical Layer by Intelligible." An _empirical layer_ is where
 
 ## Running elbi across a team
 
-elbi is built for one person working with data already in reach: your machine, your files, no account. If you need that learning shared across people and teams, connected to your organization's data systems and kept current, that's what [Summand](https://summand.com), Intelligible's enterprise data platform, is for. Write to solutions@intelligible.ai.
+elbi is built for one person working on their own machine with data already in reach. [Summand](https://summand.com), Intelligible's enterprise data platform, is the hosted version. It recomputes findings on its own when the data change and draws on several of your organization's data systems at once. Each team's work stays separate. Write to solutions@intelligible.ai.
 
 ## License
 
