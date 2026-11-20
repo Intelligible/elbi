@@ -1065,6 +1065,8 @@ class MetricSnapshot(SQLModel, table=True):
     # The source's verification verdict at snapshot time. A monitor only watches a
     # certified metric or derivation, so an alert can say the moved number was verified.
     source_verdict: str | None = Field(default=None)
+    # JSON list of the breaching keys a keyed monitor read; ``None`` for an unkeyed one.
+    breach_keys_json: str | None = Field(default=None)
 
 
 class MonitorIncident(SQLModel, table=True):
@@ -1088,6 +1090,9 @@ class MonitorIncident(SQLModel, table=True):
     reason: str = ""
     snapshots: int = 1
     cause: str | None = Field(default=None)
+    # JSON list of the breaching keys already announced in this incident, so a restart
+    # does not forget them; ``None`` for an unkeyed monitor or one not yet seeded.
+    keys_json: str | None = Field(default=None)
 
 
 class AuditEvent(SQLModel, table=True):
@@ -4983,6 +4988,8 @@ def migrate(engine: Engine) -> None:
         _migrate_add_column(conn, "saved_query", "copied_from", "VARCHAR")
         _migrate_add_column(conn, "metric", "copied_from", "VARCHAR")
         _migrate_add_column(conn, "monitor_incident", "cause", "VARCHAR")
+        _migrate_add_column(conn, "monitor_incident", "keys_json", "VARCHAR")
+        _migrate_add_column(conn, "metric_snapshot", "breach_keys_json", "VARCHAR")
         for _trash_table in (
             "notebook",
             "notebook_folder",
