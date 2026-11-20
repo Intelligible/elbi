@@ -14,9 +14,7 @@
 
 **Give your agent an empirical memory.**
 
-*Dig deeper. Build on what you find.*
-
-elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read exactly how a finding was computed, write your own, and check, correct, or throw out any of them. elbi comes batteries-included, with a local data-science environment for notebooks, SQL, and AutoML.
+elbi is an open-source data-science harness for the agent you already use. With elbi, your agent can save what it learns from your data as a *derivation*, so later sessions and any agent you connect can dig deeper and build on it. Derivations are Python functions, so you can read exactly how a finding was computed, write your own, and check, correct, or throw out any of them. Each one is tied to the data it ran on, so when the data changes, elbi recomputes instead of repeating a stale answer. elbi comes batteries-included, with a local data-science environment for notebooks, SQL, and AutoML.
 
 <p align="center"><img alt="A derivation in the elbi app: its output above the Python source that computed it" src="./docs/assets/elbi-app-derivation.png" width="720"></p>
 
@@ -31,7 +29,7 @@ cd acme-data-context
 elbi mcp                      # serve elbi over MCP
 ```
 
-That prints `MCP server ready at http://localhost:7878/mcp` (the first start can take about 30 seconds). Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer from the example's `run_churn_risk` rather than inventing SQL. The example data is three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims.
+That prints `MCP server ready at http://localhost:7878/mcp` (the first start can take about 30 seconds). Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer from the example's `run_churn_risk` rather than inventing SQL. The example data is three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims. To see elbi catch a stale answer on real data, jump to [Skill files go stale](#skill-files-go-stale).
 
 ## Connecting Clients
 
