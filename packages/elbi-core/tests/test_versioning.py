@@ -317,3 +317,9 @@ def test_canonical_json_is_idempotent(value: object) -> None:
 def test_canonical_json_independent_of_key_order(data: dict[str, int]) -> None:
     reordered = dict(reversed(list(data.items())))
     assert versioning.canonical_json(reordered) == versioning.canonical_json(data)
+
+
+def test_inputs_version_tracks_data_and_ignores_order() -> None:
+    a = versioning.inputs_version({"dataset:a": "v1", "dataset:b": "v2"})
+    assert a == versioning.inputs_version({"dataset:b": "v2", "dataset:a": "v1"})
+    assert a != versioning.inputs_version({"dataset:a": "v1", "dataset:b": "v3"})

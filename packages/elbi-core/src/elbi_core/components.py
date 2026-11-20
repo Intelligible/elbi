@@ -87,21 +87,34 @@ def validate_components(value: object) -> list[dict[str, Any]]:
 
 
 def stamp_provenance(
-    component: dict[str, Any], *, derivation: str, derivation_version: str
+    component: dict[str, Any],
+    *,
+    derivation: str,
+    derivation_version: str,
+    inputs_version: str | None = None,
+    computed_at: str | None = None,
 ) -> dict[str, Any]:
-    """Set ``provenance.derivation``/``derivation_version`` on a component.
+    """Set the producer and freshness fields of ``provenance`` on a component.
 
     Always this derivation and this version: whatever code emitted the item, the
     computation being served is its producer, and a value the author (or an
     upstream system) wrote there would let a component claim a producer, or a
     freshness, it does not have. Every other provenance field (``source``,
     ``author``, ``method``, ...) is the author's and is kept as is.
+    ``inputs_version``/``computed_at`` are set when given; an authored value for
+    either is dropped otherwise.
 
     Returns a new dict; the input is not mutated.
     """
     provenance = dict(component.get("provenance") or {})
     provenance["derivation"] = derivation
     provenance["derivation_version"] = derivation_version
+    provenance.pop("inputs_version", None)
+    provenance.pop("computed_at", None)
+    if inputs_version is not None:
+        provenance["inputs_version"] = inputs_version
+    if computed_at is not None:
+        provenance["computed_at"] = computed_at
     return {**component, "provenance": provenance}
 
 

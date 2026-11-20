@@ -53,6 +53,31 @@ def test_stamp_provenance_fills_gap() -> None:
     assert "provenance" not in VALID_COMPONENT
 
 
+def test_stamp_provenance_adds_freshness_fields_and_drops_authored_ones() -> None:
+    authored = {
+        **VALID_COMPONENT,
+        "provenance": {
+            "computed_at": "1999-01-01T00:00:00Z",
+            "inputs_version": "forged",
+        },
+    }
+    stamped = stamp_provenance(
+        authored,
+        derivation="x",
+        derivation_version="y",
+        inputs_version="d1",
+        computed_at="2026-11-06T12:00:00Z",
+    )
+    assert stamped["provenance"] == {
+        "derivation": "x",
+        "derivation_version": "y",
+        "inputs_version": "d1",
+        "computed_at": "2026-11-06T12:00:00Z",
+    }
+    bare = stamp_provenance(authored, derivation="x", derivation_version="y")
+    assert bare["provenance"] == {"derivation": "x", "derivation_version": "y"}
+
+
 def test_stamp_provenance_preserves_other_fields() -> None:
     """Stamping sets the two derivation fields; a human author/source is kept."""
     authored = {
