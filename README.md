@@ -136,7 +136,7 @@ In SleuthBench ([arXiv:2609.34228](https://arxiv.org/abs/2609.34228)), giving si
 
 Keep using them for what you've told your agent, like your conventions. Use elbi for what it found out from data. A derivation keeps its code and lineage, so you can rerun it or re-check its claim with `elbi test`, and it records which version of the data it used. elbi keeps it where every MCP client can reach it, so a finding Claude Code recorded is there for Cursor too.
 
-They work together. elbi holds the record of what your agent learned from data, and memory can carry that knowledge further. Any MCP client can already read a derivation's current result as a resource.
+They work together. Your agent's memory is for what you tell it, like your team's conventions, and a memory note can point to a derivation so the agent reads its current result. Any MCP client can already read that result as a resource.
 
 </details>
 
