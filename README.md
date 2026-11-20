@@ -33,39 +33,6 @@ elbi mcp                      # serve elbi over MCP
 
 That prints `MCP server ready at http://localhost:7878/mcp` (the first start can take about 30 seconds). Point your agent at it (steps for each client are just below) and ask who has the highest churn risk: your agent should list elbi's tools and answer from the example's `run_churn_risk` rather than inventing SQL. The example data is three rows, so it's a smoke test. Bind your own data ([Data sources](./docs/data-sources.md)) to see the agent map a dataset's structure and check its claims.
 
-## Skill files go stale
-
-A skill file tells your agent what was true when someone wrote it. elbi recomputes the answer from the data you have now.
-
-<p align="center"><img alt="An agent's skill file says to trim TTD by 3%. Overnight TTD fell 21.9%. Asked again, elbi recomputes from the new prices and says to trim 9.23%." src="./docs/assets/demo-stale-skill.gif" width="720"></p>
-
-```bash
-git clone https://github.com/Intelligible/elbi
-cd elbi/examples/03_stale_skill
-./naive.sh          # an agent that trusts the skill file
-uv run ./elbi.sh    # the same question, asked of elbi over MCP
-```
-
-`skills/risk.md` was written after the August 6, 2026 close and says to cut TTD 3%. The next morning TTD fell 21.9% on an earnings miss, and that day is already in `fixtures/returns.csv`. The prices are real; the portfolio is hypothetical.
-
-`naive.sh` follows the file:
-
-```
-BROKER: cut TTD 3%   (source: skills/risk.md, 2026-08-06 close)
-```
-
-`elbi.sh` calls elbi's `run_risk_overlay` tool, which recomputes from the current data:
-
-```
-=== run_risk_overlay ===
-as_of      2026-08-07
-gross_vol  0.2431
-cuts       TTD -0.0923
-source     cov_matrix@c55af5ca
-```
-
-Same question, current answer: cut TTD about 9%, with the version of the covariance it came from.
-
 ## Connecting Clients
 
 <details>
@@ -114,6 +81,39 @@ elbi serve
 ```
 
 </details>
+
+## Skill files go stale
+
+A skill file tells your agent what was true when someone wrote it. elbi recomputes the answer from the data you have now.
+
+<p align="center"><img alt="An agent's skill file says to trim TTD by 3%. Overnight TTD fell 21.9%. Asked again, elbi recomputes from the new prices and says to trim 9.23%." src="./docs/assets/demo-stale-skill.gif" width="720"></p>
+
+```bash
+git clone https://github.com/Intelligible/elbi
+cd elbi/examples/03_stale_skill
+./naive.sh          # an agent that trusts the skill file
+uv run ./elbi.sh    # the same question, asked of elbi over MCP
+```
+
+`skills/risk.md` was written after the August 6, 2026 close and says to cut TTD 3%. The next morning TTD fell 21.9% on an earnings miss, and that day is already in `fixtures/returns.csv`. The prices are real; the portfolio is hypothetical.
+
+`naive.sh` follows the file:
+
+```
+BROKER: cut TTD 3%   (source: skills/risk.md, 2026-08-06 close)
+```
+
+`elbi.sh` calls elbi's `run_risk_overlay` tool, which recomputes from the current data:
+
+```
+=== run_risk_overlay ===
+as_of      2026-08-07
+gross_vol  0.2431
+cuts       TTD -0.0923
+source     cov_matrix@c55af5ca
+```
+
+Same question, current answer: cut TTD about 9%, with the version of the covariance it came from.
 
 ## What your agent gets
 
