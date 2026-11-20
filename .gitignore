@@ -62,6 +62,9 @@ node_modules/
 .mutation.sqlite
 .benchmark-mutation.sqlite
 
+# The app's default SQLite store (sqlite:./elbi.db) when it runs from the repo root
+/elbi.db
+
 # Local MLflow store/artifacts created when a command or test runs from the repo root
 /mlflow.db
 /mlruns/
