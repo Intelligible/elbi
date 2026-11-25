@@ -6,7 +6,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
-from ._numerics import _frame
+from ._numerics import _design, _frame
 from ._report import _T, Check, VerificationReport
 
 
@@ -27,8 +27,11 @@ def verify_logistic(
     identifiable), ``sound`` (a significant, well-posed effect), or ``inconclusive`` (no
     significant effect, or too little data).
     """
-    cols = [x, *controls]
-    data, n = _frame(rows, [y, *cols])
+    d = _design(rows, x, y, controls)
+    if d.refusal:
+        return VerificationReport("inconclusive", 0.0, False, (), None, (d.refusal,))
+    cols = [x, *(c for z in controls for c in d.groups[z])]
+    data, n = _frame(d.rows, [y, *cols])
     cols = [c for c in cols if c in data]
     if n < 40 or y not in data or x not in data:
         return VerificationReport(

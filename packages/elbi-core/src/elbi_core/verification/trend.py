@@ -72,7 +72,7 @@ def verify_trend(
     checks: list[Check] = []
     pivotal: str | None = None
 
-    ac = _autocorr1(_residual_on(data, "v", "t"))
+    ac = _autocorr1(_residual_on(data, "v", ["t"]))
     held = abs(ac) < 0.5
     checks.append(
         Check(

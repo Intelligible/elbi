@@ -8,10 +8,10 @@ from typing import Any
 from ._numerics import (
     _breusch_pagan,
     _coef_t,
+    _design,
     _fragility,
     _frame,
     _low_influence,
-    _numeric_columns,
     _ols_full,
     _reset_t,
     _robust_t,
@@ -43,11 +43,11 @@ def verify_regression(
     The verdict is ``sound`` (every check held), ``unsound`` (one broke it), or
     ``inconclusive`` (the coefficient is not significant, or too little data to fit).
     """
-    # a non-numeric control cannot enter a linear fit; drop it rather than let it void
-    # every row (the effect gate does the same), so the coefficient is still checked
-    numeric = set(_numeric_columns(rows))
-    cols = [x, *(c for c in controls if c in numeric)]
-    data, n = _frame(rows, [y, *cols])
+    d = _design(rows, x, y, controls)
+    if d.refusal:
+        return VerificationReport("inconclusive", 0.0, False, (), None, (d.refusal,))
+    cols = [x, *(c for z in controls for c in d.groups[z])]
+    data, n = _frame(d.rows, [y, *cols])
     cols = [c for c in cols if c in data]
     if n < 30 or y not in data or x not in data:
         return VerificationReport(

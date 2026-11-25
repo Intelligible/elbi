@@ -113,7 +113,7 @@ def verify_multiverse(
         return MultiverseReport("inconclusive", 0.0, 0, 0.0, 1.0, 0, (), None, None, ())
     pool = [c for c in pool if c in data]
     # only defensible adjustments: confounders or neutral covariates, never colliders
-    pool = [z for z in pool if _role(data, x, y, z) != "collider"]
+    pool = [z for z in pool if _role(data, x, y, [z]) != "collider"]
     pool.sort(
         key=lambda z: abs(_corr(data[x], data[z])) + abs(_corr(data[y], data[z])),
         reverse=True,

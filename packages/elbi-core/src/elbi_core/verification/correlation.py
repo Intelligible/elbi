@@ -9,10 +9,12 @@ from ._numerics import (
     _autocorr1,
     _corr,
     _corr_t,
+    _design,
     _frame,
     _iqr_mask,
-    _numeric_columns,
     _residual_on,
+    _spanned,
+    _untested_caveats,
 )
 from ._report import (
     _MIN_KEEP,
@@ -32,13 +34,15 @@ def verify_correlation(
     not explained away by an observed covariate; always caveats that association is
     not causation.
     """
-    pool = [c for c in _numeric_columns(rows) if c not in (x, y)]
-    data, n = _frame(rows, [x, y, *pool])
+    d = _design(rows, x, y)
+    if d.refusal:
+        return VerificationReport("inconclusive", 0.0, False, (), None, (d.refusal,))
+    pool = d.candidates
+    data, n = _frame(d.rows, [x, y, *(c for z in pool for c in d.groups[z])])
     if n < 30 or x not in data or y not in data:
         return VerificationReport(
             "inconclusive", 0.0, False, (), None, ("too few numeric rows",)
         )
-    pool = [c for c in pool if c in data]
     r = _corr(data[x], data[y])
     if abs(_corr_t(r, n)) <= _T:
         return VerificationReport(
@@ -102,8 +106,17 @@ def verify_correlation(
     # zero (attenuation catches a spurious link the significance test misses at the
     # margin, where the residual noises correlate by chance).
     confound: str | None = None
+    copies: list[str] = []
     for z in pool:
-        partial = _corr(_residual_on(data, x, z), _residual_on(data, y, z))
+        zc = d.groups[z]
+        pinned = next((v for v in (x, y) if _spanned(data, v, zc)), None)
+        if pinned is not None:
+            if all(_spanned(data, c, [pinned]) for c in zc):
+                copies.append(z)
+                continue
+            confound = z
+            break
+        partial = _corr(_residual_on(data, x, zc), _residual_on(data, y, zc))
         overturned = (
             abs(_corr_t(partial, n)) <= _T
             or (partial > 0) != positive
@@ -132,5 +145,6 @@ def verify_correlation(
     caveats = (
         "correlation is not causation; an association does not establish that one "
         "variable drives the other",
+        *_untested_caveats(copies, d.untested, x, y),
     )
     return VerificationReport(verdict, r, True, tuple(checks), pivotal, caveats)
