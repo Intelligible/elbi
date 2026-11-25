@@ -10,6 +10,7 @@ from ._numerics import (
     _design,
     _fragility,
     _frame,
+    _independent,
     _iqr_mask,
     _is_unshielded_collider,
     _ols,
@@ -61,6 +62,7 @@ def verify_effect(
         return VerificationReport(
             "inconclusive", 0.0, False, (), None, ("too few numeric rows",)
         )
+    held = _independent(data, held)
     if held and _spanned(data, x, held):
         named = ", ".join(f"'{c}'" for c in controls)
         msg = f"'{x}' is determined by {named}, so its effect cannot be separated"
@@ -91,17 +93,19 @@ def verify_effect(
     # an uncontrolled confounder that, held fixed, overturns the effect
     for z in d.candidates:
         zc = d.groups[z]
-        fixed = [*held, *zc]
+        fixed = _independent(data, [*held, *zc])
+        if len(fixed) == len(held):
+            continue
         pinned = next((v for v in (x, y) if _spanned(data, v, fixed)), None)
         if pinned is not None:
             if all(_spanned(data, c, [*held, pinned]) for c in zc):
                 copies.append(z)
                 continue
-            contingent = (
+            contingent = contingent or (
                 f"'{pinned}' is determined by '{z}', so the effect cannot be "
                 f"separated from '{z}'"
             )
-            break
+            continue
         if _role(data, x, y, zc) != "confounder":
             continue
         if not holds(_ols(data, y, x, fixed)):
@@ -127,10 +131,10 @@ def verify_effect(
     # effect and a collider or mediator fabricating one look identical), so the effect
     # is real-or-artifact on an assumption the data cannot settle: not certifiable.
     for z in controls:
-        zc = d.groups[z]
-        if holds(_ols(data, y, x, [c for c in held if c not in zc])):
+        rest = [c for w in controls if w != z for c in d.groups[w]]
+        if holds(_ols(data, y, x, _independent(data, rest))):
             continue
-        if _is_unshielded_collider(data, x, y, zc):
+        if _is_unshielded_collider(data, x, y, d.groups[z]):
             pivotal = (
                 pivotal or f"the effect only appears when controlling collider '{z}'"
             )

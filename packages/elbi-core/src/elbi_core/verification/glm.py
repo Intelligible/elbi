@@ -6,7 +6,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
-from ._numerics import _design, _frame
+from ._numerics import _design, _frame, _independent, _spanned
 from ._report import _T, Check, VerificationReport
 
 
@@ -63,7 +63,12 @@ def verify_logistic(
             ("with separation, report the threshold rule, not an odds ratio",),
         )
 
-    beta, t = _logit_coef(data, yv, x, cols)
+    held = _independent(data, cols[1:])
+    if held and _spanned(data, x, held):
+        named = ", ".join(f"'{c}'" for c in controls)
+        msg = f"'{x}' is determined by {named}, so its effect cannot be separated"
+        return VerificationReport("inconclusive", 0.0, False, (), None, (msg,))
+    beta, t = _logit_coef(data, yv, x, [x, *held])
     if abs(t) <= _T:
         return VerificationReport(
             "inconclusive",
@@ -134,15 +139,11 @@ def _logit_coef(
         if last is not None and max(abs(s) for s in step) < 1e-8:
             break
         last = beta
+    w = [max(m * (1 - m), 1e-9) for m in (_p(beta, design, k) for k in range(n))]
     inv = _invert(
         [
             [
-                math.fsum(
-                    design[i][k]
-                    * max(_p(beta, design, k) * (1 - _p(beta, design, k)), 1e-9)
-                    * design[j][k]
-                    for k in range(n)
-                )
+                math.fsum(design[i][k] * w[k] * design[j][k] for k in range(n))
                 for j in range(p)
             ]
             for i in range(p)

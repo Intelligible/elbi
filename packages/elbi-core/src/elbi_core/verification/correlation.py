@@ -106,6 +106,7 @@ def verify_correlation(
     # zero (attenuation catches a spurious link the significance test misses at the
     # margin, where the residual noises correlate by chance).
     confound: str | None = None
+    contingent: str | None = None
     copies: list[str] = []
     for z in pool:
         zc = d.groups[z]
@@ -114,8 +115,11 @@ def verify_correlation(
             if all(_spanned(data, c, [pinned]) for c in zc):
                 copies.append(z)
                 continue
-            confound = z
-            break
+            contingent = contingent or (
+                f"'{pinned}' is determined by '{z}', so the association cannot be "
+                f"separated from '{z}'"
+            )
+            continue
         partial = _corr(_residual_on(data, x, zc), _residual_on(data, y, zc))
         overturned = (
             abs(_corr_t(partial, n)) <= _T
@@ -141,7 +145,13 @@ def verify_correlation(
                 pivotal or f"the association disappears controlling for '{confound}'"
             )
 
-    verdict = "sound" if all(c.survived for c in checks) else "unsound"
+    if not all(c.survived for c in checks):
+        verdict = "unsound"
+    elif contingent is not None:
+        verdict = "inconclusive"
+        pivotal = contingent
+    else:
+        verdict = "sound"
     caveats = (
         "correlation is not causation; an association does not establish that one "
         "variable drives the other",

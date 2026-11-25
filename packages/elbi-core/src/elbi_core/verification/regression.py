@@ -11,6 +11,7 @@ from ._numerics import (
     _design,
     _fragility,
     _frame,
+    _independent,
     _low_influence,
     _ols_full,
     _reset_t,
@@ -53,6 +54,7 @@ def verify_regression(
         return VerificationReport(
             "inconclusive", 0.0, False, (), None, ("too few numeric rows",)
         )
+    cols = [x, *_independent(data, cols[1:])]
     p = len(cols) + 1
     if n < 10 * p:
         return VerificationReport(

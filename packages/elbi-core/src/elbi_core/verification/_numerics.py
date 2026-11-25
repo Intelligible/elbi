@@ -62,7 +62,8 @@ def _design(
     }
     refuse = partial(_Design, [], {}, [], [])
     for v in (x, y):
-        if v in text:
+        # a numeric x or y with some unreadable cells loses only those rows
+        if v in text and not any(_as_float(r.get(v)) is not None for r in rows):
             return refuse(
                 f"'{v}' is text: add a 0/1 column for it, or use verify_comparison "
                 "for a difference between two groups"
@@ -302,6 +303,12 @@ def _ols(
     xtx = [[_dot(design[i], design[j]) for j in range(p)] for i in range(p)]
     inv = _inv(xtx)
     if inv is None:
+        # controls aliased on these rows only (a level a subset lacks) add nothing
+        live = _independent(
+            {c: [data[c][i] for i in indices] for c in controls}, controls
+        )
+        if len(live) < len(controls):
+            return _ols(data, y, x, live, mask)
         return 0.0, 0.0
     xty = [_dot(col, yv) for col in design]
     beta = [_dot(inv[i], xty) for i in range(p)]
@@ -327,20 +334,35 @@ def _residual_on(
     data: dict[str, list[float]], target: str, zs: Sequence[str]
 ) -> list[float]:
     """Residuals of ``target`` on intercept and ``zs``; a spanned column is skipped."""
-    basis: list[list[float]] = []
+    basis, _ = _basis(data, zs, len(data[target]))
+    return _project_out(list(data[target]), basis)
 
-    def project_out(v: list[float]) -> list[float]:
-        for b in basis:
-            c = _dot(v, b)
-            v = [vi - c * bi for vi, bi in zip(v, b, strict=True)]
-        return v
 
-    for col in ([1.0] * len(data[target]), *(data[z] for z in zs)):
-        v = project_out(list(col))
+def _project_out(v: list[float], basis: Sequence[Sequence[float]]) -> list[float]:
+    for b in basis:
+        c = _dot(v, b)
+        v = [vi - c * bi for vi, bi in zip(v, b, strict=True)]
+    return v
+
+
+def _basis(
+    data: dict[str, list[float]], cols: Sequence[str], n: int
+) -> tuple[list[list[float]], list[str]]:
+    """Orthonormal basis of intercept and ``cols``, and the ``cols`` that add to it."""
+    basis = [[1.0 / math.sqrt(n)] * n] if n else []
+    kept: list[str] = []
+    for c in cols:
+        v = _project_out(list(data[c]), basis)
         norm = math.sqrt(_dot(v, v))
-        if norm > 1e-9 * math.sqrt(_dot(col, col)):
+        if norm > 1e-9 * math.sqrt(_dot(data[c], data[c])):
             basis.append([vi / norm for vi in v])
-    return project_out(list(data[target]))
+            kept.append(c)
+    return basis, kept
+
+
+def _independent(data: dict[str, list[float]], cols: Sequence[str]) -> list[str]:
+    """``cols`` without any that the intercept and earlier ones already determine."""
+    return _basis(data, cols, len(data[cols[0]]))[1] if cols else []
 
 
 def _spanned(data: dict[str, list[float]], target: str, cols: Sequence[str]) -> bool:
