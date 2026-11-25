@@ -192,6 +192,7 @@ module = [
     "flaml.*",
     "pandas.*",
     "sklearn.*",
+    "threadpoolctl",
     "numpy.*",
     "shap.*",
     "matplotlib.*",
