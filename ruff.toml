@@ -1,5 +1,9 @@
 line-length = 88
 target-version = "py310"
+# The agent-eval harnesses are the prototypes that produced the recorded results, kept as
+# run (one tool file is pinned by hash in its pre-registration); reformatting them would
+# break that link. A port onto the shipped MCP tool belongs in linted code.
+extend-exclude = ["benchmark/agent_evals"]
 src = [
     "packages/elbi-core/src",
     "packages/elbi-cli/src",
