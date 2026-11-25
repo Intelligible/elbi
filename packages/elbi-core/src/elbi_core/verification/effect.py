@@ -7,13 +7,16 @@ from typing import Any
 
 from ._numerics import (
     _autocorr1,
+    _design,
     _fragility,
     _frame,
+    _independent,
     _iqr_mask,
     _is_unshielded_collider,
-    _numeric_columns,
     _ols,
     _role,
+    _spanned,
+    _untested_caveats,
 )
 from ._report import (
     _MIN_KEEP,
@@ -36,19 +39,36 @@ def verify_effect(
 
     ``negative_controls`` name variables ``x`` cannot plausibly cause but that share
     any confounder; an association between ``x`` and one exposes latent confounding.
-    Every other column with numeric, complete values is treated as a candidate
-    confounder or collider to test against.
+    Every other numeric column, and every text column with 2 to 10 values each on at
+    least 10 rows, is a candidate confounder or collider to test against. A text
+    control is held fixed as 0/1 columns, a control that cannot be used is named in an
+    ``inconclusive`` report, never left out.
     """
-    pool = [c for c in _numeric_columns(rows) if c not in (x, y, *negative_controls)]
-    data, n = _frame(rows, [x, y, *pool, *negative_controls])
+    d = _design(rows, x, y, controls, exclude=negative_controls)
+    unusable = d.refusal or next(
+        (
+            f"negative control '{w}' is not a numeric column"
+            for w in negative_controls
+            if w not in d.groups
+        ),
+        None,
+    )
+    if unusable:
+        return VerificationReport("inconclusive", 0.0, False, (), None, (unusable,))
+    held = [c for z in controls for c in d.groups[z]]
+    tested = [c for z in d.candidates for c in d.groups[z]]
+    data, n = _frame(d.rows, [x, y, *tested, *held, *negative_controls])
     if n < 30 or x not in data or y not in data:
         return VerificationReport(
             "inconclusive", 0.0, False, (), None, ("too few numeric rows",)
         )
+    held = _independent(data, held)
+    if held and _spanned(data, x, held):
+        named = ", ".join(f"'{c}'" for c in controls)
+        msg = f"'{x}' is determined by {named}, so its effect cannot be separated"
+        return VerificationReport("inconclusive", 0.0, False, (), None, (msg,))
 
-    pool = [c for c in pool if c in data]
-    controls = [c for c in controls if c in data]
-    base_b, base_t = _ols(data, y, x, controls)
+    base_b, base_t = _ols(data, y, x, held)
     if abs(base_t) <= _T:
         return VerificationReport(
             "inconclusive",
@@ -67,12 +87,28 @@ def verify_effect(
 
     checks: list[Check] = []
     pivotal: str | None = None
+    contingent: str | None = None
+    copies: list[str] = []
 
     # an uncontrolled confounder that, held fixed, overturns the effect
-    for z in pool:
-        if z in controls or _role(data, x, y, z) != "confounder":
+    for z in d.candidates:
+        zc = d.groups[z]
+        fixed = _independent(data, [*held, *zc])
+        if len(fixed) == len(held):
             continue
-        if not holds(_ols(data, y, x, [*controls, z])):
+        pinned = next((v for v in (x, y) if _spanned(data, v, fixed)), None)
+        if pinned is not None:
+            if all(_spanned(data, c, [*held, pinned]) for c in zc):
+                copies.append(z)
+                continue
+            contingent = contingent or (
+                f"'{pinned}' is determined by '{z}', so the effect cannot be "
+                f"separated from '{z}'"
+            )
+            continue
+        if _role(data, x, y, zc) != "confounder":
+            continue
+        if not holds(_ols(data, y, x, fixed)):
             # controlling z overturns the effect: z is a confounder (the effect is
             # spurious) or a mediator on the x->y path (the effect is real but
             # indirect). The data cannot tell them apart, so the simple effect is not
@@ -94,17 +130,17 @@ def verify_effect(
     # is not identifiable from the data (a confounder or suppressor revealing a real
     # effect and a collider or mediator fabricating one look identical), so the effect
     # is real-or-artifact on an assumption the data cannot settle: not certifiable.
-    contingent: str | None = None
     for z in controls:
-        if holds(_ols(data, y, x, [c for c in controls if c != z])):
+        rest = [c for w in controls if w != z for c in d.groups[w]]
+        if holds(_ols(data, y, x, _independent(data, rest))):
             continue
-        if _is_unshielded_collider(data, x, y, z):
+        if _is_unshielded_collider(data, x, y, d.groups[z]):
             pivotal = (
                 pivotal or f"the effect only appears when controlling collider '{z}'"
             )
             checks.append(Check("collider-control", False, f"'{z}' is a collider"))
             break
-        contingent = (
+        contingent = contingent or (
             f"the effect reverses or vanishes when '{z}' is not controlled; whether "
             f"adjusting for '{z}' is valid turns on its causal role (a pre-{x} common "
             f"cause to control for, or a collider/mediator not to), which the data "
@@ -122,7 +158,7 @@ def verify_effect(
     continuous = [c for c in (x, y) if len(set(data[c])) > 10]
     keep = _iqr_mask(data, continuous) if continuous else [True] * n
     if sum(keep) >= _MIN_KEEP * n:
-        survived = holds(_ols(data, y, x, controls, mask=keep))
+        survived = holds(_ols(data, y, x, held, mask=keep))
         checks.append(
             Check(
                 "outliers",
@@ -136,7 +172,7 @@ def verify_effect(
             pivotal = pivotal or "the effect is driven by outliers"
 
     # signal vs noise: how often random half-size subsets break the effect
-    rate = _fragility(data, x, y, controls, base_positive=base_b > 0)
+    rate = _fragility(data, x, y, held, base_positive=base_b > 0)
     survived = rate <= 0.30
     checks.append(
         Check(
@@ -222,7 +258,7 @@ def verify_effect(
     try:
         from . import _causal
 
-        bp = _causal.best_practice_effect(data, x, y, controls)
+        bp = _causal.best_practice_effect(data, x, y, held)
     except ImportError:
         bp = None
     if bp is not None and (bp["estimate"] > 0) == (base_b > 0):
@@ -237,5 +273,6 @@ def verify_effect(
         "confirm with domain knowledge",
         "soundness is conditional on no unmeasured confounder beyond those tested",
         *method_caveat,
+        *_untested_caveats(copies, d.untested, x, y),
     )
     return VerificationReport(verdict, estimate, True, tuple(checks), pivotal, caveats)

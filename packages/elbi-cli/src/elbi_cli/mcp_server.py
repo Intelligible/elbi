@@ -1025,7 +1025,10 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         "created it, fragility under resampling, reliance on outliers, and (given "
         "`negative_controls`, variables x cannot cause) latent confounding. Returns "
         "sound / unsound / inconclusive with the pivotal issue. It does NOT decide "
-        "causal direction (x→y vs y→x); confirm that with domain knowledge."
+        "causal direction (x→y vs y→x); confirm that with domain knowledge. Text "
+        "columns count: one with up to 10 values is tested as a confounder, and a "
+        "text control with up to 50 values is held fixed; a control it cannot use "
+        "makes the report inconclusive and is named in it."
     )
     server.tool(name="verify_analysis", description=verify_analysis.__doc__)(
         verify_analysis
@@ -1363,7 +1366,8 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
     verify_correlation_tool.__doc__ = (
         "Verify a linear association between `x` and `y` before you report it: "
         "significance, reliance on outliers, and whether an observed covariate "
-        "explains it away. Always caveats that correlation is not causation."
+        "explains it away, text columns with up to 10 values included. Always caveats "
+        "that correlation is not causation."
     )
     server.tool(name="verify_correlation", description=verify_correlation_tool.__doc__)(
         verify_correlation_tool
@@ -1396,7 +1400,9 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         "Verify an OLS regression coefficient (the slope of `x` on `y`, holding "
         "`controls`) before you report it: multicollinearity (VIF), heteroskedastic "
         "errors re-tested with robust standard errors, influential points, and "
-        "functional-form misspecification. Returns sound / unsound / inconclusive."
+        "functional-form misspecification. Returns sound / unsound / inconclusive. "
+        "A text control is held fixed as 0/1 columns, one it cannot use makes the "
+        "report inconclusive and is named in it."
     )
     server.tool(name="verify_regression", description=verify_regression_tool.__doc__)(
         verify_regression_tool
@@ -1537,7 +1543,8 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
         "Verify a logistic-regression odds ratio of `x` on a binary `y`. Catches "
         "separation: when a predictor splits the outcome and the maximum-likelihood "
         "odds ratio is infinite/not identifiable. Returns sound / unsound / "
-        "inconclusive."
+        "inconclusive. A text control is held fixed as 0/1 columns, one it cannot "
+        "use makes the report inconclusive and is named in it."
     )
     server.tool(name="verify_logistic", description=verify_logistic_tool.__doc__)(
         verify_logistic_tool

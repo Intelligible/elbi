@@ -218,8 +218,10 @@ per-derivation run tools:
   created it, fragility under resampling, reliance on outliers, and (given
   `negative_controls`) latent confounding, then returns **sound / unsound /
   inconclusive** with the pivotal issue. Deterministic; it does *not* decide causal
-  direction (that needs domain knowledge, surfaced as a caveat). See
-  [Verification](#verification).
+  direction (that needs domain knowledge, surfaced as a caveat). Text columns count:
+  one with up to 10 values is tested as a confounder, a text control with up to 50
+  values is held fixed, and a control it cannot use is named in an inconclusive
+  report. See [Verification](#verification).
 - **`verify_comparison`, `verify_correlation`, `verify_trend`, `verify_regression`,
   `verify_prediction`**: the same oracle for the other claim shapes a data scientist
   reports: a group difference (significance, effect size, Simpson's-paradox

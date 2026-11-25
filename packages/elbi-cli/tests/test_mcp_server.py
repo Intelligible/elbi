@@ -497,6 +497,78 @@ def test_verify_analysis_through_mcp() -> None:
     assert "'z'" in out_conf  # the confounder is named
 
 
+def _plan_rows() -> list[dict[str, str]]:
+    # Source: the reproduction in GitHub issue 210, with cells as a CSV delivers them.
+    import random
+
+    rng = random.Random(7)
+    rows = []
+    for i in range(300):
+        if i < 150:
+            discount = rng.uniform(15, 30)
+            spend = 900 - 2 * discount + rng.uniform(-60, 60)
+            plan = "enterprise"
+        else:
+            discount = rng.uniform(0, 12)
+            spend = 300 + rng.uniform(-60, 60)
+            plan = "team"
+        rows.append({"plan": plan, "discount": str(discount), "spend": str(spend)})
+    return rows
+
+
+def test_verify_analysis_names_a_text_confounder_over_mcp() -> None:
+    from elbi_core.data import Table
+
+    table = Table(rows=_plan_rows())
+    registry = Registry()
+    server = build_server(
+        registry, lambda: Runner(registry), load_dataset=lambda name: table
+    )
+
+    def verify(**extra: Any) -> str:
+        args = {"dataset": "plans", "x": "discount", "y": "spend", **extra}
+        return _tool_text(asyncio.run(server.call_tool("verify_analysis", args)))
+
+    out = verify()
+    assert "UNSOUND" in out and "'plan'" in out
+    assert "SOUND" not in verify(controls=["plan"]).replace("UNSOUND", "")
+    out = verify(controls=["plann"])
+    assert "INCONCLUSIVE" in out and "'plann'" in out
+
+
+def test_propose_holds_the_reported_claim(tmp_path: Path) -> None:
+    # Source: GitHub issue 210 reports this claim was certified over these rows.
+    import csv
+
+    rows = _plan_rows()
+    with (tmp_path / "plans.csv").open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    registry = Registry()
+    bindings = DataBindings(bindings={"d": "plans.csv"})
+    server = build_server(
+        registry,
+        lambda: Runner(
+            registry,
+            executor=RoutingExecutor(sandbox=SubprocessExecutor()),
+            bindings=bindings,
+            base_dir=tmp_path,
+        ),
+        load_dataset=lambda name: bindings.load_dataset(name, tmp_path),
+        enable_propose=True,
+    )
+    args = {
+        "name": "eff",
+        "source": "def eff(ctx):\n    return list(ctx.input('d').rows)\n",
+        "inputs": ["d"],
+        "claim": {"x": "discount", "y": "spend"},
+    }
+    out = _tool_text(asyncio.run(server.call_tool("propose_derivation", args)))
+    assert "did not pass verification" in out and "held" in out
+    assert "run_eff" not in {t.name for t in asyncio.run(server.list_tools())}
+
+
 def test_describe_dataset_lists_and_describes() -> None:
     registry = Registry()
     server = build_server(

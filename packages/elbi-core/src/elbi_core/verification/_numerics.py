@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Sequence
-from typing import Any
+from functools import partial
+from typing import Any, NamedTuple
 
 from ._report import _SIGNAL, _T
+
+# each value of a text control is a column in every fit, and fits are pure Python
+_MAX_HELD = 50
+_MAX_TESTED = 10
+_MIN_PER_VALUE = 10
 
 
 def _numeric_columns(rows: Sequence[dict[str, Any]]) -> list[str]:
@@ -21,6 +28,105 @@ def _numeric_columns(rows: Sequence[dict[str, Any]]) -> list[str]:
         except (ValueError, TypeError):
             continue
     return out
+
+
+def _text(value: Any) -> str:
+    return "" if value is None else str(value).strip()
+
+
+class _Design(NamedTuple):
+    rows: list[dict[str, Any]]
+    groups: dict[str, list[str]]
+    candidates: list[str]
+    untested: list[str]
+    refusal: str | None
+
+
+def _design(
+    rows: Sequence[dict[str, Any]],
+    x: str,
+    y: str,
+    controls: Sequence[str] = (),
+    exclude: Sequence[str] = (),
+) -> _Design:
+    """The rows as a fit sees them, each text column as 0/1 columns.
+
+    A text column of K values enters as K-1 0/1 columns (treatment coding), the most
+    common value the baseline and a blank a value of its own. ``refusal`` names a
+    requested column that cannot be used, so no caller drops it unannounced.
+    """
+    columns = list(rows[0]) if rows else []
+    numeric = set(_numeric_columns(rows))
+    text = {
+        c: Counter(_text(r.get(c)) for r in rows) for c in columns if c not in numeric
+    }
+    refuse = partial(_Design, [], {}, [], [])
+    for v in (x, y):
+        # a numeric x or y with some unreadable cells loses only those rows
+        if v in text and not any(_as_float(r.get(v)) is not None for r in rows):
+            return refuse(
+                f"'{v}' is text: add a 0/1 column for it, or use verify_comparison "
+                "for a difference between two groups"
+            )
+    for c in controls:
+        if c not in columns:
+            return refuse(f"control '{c}' is not a column")
+        if len(text.get(c, ())) > _MAX_HELD:
+            return refuse(
+                f"control '{c}' has {len(text[c])} text values; at most {_MAX_HELD} "
+                "can be held fixed"
+            )
+    skip = {x, y, *controls, *exclude}
+    candidates: list[str] = []
+    untested: list[str] = []
+    for c in columns:
+        if c in skip:
+            continue
+        if c in numeric or (
+            2 <= len(text[c]) <= _MAX_TESTED and min(text[c].values()) >= _MIN_PER_VALUE
+        ):
+            candidates.append(c)
+        elif len(text[c]) > 1:
+            untested.append(c)
+    levels = {
+        c: [v for v, _ in sorted(text[c].items(), key=lambda kv: (-kv[1], kv[0]))][1:]
+        for c in [*controls, *candidates]
+        if c in text
+    }
+    groups = {c: [c] for c in columns if c in numeric}
+    groups |= {c: [f"{c}\x1f{v}" for v in vs] for c, vs in levels.items()}
+    out = [
+        {
+            **r,
+            **{
+                f"{c}\x1f{v}": float(_text(r.get(c)) == v)
+                for c, vs in levels.items()
+                for v in vs
+            },
+        }
+        for r in rows
+    ]
+    return _Design(out, groups, candidates, untested, None)
+
+
+def _untested_caveats(
+    copies: Sequence[str], untested: Sequence[str], x: str, y: str
+) -> tuple[str, ...]:
+    def names(cs: Sequence[str]) -> str:
+        return ", ".join(f"'{c}'" for c in cs)
+
+    out = []
+    if copies:
+        out.append(
+            f"not tested as confounders, being exact linear functions of '{x}' or "
+            f"'{y}': {names(copies)}"
+        )
+    if untested:
+        out.append(
+            f"not tested as confounders (text with more than {_MAX_TESTED} values, or "
+            f"a value on fewer than {_MIN_PER_VALUE} rows): {names(untested)}"
+        )
+    return tuple(out)
 
 
 def _threshold_balanced_accuracy(
@@ -189,12 +295,20 @@ def _ols(
     indices = [i for i in range(len(data[y])) if mask is None or mask[i]]
     yv = [data[y][i] for i in indices]
     design = [[1.0] * len(indices), [data[x][i] for i in indices]]
-    design += [[data[c][i] for i in indices] for c in controls]
+    # a control constant on these rows only repeats the intercept
+    held = ([data[c][i] for i in indices] for c in controls)
+    design += [col for col in held if len(set(col)) > 1]
     p = len(design)
     n = len(yv)
     xtx = [[_dot(design[i], design[j]) for j in range(p)] for i in range(p)]
     inv = _inv(xtx)
     if inv is None:
+        # controls aliased on these rows only (a level a subset lacks) add nothing
+        live = _independent(
+            {c: [data[c][i] for i in indices] for c in controls}, controls
+        )
+        if len(live) < len(controls):
+            return _ols(data, y, x, live, mask)
         return 0.0, 0.0
     xty = [_dot(col, yv) for col in design]
     beta = [_dot(inv[i], xty) for i in range(p)]
@@ -216,21 +330,52 @@ def _corr(a: Sequence[float], b: Sequence[float]) -> float:
     return cov / math.sqrt(va * vb) if va > 0 and vb > 0 else 0.0
 
 
-def _residual_on(data: dict[str, list[float]], target: str, z: str) -> list[float]:
-    """Residuals of ``target`` after regressing it on intercept and ``z``."""
-    design = [[1.0] * len(data[z]), data[z]]
-    inv = _inv([[_dot(design[i], design[j]) for j in range(2)] for i in range(2)])
-    if inv is None:
-        return list(data[target])
-    xty = [_dot(col, data[target]) for col in design]
-    b0, b1 = (_dot(inv[i], xty) for i in range(2))
-    return [v - b0 - b1 * zi for v, zi in zip(data[target], data[z], strict=True)]
+def _residual_on(
+    data: dict[str, list[float]], target: str, zs: Sequence[str]
+) -> list[float]:
+    """Residuals of ``target`` on intercept and ``zs``; a spanned column is skipped."""
+    basis, _ = _basis(data, zs, len(data[target]))
+    return _project_out(list(data[target]), basis)
+
+
+def _project_out(v: list[float], basis: Sequence[Sequence[float]]) -> list[float]:
+    for b in basis:
+        c = _dot(v, b)
+        v = [vi - c * bi for vi, bi in zip(v, b, strict=True)]
+    return v
+
+
+def _basis(
+    data: dict[str, list[float]], cols: Sequence[str], n: int
+) -> tuple[list[list[float]], list[str]]:
+    """Orthonormal basis of intercept and ``cols``, and the ``cols`` that add to it."""
+    basis = [[1.0 / math.sqrt(n)] * n] if n else []
+    kept: list[str] = []
+    for c in cols:
+        v = _project_out(list(data[c]), basis)
+        norm = math.sqrt(_dot(v, v))
+        if norm > 1e-9 * math.sqrt(_dot(data[c], data[c])):
+            basis.append([vi / norm for vi in v])
+            kept.append(c)
+    return basis, kept
+
+
+def _independent(data: dict[str, list[float]], cols: Sequence[str]) -> list[str]:
+    """``cols`` without any that the intercept and earlier ones already determine."""
+    return _basis(data, cols, len(data[cols[0]]))[1] if cols else []
+
+
+def _spanned(data: dict[str, list[float]], target: str, cols: Sequence[str]) -> bool:
+    """Whether ``target`` is a linear function of ``cols``: nothing left to vary."""
+    r = _residual_on(data, target, cols)
+    d = _residual_on(data, target, ())
+    return _dot(r, r) <= 1e-12 * _dot(d, d)
 
 
 def _is_unshielded_collider(
-    data: dict[str, list[float]], x: str, y: str, z: str
+    data: dict[str, list[float]], x: str, y: str, zs: Sequence[str]
 ) -> bool:
-    """Whether ``z`` is an identifiable collider on ``x`` and ``y`` (``x->z<-y``).
+    """Whether ``zs`` is an identifiable collider on ``x`` and ``y`` (``x->z<-y``).
 
     This is the one causal-role fact observational data can settle: a collider is an
     *unshielded* v-structure: ``x`` and ``y`` are marginally independent but become
@@ -240,12 +385,12 @@ def _is_unshielded_collider(
     """
     n = len(data[x])
     marg = _corr(data[x], data[y])
-    cond = _corr(_residual_on(data, x, z), _residual_on(data, y, z))
+    cond = _corr(_residual_on(data, x, zs), _residual_on(data, y, zs))
     return abs(_corr_t(marg, n)) <= _T and abs(_corr_t(cond, n)) > _T
 
 
-def _role(data: dict[str, list[float]], x: str, y: str, z: str) -> str:
-    """The identifiable role of ``z`` w.r.t. the ``x``-``y`` link, from data alone.
+def _role(data: dict[str, list[float]], x: str, y: str, zs: Sequence[str]) -> str:
+    """The identifiable role of ``zs`` w.r.t. the ``x``-``y`` link, from data alone.
 
     ``collider`` only when the unshielded v-structure is identifiable (see
     :func:`_is_unshielded_collider`); ``confounder`` when ``x`` and ``y`` are already
@@ -253,10 +398,10 @@ def _role(data: dict[str, list[float]], x: str, y: str, z: str) -> str:
     ``neutral`` otherwise: including every shielded case whose role the data cannot pin
     down, which callers must therefore not treat as an established collider.
     """
-    if _is_unshielded_collider(data, x, y, z):
+    if _is_unshielded_collider(data, x, y, zs):
         return "collider"
     marg = abs(_corr(data[x], data[y]))
-    cond = abs(_corr(_residual_on(data, x, z), _residual_on(data, y, z)))
+    cond = abs(_corr(_residual_on(data, x, zs), _residual_on(data, y, zs)))
     if cond < marg - _SIGNAL:
         return "confounder"
     return "neutral"
