@@ -257,6 +257,7 @@ _ANNOTATIONS: dict[str, ToolAnnotations] = {
         )
     },
     "verify": READS,
+    "reconcile_effect": READS,
     # authoring and runs
     "propose_derivation": ADDS,
     "train_model": ADDS,
@@ -990,6 +991,107 @@ def _load_or_refuse(load_dataset: Callable[[str], Table], dataset: str) -> Table
         ) from exc
 
 
+def _reconcile_effect(
+    rows: Sequence[dict[str, Any]],
+    x: str,
+    y: str,
+    estimate: float,
+    adjust: Sequence[str],
+    estimand: str,
+    x0: float,
+    x1: float,
+    ci_lower: float | None,
+    ci_upper: float | None,
+    procedure_specified: bool,
+    confirm: bool,
+) -> str:
+    """The final effect answer: the agent's analysis combined with elbi's own.
+
+    Combining is for a question about the effect itself; a named procedure defines its
+    own answer, so then the agent's stands and is only checked. An estimate outside the
+    span of every elbi model is withheld until the agent confirms it, because a
+    disagreement that large is more often a mistake (a sign, a population, a unit) than
+    a modelling choice.
+    """
+    import json
+
+    if estimand not in ("ate", "att", "atc"):
+        raise MCPError(INVALID_PARAMS, "estimand must be 'ate', 'att' or 'atc'")
+    if (ci_lower is None) != (ci_upper is None):
+        raise MCPError(INVALID_PARAMS, "give both ci_lower and ci_upper, or neither")
+    if ci_lower is not None and ci_upper is not None and ci_upper < ci_lower:
+        raise MCPError(INVALID_PARAMS, "ci_upper must not be below ci_lower")
+    try:
+        from elbi_core.verification import second_opinion as so
+    except ImportError:
+        return (
+            "reconcile_effect needs scikit-learn (install elbi-core[ml]); "
+            "report your own estimate."
+        )
+    try:
+        opinion = so.estimate_effect(
+            rows,
+            x,
+            y,
+            adjust,
+            x0=x0,
+            x1=x1,
+            estimand=estimand,  # type: ignore[arg-type]
+        )
+    except ValueError as exc:
+        raise MCPError(INVALID_PARAMS, str(exc)) from exc
+    span = opinion.range()
+    out: dict[str, Any] = {
+        "elbi_estimates": opinion.estimates,
+        "elbi_standard_errors": opinion.standard_errors,
+        "elbi_range": span,
+        "rows": opinion.n,
+        "estimand": estimand,
+        "caveats": list(opinion.caveats),
+    }
+    if span is None:
+        out["final"] = {
+            "estimate": estimate,
+            "ci_lower": ci_lower,
+            "ci_upper": ci_upper,
+        }
+        out["note"] = (
+            "elbi could not estimate this effect; your answer stands unchecked."
+        )
+        return json.dumps(out, indent=1)
+    outside = not span[0] <= estimate <= span[1]
+    if outside and not confirm:
+        out["final"] = None
+        out["problem"] = (
+            f"your estimate {estimate:.4g} is outside every elbi model "
+            f"({span[0]:.4g} to {span[1]:.4g}). Check the sign, the population "
+            "(ate/att/atc), the units and the adjustment set; then fix it, or "
+            "resubmit with confirm=true to keep it."
+        )
+        return json.dumps(out, indent=1)
+    if procedure_specified or outside:
+        final_point, lo, hi = estimate, ci_lower, ci_upper
+        how = "your answer, checked" if not outside else "your answer, confirmed"
+    else:
+        final_point = so.combine_point(estimate, opinion)
+        lo, hi = ci_lower, ci_upper
+        if ci_lower is not None and ci_upper is not None:
+            lo, hi = so.combine_interval(ci_lower, ci_upper, opinion)
+            final_point = min(max(final_point, lo), hi)
+        # The point is combined only with the doubly robust estimate (a two-valued
+        # treatment); say so when there is none rather than claim a combination.
+        if opinion.doubly_robust is not None:
+            how = "your analysis and elbi's, equally weighted"
+        elif ci_lower is not None:
+            how = "interval combined with elbi's models; point is yours, checked"
+        else:
+            how = "your answer, checked (no doubly robust estimate to combine with)"
+    out["final"] = {"estimate": final_point, "ci_lower": lo, "ci_upper": hi}
+    out["combined"] = how
+    out["note"] = "Report the final answer."
+    return json.dumps(out, indent=1)
+
+
 def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) -> None:
     """Register the deterministic verification oracle.
 
@@ -1592,6 +1694,56 @@ def _register_verify(server: MCPServer, load_dataset: Callable[[str], Table]) ->
     )
     server.tool(name="verify_robustness", description=verify_robustness_tool.__doc__)(
         verify_robustness_tool
+    )
+
+    async def reconcile_effect(
+        dataset: str,
+        x: str,
+        y: str,
+        estimate: float,
+        adjust: list[str] | None = None,
+        estimand: str = "ate",
+        x0: float = 0.0,
+        x1: float = 1.0,
+        ci_lower: float | None = None,
+        ci_upper: float | None = None,
+        procedure_specified: bool = False,
+        confirm: bool = False,
+    ) -> str:
+        return await asyncio.to_thread(
+            _reconcile_effect,
+            _load(dataset).rows,
+            x,
+            y,
+            estimate,
+            adjust or [],
+            estimand,
+            x0,
+            x1,
+            ci_lower,
+            ci_upper,
+            procedure_specified,
+            confirm,
+        )
+
+    reconcile_effect.__doc__ = (
+        "Before reporting an average effect of `x` on `y`, give elbi your estimate "
+        "(and your interval as `ci_lower`/`ci_upper`, if you have one): elbi "
+        "re-estimates the same effect from the data with its own models (three "
+        "outcome models with bootstrap errors, and a doubly robust estimator for a "
+        "two-valued treatment) and returns the final answer to report. `x0`/`x1` are "
+        "the two values of `x` your estimate compares (default 0 and 1). `adjust` is "
+        "the adjustment set your causal reasoning chose; `estimand` is ate "
+        "(everyone), att (rows at x1) or atc (rows at x0). When the question asks for "
+        "the effect itself, the answer combines your analysis and elbi's with equal "
+        "weight: a point is their mean, an interval widens where they disagree. When "
+        "it asks for the output of a named method, set `procedure_specified` and elbi "
+        "only checks. If your estimate falls outside every elbi model's range, no "
+        "answer is given until you investigate; resubmit with `confirm` to keep "
+        "yours. Report the returned answer, not your own."
+    )
+    server.tool(name="reconcile_effect", description=reconcile_effect.__doc__)(
+        reconcile_effect
     )
 
     async def verify_tool(
