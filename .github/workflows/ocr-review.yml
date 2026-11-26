@@ -63,7 +63,7 @@ jobs:
           cat "$RUNNER_TEMP/anthropic-oidc-proxy.log"
           exit 1
 
-      - uses: alibaba/open-code-review@7e5ce06c88de5ce81df5dc4f24e2e485b517fae8 # v1.13.10
+      - uses: alibaba/open-code-review@e74f2c6bd4422bd1e12d257d1725bcce1d6b9ddd # v1.14.2
         with:
           ocr_version: '1.12.12'
           llm_url: http://127.0.0.1:${{ env.ANTHROPIC_PROXY_PORT }}/v1/messages
